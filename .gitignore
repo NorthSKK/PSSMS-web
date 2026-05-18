@@ -1,0 +1,7 @@
+node_modules/
+.env
+credentials.json
+*.json.key
+dark-sensor-*.json
+d3479eb6-*.json
+.DS_Store

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PSSMS">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#15171b">
+  <title>PSSMS</title>
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%2315171b'/%3E%3Ctext x='90' y='108' font-size='72' text-anchor='middle' fill='%233b82f6' font-family='Arial Black%2CArial' font-weight='900'%3EP%3C/text%3E%3Ctext x='90' y='150' font-size='16' text-anchor='middle' fill='%236b7280' font-family='Arial'%3EPSSMS%3C/text%3E%3C/svg%3E">
+
+  <!-- CDN: Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- CDN: Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- CDN: Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <!-- CDN: Flatpickr -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+  <!-- PSSMS Styles (served from src/Styles.html, <style> tags stripped) -->
+  <link rel="stylesheet" href="/api/assets/style">
+</head>
+<body>
+
+  <div id="loader" class="loader-container">
+    <div class="spinner-border text-primary" role="status"></div>
+  </div>
+
+  <div id="login-section" class="d-none">
+    <div class="container">
+      <div class="row min-vh-100 align-items-center justify-content-center">
+        <div class="col-md-5 col-lg-4">
+          <div class="pssms-card p-4 text-center" style="background: #fff;">
+            <div class="mb-4">
+              <div id="loginLogoWrap" class="rounded-circle d-inline-flex justify-content-center align-items-center mb-3 overflow-hidden" style="width: 72px; height: 72px; background: var(--p-accent-soft); border: 1px solid var(--p-border); position:relative;">
+                <i id="loginLogoIcon" class="fas fa-school fa-lg" style="color: var(--p-accent);"></i>
+                <img id="loginLogoImg" src="" alt="logo" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;">
+              </div>
+              <h4 class="fw-bold mb-1" style="letter-spacing: -0.01em;">PSSMS</h4>
+              <p id="loginSchoolName" class="text-muted small mb-0">โรงเรียนภูพระบาทวิทยา</p>
+            </div>
+
+            <div class="mb-3 text-start position-relative" id="usernameWrapper">
+              <div class="form-floating">
+                <input type="text" class="form-control" id="username" placeholder="Username"
+                       autocomplete="off"
+                       onkeydown="if(event.key==='Enter'){hideSavedAccounts();document.getElementById('password').focus();}"
+                       oninput="filterSavedAccounts(this.value)"
+                       onfocus="showSavedAccounts()">
+                <label for="username"><i class="fas fa-user me-2"></i>รหัสผู้ใช้งาน</label>
+              </div>
+              <div id="savedAccountsList" class="position-absolute w-100 bg-white border rounded-3 shadow"
+                   style="top:100%;left:0;z-index:1050;display:none;max-height:220px;overflow-y:auto;margin-top:2px;">
+              </div>
+            </div>
+
+            <div class="form-floating mb-3 text-start position-relative">
+              <input type="password" class="form-control" id="password" placeholder="Password"
+                     style="padding-right: 45px;"
+                     onkeydown="if(event.key === 'Enter') processLogin()">
+              <label for="password"><i class="fas fa-lock me-2"></i>รหัสผ่าน</label>
+              <span class="position-absolute top-50 end-0 translate-middle-y me-3"
+                    style="cursor: pointer; color: var(--p-text-muted); z-index: 10;"
+                    onclick="togglePasswordVisibility()">
+                <i id="toggleIcon" class="fas fa-eye-slash"></i>
+              </span>
+            </div>
+
+            <button class="btn btn-accent w-100 py-2 fw-medium" onclick="hideSavedAccounts();processLogin()">
+              เข้าสู่ระบบ
+            </button>
+
+            <div class="mt-4 small text-muted">
+              พัฒนาโดย: ครูน๊อต ศิกษก เดินรีบรัมย์
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function togglePasswordVisibility() {
+        const passwordInput = document.getElementById('password');
+        const toggleIcon = document.getElementById('toggleIcon');
+        if (passwordInput.type === 'password') {
+          passwordInput.type = 'text';
+          toggleIcon.classList.replace('fa-eye-slash', 'fa-eye');
+        } else {
+          passwordInput.type = 'password';
+          toggleIcon.classList.replace('fa-eye', 'fa-eye-slash');
+        }
+      }
+      document.addEventListener('click', function(e) {
+        if (!document.getElementById('usernameWrapper')?.contains(e.target)) hideSavedAccounts();
+      });
+    </script>
+  </div>
+
+  <div id="main-app" class="wrapper d-none">
+    <nav id="sidebar" class="bg-dark text-white shadow">
+      <div class="sidebar-header py-3 px-3 border-bottom border-secondary" style="border-opacity: 0.1;">
+        <div class="d-flex align-items-center gap-2">
+          <div id="sidebarLogoWrap" class="d-flex justify-content-center align-items-center bg-white rounded-circle shadow-sm border border-2 border-primary overflow-hidden flex-shrink-0"
+               style="width: 38px; height: 38px; position:relative;">
+            <i id="sidebarLogoIcon" class="fas fa-school text-primary" style="font-size: 1rem;"></i>
+            <img id="sidebarLogoImg" src="" alt="logo" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;">
+          </div>
+          <div>
+            <div class="text-white fw-bold" style="letter-spacing: 1px; font-size: 0.95rem; line-height: 1.1;">PSSMS</div>
+            <div id="sidebarSchoolName" class="text-info fw-bold" style="font-size: 0.72rem; line-height: 1.2;">โรงเรียนภูพระบาทวิทยา</div>
+            <div class="text-secondary opacity-75" style="font-size: 0.58rem; line-height: 1.2;">Professional School Smart Management System</div>
+          </div>
+        </div>
+      </div>
+      <ul class="list-unstyled components p-2" id="menu-list"></ul>
+      <div class="p-3">
+        <button class="btn btn-outline-danger btn-sm w-100" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i> ออกจากระบบ
+        </button>
+      </div>
+    </nav>
+
+    <div id="content" class="w-100">
+      <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm px-4">
+        <button type="button" id="sidebarCollapse" class="btn btn-primary btn-sm me-3">
+          <i class="fas fa-bars"></i>
+        </button>
+        <div class="ms-auto" id="user-display"></div>
+      </nav>
+      <div id="page-content" class="container-fluid p-4"></div>
+    </div>
+  </div>
+
+  <!-- CDN: Bootstrap JS, Chart.js, Flatpickr, FullCalendar -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.10/locales-all.global.min.js"></script>
+
+  <!-- GAS shim MUST load before any Scripts_*.html code -->
+  <script src="/gas-shim.js"></script>
+
+  <!-- PSSMS Scripts (served from src/*.html, <script> tags stripped) -->
+  <script src="/api/assets/script/Scripts_Core"></script>
+  <script src="/api/assets/script/Scripts_Admin"></script>
+  <script src="/api/assets/script/Scripts_Teacher"></script>
+  <script src="/api/assets/script/Scripts_Academic"></script>
+  <script src="/api/assets/script/Scripts_Score"></script>
+  <script src="/api/assets/script/Scripts_General"></script>
+  <script src="/api/assets/script/Scripts_Calendar"></script>
+
+</body>
+</html>
