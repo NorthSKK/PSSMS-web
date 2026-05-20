@@ -57,13 +57,13 @@ async function saveCalendarEvent([eventData]) {
        e.color || '#3b82f6', e.description || '', e.createdBy || '']
     );
   }
-  cache.del('calendar_events');
+  cache.del('calendar_events_all');
   return { status: 'success', message: 'บันทึกกิจกรรมสำเร็จ' };
 }
 
 async function deleteCalendarEvent([eventId]) {
   await query(`DELETE FROM calendar_events WHERE id=$1`, [eventId]);
-  cache.del('calendar_events');
+  cache.del('calendar_events_all');
   return { status: 'success', message: 'ลบกิจกรรมสำเร็จ' };
 }
 
@@ -90,7 +90,7 @@ async function importCalendarCSV([rows]) {
   } finally {
     client.release();
   }
-  cache.del('calendar_events');
+  cache.del('calendar_events_all');
   return { status: 'success', message: `นำเข้าสำเร็จ ${count} รายการ`, imported: count };
 }
 
