@@ -110,8 +110,11 @@ const handlers = {
   // Academic reports
   getAllSubjectsReport:             require('../functions/getAllSubjectsReport'),
 
-  // Calendar
-  getCalendarEvents:               require('../functions/getCalendarEvents'),
+  // Calendar — filter personal events to owner only (admin sees all)
+  getCalendarEvents: (args, user) => {
+    const isAdmin = String(user?.role || '').toUpperCase() === 'ADMIN';
+    return require('../functions/getCalendarEvents')(isAdmin ? null : user?.id);
+  },
 
   // Morning activity
   getMorningActivityData:          (args) => morning.getMorningActivityData(args),

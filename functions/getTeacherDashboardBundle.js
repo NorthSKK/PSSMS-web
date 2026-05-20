@@ -15,7 +15,7 @@ module.exports = async function getTeacherDashboardBundle([teacherId, term, year
 
   const [timetable, calendarEvents, riskDashboard, atRiskDashboard] = await Promise.all([
     section(() => getTeacherTimetableWithStatus([teacherId])),
-    section(() => getCalendarEvents()),
+    section(() => getCalendarEvents(teacherId)),
     section(() => getTeacherRiskDashboard([teacherId, t, y])),
     section(() => getTeacherAtRiskDashboard([teacherId, t, y])),
   ]);
