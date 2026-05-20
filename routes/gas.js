@@ -134,6 +134,12 @@ const handlers = {
   saveLeaveRequest:                (args) => leaveWrite.saveLeaveRequest(args),
   approveLeave:                    (args) => leaveWrite.approveLeave(args),
   rejectLeave:                     (args) => leaveWrite.rejectLeave(args),
+  reviewLeave:                     (args) => leaveWrite.reviewLeave(args),
+  updateLeave:                     (args) => leaveWrite.updateLeave(args),
+  deleteLeave:                     (args) => leaveWrite.deleteLeave(args),
+  assignSubstitute:                (args) => leaveWrite.assignSubstitute(args),
+  unassignSubstitute:              (args) => leaveWrite.unassignSubstitute(args),
+  manualCreateAffected:            (args) => leaveWrite.manualCreateAffected(args),
   saveSubstituteAssignment:        (args) => leaveWrite.saveSubstituteAssignment(args),
   confirmSubstitute:               (args) => leaveWrite.confirmSubstitute(args),
 
@@ -141,6 +147,7 @@ const handlers = {
   getSarabunHistory:               require('../functions/getSarabunHistory'),
   saveSarabun:                     (args) => sarabun.saveSarabun(args),
   deleteSarabun:                   (args) => sarabun.deleteSarabun(args),
+  requestSarabunNumber:            (args) => sarabun.requestSarabunNumber(args),
 
   // Budget
   getBudgets:                      (args) => budget.getBudgets(args),

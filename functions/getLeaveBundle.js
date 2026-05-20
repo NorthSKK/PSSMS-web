@@ -1,18 +1,20 @@
 const { query } = require('../lib/db');
 
+const fmtDate = (d) => d instanceof Date ? d.toISOString().slice(0, 10) : (d ? String(d).slice(0, 10) : '');
+
 function rowToLeave(r) {
   return {
     leaveId:      r.id || '',
     teacherId:    r.teacher_id || '',
     teacherName:  r.staff_name || '',
     type:         r.type || '',
-    startDate:    r.start_date ? String(r.start_date).slice(0, 10) : '',
-    endDate:      r.end_date   ? String(r.end_date).slice(0, 10)   : '',
+    startDate:    fmtDate(r.start_date),
+    endDate:      fmtDate(r.end_date),
     days:         Number(r.days || 1),
     reason:       r.reason       || '',
     status:       r.status       || 'รอพิจารณา',
     year:         r.year         || '',
-    requestDate:  r.request_date ? String(r.request_date) : '',
+    requestDate:  r.request_date ? fmtDate(r.request_date) : '',
     comment:      r.admin_comment || '',
     reviewerName: r.reviewed_by   || '',
   };
@@ -25,6 +27,11 @@ async function getPendingLeaves() {
   return rows.map(rowToLeave);
 }
 
+const LEAVE_LIMITS = {
+  'ลาป่วย': 60, 'ลากิจ': 45, 'ลาพักร้อน': 10,
+  'ลาคลอด': 90, 'ลาบวช': 120,
+};
+
 async function getLeaveRequestBundle([teacherId, year]) {
   const params = [teacherId];
   let sql = `SELECT * FROM leave_records WHERE teacher_id=$1`;
@@ -33,11 +40,16 @@ async function getLeaveRequestBundle([teacherId, year]) {
 
   const { rows } = await query(sql, params);
   const byType = {};
-  for (const r of rows) byType[r.type] = (byType[r.type] || 0) + 1;
-  return {
-    stats: Object.entries(byType).map(([type, count]) => ({ type, count })),
-    history: rows.map(rowToLeave),
-  };
+  for (const r of rows) {
+    if (!byType[r.type]) byType[r.type] = 0;
+    byType[r.type] += Number(r.days || 1);
+  }
+  const stats = Object.entries(byType).map(([type, used]) => ({
+    type,
+    used,
+    limit: LEAVE_LIMITS[type] || 9999,
+  }));
+  return { stats, history: rows.map(rowToLeave) };
 }
 
 async function getPendingSubstitutes() {

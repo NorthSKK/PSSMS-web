@@ -22,7 +22,37 @@ async function saveSarabun([data]) {
 
 async function deleteSarabun([id]) {
   await query(`DELETE FROM sarabun WHERE id=$1`, [id]);
-  return { status: 'success', message: 'บันทึกสำเร็จ' };
+  return { status: 'success', message: 'ลบสำเร็จ' };
 }
 
-module.exports = { saveSarabun, deleteSarabun };
+async function requestSarabunNumber([payload]) {
+  const d = payload || {};
+  const docType = d.docType || '';
+  const year = d.year || String(new Date().getFullYear() + 543);
+
+  // หาเลขที่ล่าสุดของประเภทนี้ในปีนี้
+  const { rows } = await query(
+    `SELECT doc_number FROM sarabun WHERE doc_type=$1 AND year=$2 ORDER BY id DESC LIMIT 1`,
+    [docType, year]
+  );
+
+  let nextNum = 1;
+  if (rows.length > 0) {
+    const last = String(rows[0].doc_number || '').match(/(\d+)/);
+    if (last) nextNum = parseInt(last[1]) + 1;
+  }
+
+  const docNumber = `${nextNum}/${year}`;
+
+  const targetDate = (d.targetDate && d.targetDate !== '-') ? d.targetDate : null;
+  await query(
+    `INSERT INTO sarabun(doc_type,doc_number,subject,requester,target_date,status,file_url,year)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [docType, docNumber, d.subject || '', d.requester || '',
+     targetDate, 'รอดำเนินการ', '', year]
+  );
+
+  return { status: 'success', message: 'บันทึกสำเร็จ', docNumber };
+}
+
+module.exports = { saveSarabun, deleteSarabun, requestSarabunNumber };

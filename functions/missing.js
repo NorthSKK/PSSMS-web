@@ -234,11 +234,11 @@ async function getAllLeaves([year, statusFilter]) {
   sql += ' ORDER BY request_date DESC';
   const { rows } = await query(sql, params);
   return rows.map(r => ({
-    id: r.id, teacherId: r.teacher_id, staffName: r.staff_name || '',
+    leaveId: r.id, teacherId: r.teacher_id, teacherName: r.staff_name || '',
     type: r.type, startDate: r.start_date, endDate: r.end_date,
     days: parseFloat(r.days || 1), reason: r.reason || '',
     status: r.status, year: r.year,
-    adminComment: r.admin_comment || '', reviewedBy: r.reviewed_by || '',
+    adminComment: r.admin_comment || '', reviewerName: r.reviewed_by || '',
   }));
 }
 
@@ -438,7 +438,13 @@ async function getAvailableSubstitutes([date, period, originalSubjectCode, origi
   const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
   const dayName = DAYS[new Date(date).getDay()];
 
-  // Find teachers who have a conflict (already teaching that slot)
+  // Get original teacher's department for group matching
+  const { rows: origRows } = await query(
+    `SELECT department FROM users WHERE username=$1 LIMIT 1`, [originalTeacherId]
+  );
+  const origDept = origRows[0]?.department || '';
+
+  // Find teachers who have a timetable conflict at that slot
   const { rows: conflictRows } = await query(
     `SELECT DISTINCT teacher_id FROM timetable
      WHERE day=$1 AND period=$2 AND term=$3 AND year=$4`,
@@ -449,36 +455,52 @@ async function getAvailableSubstitutes([date, period, originalSubjectCode, origi
   // Also conflict if already assigned as substitute that date+period
   try {
     const { rows: subRows } = await query(
-      `SELECT DISTINCT substitute_teacher_id FROM substitute_assignments
-       WHERE sub_date=$1 AND period=$2 AND status != 'ยกเลิก'`,
+      `SELECT DISTINCT sub_teacher_id FROM substitute_assignments
+       WHERE date=$1 AND period=$2 AND status != 'ยกเลิก'`,
       [date, String(period)]
     );
-    subRows.forEach(r => conflictSet.add(r.substitute_teacher_id));
+    subRows.forEach(r => conflictSet.add(r.sub_teacher_id));
   } catch (_) {}
 
-  // Get all teachers
+  // Get all teachers + their lifetime substitute count
   const { rows: teachers } = await query(
-    `SELECT username, full_name, department FROM users
-     WHERE UPPER(role) IN ('TEACHER','ADMIN') AND username != $1
-     ORDER BY full_name`,
+    `SELECT u.username, u.full_name, u.department,
+            COUNT(sa.id) AS sub_count
+     FROM users u
+     LEFT JOIN substitute_assignments sa ON sa.sub_teacher_id=u.username
+     WHERE UPPER(u.role) IN ('TEACHER','ADMIN') AND u.username != $1
+     GROUP BY u.username, u.full_name, u.department
+     ORDER BY u.full_name`,
     [originalTeacherId]
   );
 
-  // Categorize: same-subject teachers first, then free, exclude conflicts
-  const sameSubject = [];
-  const free = [];
-  for (const t of teachers) {
-    if (conflictSet.has(t.username)) continue;
-    const { rows: taughtRows } = await query(
-      `SELECT 1 FROM timetable WHERE teacher_id=$1 AND subject_code=$2 AND term=$3 AND year=$4 LIMIT 1`,
-      [t.username, originalSubjectCode, String(term), String(year)]
-    );
-    const entry = { teacherId: t.username, name: t.full_name, dept: t.department };
-    if (taughtRows.length > 0) sameSubject.push(entry);
-    else free.push(entry);
-  }
+  // Find teachers who taught same subject (for 'exact' badge)
+  const { rows: exactRows } = await query(
+    `SELECT DISTINCT teacher_id FROM timetable
+     WHERE subject_code=$1 AND term=$2 AND year=$3`,
+    [originalSubjectCode, String(term), String(year)]
+  );
+  const exactSet = new Set(exactRows.map(r => r.teacher_id));
 
-  return { sameSubject, free };
+  const RANK = { exact: 0, group: 1, none: 2 };
+  const result = teachers.map(t => ({
+    teacherId:    t.username,
+    name:         t.full_name,
+    department:   t.department,
+    subjectMatch: exactSet.has(t.username) ? 'exact'
+                : (origDept && t.department === origDept ? 'group' : 'none'),
+    hasConflict:  conflictSet.has(t.username),
+    subCount:     Number(t.sub_count || 0),
+  }));
+
+  // Sort: no conflict first → exact > group > none → subCount ASC
+  result.sort((a, b) => {
+    if (a.hasConflict !== b.hasConflict) return a.hasConflict ? 1 : -1;
+    const rd = RANK[a.subjectMatch] - RANK[b.subjectMatch];
+    if (rd !== 0) return rd;
+    return a.subCount - b.subCount;
+  });
+  return result;
 }
 
 // ============================================================

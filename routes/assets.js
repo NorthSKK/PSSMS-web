@@ -6,7 +6,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs').promises;
 
-const SRC_DIR = path.join(__dirname, '../../src');
+const SRC_DIR = path.join(__dirname, '../../Wap app PSSMS/src');
 const ALLOWED = /^[a-zA-Z0-9_-]+$/;
 
 router.get('/style', async (req, res) => {
