@@ -17,8 +17,24 @@ async function getMorningActivityData([date, className]) {
   }));
 }
 
-async function saveMorningActivityBatch([list]) {
-  if (!Array.isArray(list) || list.length === 0) return { status: 'success', message: 'ไม่มีรายการ', saved: 0 };
+async function saveMorningActivityBatch([payload]) {
+  // payload can be { date, term, year, className, teacherId, records: [...] } or a raw array
+  let list;
+  if (Array.isArray(payload)) {
+    list = payload;
+  } else if (payload && Array.isArray(payload.records)) {
+    list = payload.records.map(r => ({
+      date: payload.date, term: payload.term, year: payload.year,
+      className: payload.className, teacherId: payload.teacherId,
+      studentId: r.studentId, studentName: r.studentName,
+      areaStatus: r.area || r.areaStatus || '',
+      dutyStatus: r.duty || r.dutyStatus || '',
+      flagStatus: r.flag || r.flagStatus || '',
+    }));
+  } else {
+    list = [];
+  }
+  if (list.length === 0) return { status: 'success', message: 'ไม่มีรายการ', saved: 0 };
   const first = list[0];
   const sessionId = `${first.date}|morning|${first.className}`;
   const { pool } = require('../lib/db');
