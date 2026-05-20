@@ -29,9 +29,7 @@ async function getTeacherTimetableByDate([teacherId, dateStr]) {
   const [ttRes, club] = await Promise.all([
     query(
       `SELECT subject_code, subject_name, level, room, location, teacher_id, day, period
-       FROM timetable WHERE teacher_id=$1 AND term=$3 AND year=$4
-         AND (day=$2 OR UPPER(subject_code)='HR' OR subject_name ILIKE '%โฮมรูม%')
-       ORDER BY period::int`,
+       FROM timetable WHERE teacher_id=$1 AND day=$2 AND term=$3 AND year=$4 ORDER BY period::int`,
       [teacherId, targetDay, term, year]
     ),
     _getTeacherClub(teacherId, term, year),
