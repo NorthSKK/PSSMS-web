@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs').promises;
 
-const SRC_DIR = path.join(__dirname, '../../Wap app PSSMS/src');
+const SRC_DIR = path.join(__dirname, '../src');
 const ALLOWED = /^[a-zA-Z0-9_-]+$/;
 
 module.exports = async function getPage([pageName]) {
