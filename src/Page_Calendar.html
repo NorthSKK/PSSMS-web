@@ -1,0 +1,213 @@
+<style>
+/* Calendar — minimal modern theme */
+#calendarPageWrap { --cal-accent: var(--p-accent); --cal-border: var(--p-border); --cal-muted: #8a93a4; }
+#calendarPageWrap .fc { font-family: inherit; }
+#calendarPageWrap .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
+#calendarPageWrap .fc-toolbar-title { font-size: 1.15rem; font-weight: 600; color: #222; letter-spacing: -0.01em; }
+#calendarPageWrap .fc-button {
+    background: transparent !important; border: 1px solid var(--cal-border) !important;
+    color: #444 !important; font-weight: 500 !important; text-transform: none !important;
+    padding: 0.32rem 0.85rem !important; box-shadow: none !important; border-radius: 8px !important;
+    font-size: 0.85rem !important; transition: all 0.15s;
+}
+#calendarPageWrap .fc-button:hover { background: #f6f8fa !important; border-color: #dde1e6 !important; color: #111 !important; }
+#calendarPageWrap .fc-button-primary:not(:disabled).fc-button-active,
+#calendarPageWrap .fc-button-primary:not(:disabled):active {
+    background: #111 !important; color: #fff !important; border-color: #111 !important;
+}
+#calendarPageWrap .fc-today-button { font-weight: 600 !important; }
+#calendarPageWrap .fc-prev-button, #calendarPageWrap .fc-next-button { padding: 0.32rem 0.6rem !important; }
+#calendarPageWrap .fc-col-header-cell {
+    background: transparent; border: none; padding: 8px 4px;
+    font-weight: 500; font-size: 0.78rem; color: var(--cal-muted); text-transform: uppercase; letter-spacing: 0.04em;
+}
+#calendarPageWrap .fc-col-header-cell a { color: inherit; text-decoration: none; }
+#calendarPageWrap .fc-scrollgrid, #calendarPageWrap .fc-scrollgrid-section > * {
+    border-color: var(--cal-border) !important;
+}
+#calendarPageWrap .fc-daygrid-day { background: #fff; transition: background 0.12s; }
+#calendarPageWrap .fc-daygrid-day:hover { background: #fafbfc; }
+#calendarPageWrap .fc-day-sat, #calendarPageWrap .fc-day-sun { background: #f5f6f8; }
+#calendarPageWrap .fc-day-sat .fc-daygrid-day-number,
+#calendarPageWrap .fc-day-sun .fc-daygrid-day-number { color: #9aa0a6; }
+#calendarPageWrap .fc-col-header-cell.fc-day-sat,
+#calendarPageWrap .fc-col-header-cell.fc-day-sun { color: #b0b6c0; }
+#calendarPageWrap .fc-day-today { background: var(--p-accent-soft) !important; }
+#calendarPageWrap .fc-day-today .fc-daygrid-day-number { color: var(--cal-accent); font-weight: 700; }
+#calendarPageWrap .fc-daygrid-day-number {
+    font-size: 0.82rem; color: #444; padding: 6px 8px; font-weight: 500;
+}
+#calendarPageWrap .fc-day-other .fc-daygrid-day-number { color: #c8ccd1; }
+#calendarPageWrap .fc-daygrid-event {
+    border-radius: 4px !important; border: none !important; padding: 2px 6px !important;
+    font-size: 0.72rem !important; font-weight: 500;
+    margin: 1px 4px !important; box-shadow: none !important;
+}
+#calendarPageWrap .fc-event-title { font-weight: 500 !important; }
+#calendarPageWrap .fc-list-event:hover td { background: #f6f8fa !important; }
+#calendarPageWrap .fc-list-day-cushion { background: #fafbfc !important; }
+#calendarPageWrap .fc-list-event-dot { border-width: 5px !important; }
+#calendarPageWrap .fc-list-empty { background: #fafbfc; color: var(--cal-muted); }
+#calendarPageWrap .fc-popover { border-radius: 10px; border-color: var(--cal-border); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+.cal-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+</style>
+
+<div class="container-fluid pssms-page pssms-dept-general" id="calendarPageWrap">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-calendar-alt me-2" style="color: var(--p-accent);"></i>ปฏิทินปฏิบัติงาน</h4>
+      <div class="d-flex flex-wrap gap-3 small text-muted mt-1">
+        <span><span class="cal-legend-dot" style="background:#0d6efd"></span>ทั่วไป</span>
+        <span><span class="cal-legend-dot" style="background:#198754"></span>วิชาการ</span>
+        <span><span class="cal-legend-dot" style="background:#ffc107"></span>ประชุม</span>
+        <span><span class="cal-legend-dot" style="background:#dc3545"></span>วันหยุด</span>
+        <span><span class="cal-legend-dot" style="background:#6f42c1"></span>ส่วนตัว</span>
+      </div>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm pssms-admin-only" onclick="initCalendarDB()">
+        <i class="fas fa-tools me-1"></i>Setup DB
+      </button>
+      <button class="btn btn-soft btn-sm pssms-admin-only" onclick="openImportCalendarModal()">
+        <i class="fas fa-file-import me-1"></i>นำเข้า
+      </button>
+      <button class="btn btn-accent btn-sm" id="btnAddCalendarEvent" onclick="openCalendarModal('add')">
+        <i class="fas fa-plus me-1"></i><span id="btnAddCalendarEventLabel">เพิ่มกิจกรรม</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Term progress bar -->
+  <div id="termProgressWrap" class="mb-3 d-none">
+    <div class="d-flex justify-content-between align-items-center mb-1 small">
+      <div>
+        <span class="fw-semibold" id="termProgressLabel">ภาคเรียน</span>
+        <span class="text-muted ms-2" id="termProgressDates"></span>
+      </div>
+      <div class="text-muted">
+        <span id="termProgressDay" class="fw-semibold">-</span> / <span id="termProgressTotal">-</span> วัน
+        <span class="badge ms-2" id="termProgressPct" style="background:#eef0f3; color:#444;">0%</span>
+      </div>
+    </div>
+    <div class="progress" style="height: 6px; border-radius: 999px; background: #eef0f3;">
+      <div id="termProgressBar" class="progress-bar" role="progressbar" style="width: 0%; background: var(--p-accent); border-radius: 999px; transition: width 0.6s ease;"></div>
+    </div>
+  </div>
+
+  <div class="pssms-card p-3">
+    <div id="schoolCalendar" style="min-height: 640px;"></div>
+  </div>
+</div>
+
+<!-- 🌟 Modal นำเข้าปฏิทินจากไฟล์ CSV -->
+<div class="modal fade pssms-modal" id="calImportModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-file-import me-2" style="color:var(--p-accent);"></i>นำเข้ากิจกรรมจากไฟล์ CSV</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+
+        <div class="alert alert-info border-0 d-flex align-items-start gap-2 mb-3">
+          <i class="fas fa-info-circle mt-1 flex-shrink-0"></i>
+          <div>
+            <strong>รูปแบบไฟล์ CSV — 4 คอลัมน์:</strong><br>
+            <code>วันที่, กิจกรรม, ผู้รับผิดชอบ/รายละเอียด, สี (#hex)</code><br>
+            <small class="text-muted">รองรับวันที่แบบไทย เช่น <b>5-8 พ.ค.69</b>, <b>11 พ.ค.69</b> หรือ ISO <b>2026-05-11</b><br>
+            ถ้าไม่ระบุสี ระบบจะเลือกอัตโนมัติตามชื่อกิจกรรม</small>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mb-3">
+          <button class="btn btn-outline-success btn-sm" onclick="downloadCalendarTemplate()">
+            <i class="fas fa-download me-1"></i> ดาวน์โหลด Template CSV
+          </button>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-bold small text-muted">เลือกไฟล์ CSV <span class="text-danger">*</span></label>
+          <input type="file" class="form-control" id="calImportFile" accept=".csv" onchange="previewCalendarCSV(this)">
+        </div>
+
+        <div id="calImportPreview" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold small text-muted">ตัวอย่างข้อมูลที่จะนำเข้า</span>
+            <span id="calImportCount" class="badge bg-primary rounded-pill"></span>
+          </div>
+          <div class="table-responsive rounded-3 border" style="max-height: 240px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0 small">
+              <thead class="table-dark sticky-top">
+                <tr><th>วันที่</th><th>กิจกรรม</th><th>รายละเอียด</th><th>สี</th></tr>
+              </thead>
+              <tbody id="calPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer gap-2">
+        <button type="button" class="btn btn-sm btn-soft" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-sm btn-accent" id="btnConfirmImport" onclick="confirmCalendarImport()" disabled>
+          <i class="fas fa-file-import me-1"></i>นำเข้าทั้งหมด
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal สำหรับเพิ่ม/แก้ไขกิจกรรม -->
+<div class="modal fade pssms-modal" id="calendarModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" id="calModalHeader">
+        <h5 class="modal-title" id="calModalTitle"><i class="fas fa-calendar-plus me-2" style="color:var(--p-accent);"></i>เพิ่มกิจกรรมใหม่</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="calendarForm">
+          <input type="hidden" id="calEventId">
+          
+          <div class="mb-3">
+            <label class="form-label fw-bold text-muted small">ชื่อกิจกรรม <span class="text-danger">*</span></label>
+            <input type="text" class="form-control fw-bold" id="calTitle" placeholder="เช่น สอบกลางภาค, ประชุมผู้ปกครอง" required>
+          </div>
+          
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-bold text-muted small">วันที่เริ่มต้น <span class="text-danger">*</span></label>
+              <input type="date" class="form-control" id="calStart" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-bold text-muted small">วันที่สิ้นสุด (ไม่บังคับ)</label>
+              <input type="date" class="form-control" id="calEnd">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold text-muted small">ประเภท/สีของกิจกรรม <span class="text-danger">*</span></label>
+            <select class="form-select fw-bold" id="calColor" onchange="this.style.color = this.options[this.selectedIndex].dataset.color">
+              <option value="#0d6efd" data-color="#0d6efd" style="color: #0d6efd;" selected>🔵 กิจกรรมทั่วไป (สีฟ้า)</option>
+              <option value="#198754" data-color="#198754" style="color: #198754;">🟢 วิชาการ / สอบ (สีเขียว)</option>
+              <option value="#ffc107" data-color="#ffc107" style="color: #ffc107;">🟠 ประชุม / สัมมนา (สีส้ม)</option>
+              <option value="#dc3545" data-color="#dc3545" style="color: #dc3545;">🔴 วันหยุด / สำคัญ (สีแดง)</option>
+              <option value="#6f42c1" data-color="#6f42c1" style="color: #6f42c1;">🟣 ส่วนตัว / ภายใน (สีม่วง)</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold text-muted small">รายละเอียดเพิ่มเติม</label>
+            <textarea class="form-control" id="calDesc" rows="3" placeholder="สถานที่ หรือรายละเอียด..."></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer gap-2">
+        <button type="button" class="btn btn-sm btn-outline-danger d-none" id="btnDeleteEvent" onclick="deleteCalendarEvent()"><i class="fas fa-trash-alt me-1"></i>ลบ</button>
+        <div class="ms-auto d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-soft" data-bs-dismiss="modal">ยกเลิก</button>
+          <button type="button" class="btn btn-sm btn-accent" id="btnSaveEvent" onclick="saveCalendarEvent()"><i class="fas fa-save me-1"></i>บันทึก</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,77 @@
+<div class="container-fluid pssms-page pssms-dept-personnel" id="homeroomPageRoot">
+
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-home me-2" style="color:var(--p-accent);"></i>ครูที่ปรึกษาประจำชั้น</h4>
+      <p class="pssms-subtitle">กำหนดครูที่ปรึกษาสำหรับแต่ละห้องเรียน</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="ttoAddHomeroomRow()">
+        <i class="fas fa-plus me-1"></i>เพิ่มห้อง
+      </button>
+      <button class="btn btn-accent btn-sm" id="ttoSaveAllHomeroomBtn" onclick="ttoSaveAllHomeroom()">
+        <i class="fas fa-save me-1"></i>บันทึกทั้งหมด
+      </button>
+    </div>
+  </div>
+
+  <!-- Term / Year -->
+  <div class="pssms-card mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-3">
+        <label class="form-label small fw-medium" style="color:var(--p-text-muted);">ภาคเรียน</label>
+        <select id="ttoTerm" class="form-select form-select-sm" onchange="ttoLoadHomeroom()">
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small fw-medium" style="color:var(--p-text-muted);">ปีการศึกษา</label>
+        <input type="number" id="ttoYear" class="form-control form-control-sm" onchange="ttoLoadHomeroom()">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-soft btn-sm" onclick="initHomeroomPage()">
+          <i class="fas fa-sync me-1"></i>รีเฟรช
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="pssms-card p-0">
+    <div class="pssms-card-header">
+      <span><i class="fas fa-chalkboard-teacher me-2" style="color:var(--p-text-muted);"></i>รายการครูที่ปรึกษา</span>
+      <span class="pssms-chip" id="hrCountBadge">0 ห้อง</span>
+    </div>
+    <div class="table-responsive">
+      <table class="pssms-table mb-0" style="font-size:.85rem;">
+        <thead>
+          <tr>
+            <th style="width:100px;">ระดับชั้น</th>
+            <th style="width:70px;">ห้อง</th>
+            <th>ครูที่ปรึกษา 1 / 2</th>
+            <th style="width:140px;">สถานที่แนะแนว<br><span class="fw-normal text-muted" style="font-size:.75rem;">จ.คาบ7</span></th>
+            <th style="width:140px;">สถานที่วิถีพุทธ<br><span class="fw-normal text-muted" style="font-size:.75rem;">ศ.คาบ7</span></th>
+            <th style="width:44px;"></th>
+          </tr>
+        </thead>
+        <tbody id="ttoHomeroomBody">
+          <tr><td colspan="6" class="py-2">
+            <div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div>
+            <div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div>
+            <div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mt-3 small" style="color:var(--p-text-muted);">
+    <i class="fas fa-info-circle me-1"></i>การบันทึกจะสร้างคาบ <strong>โฮมรูม</strong> / <strong>แนะแนว (จ.คาบ7)</strong> / <strong>วิถีพุทธ (ศ.คาบ7)</strong> อัตโนมัติในตารางสอน
+  </div>
+
+</div>
+
+<script>
+  initHomeroomPage();
+</script>

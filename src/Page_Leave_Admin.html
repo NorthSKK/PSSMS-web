@@ -1,0 +1,150 @@
+<div class="container-fluid pssms-page pssms-dept-personnel">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-clipboard-check me-2" style="color:var(--p-accent);"></i>จัดการการลา</h4>
+      <p class="pssms-subtitle">อนุมัติหรือปฏิเสธคำร้องลา</p>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav pssms-tabs mb-3 gap-2" id="leaveAdminTabs">
+    <li class="nav-item">
+      <button class="nav-link active fw-medium px-3" id="tabPending" onclick="leaveAdminShowTab('pending')">
+        <i class="fas fa-clock me-1"></i>รอพิจารณา
+        <span class="badge bg-danger ms-1" id="pendingCount" style="display:none;"></span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-medium px-3" id="tabAll" onclick="leaveAdminShowTab('all')">
+        <i class="fas fa-list me-1"></i>ทั้งหมด
+      </button>
+    </li>
+  </ul>
+
+  <!-- Filter bar (tab all) -->
+  <div id="leaveAllFilters" class="d-none mb-3 row g-2 align-items-end">
+    <div class="col-md-3 col-6">
+      <label class="form-label small text-muted mb-1">ปีการศึกษา</label>
+      <input type="number" class="form-control form-control-sm" id="leaveFilterYear" placeholder="2568">
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small text-muted mb-1">สถานะ</label>
+      <select class="form-select form-select-sm" id="leaveFilterStatus">
+        <option value="all">ทั้งหมด</option>
+        <option value="รอพิจารณา">รอพิจารณา</option>
+        <option value="อนุมัติ">อนุมัติ</option>
+        <option value="ปฏิเสธ">ปฏิเสธ</option>
+      </select>
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small text-muted mb-1">ประเภท</label>
+      <select class="form-select form-select-sm" id="leaveFilterType">
+        <option value="">ทุกประเภท</option>
+        <option>ลาป่วย</option><option>ลากิจ</option><option>ลาพักร้อน</option>
+        <option>ลาคลอด</option><option>ลาบวช</option><option>ลาไปช่วยราชการ</option>
+      </select>
+    </div>
+    <div class="col-md-3 col-6">
+      <button class="btn btn-accent btn-sm w-100" onclick="leaveAdminLoadAll()">
+        <i class="fas fa-search me-1"></i>ค้นหา
+      </button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="pssms-card">
+    <div class="table-responsive">
+      <table class="pssms-table w-100">
+        <thead>
+          <tr>
+            <th>ชื่อ-สกุล</th>
+            <th>ประเภท</th>
+            <th>วันที่ลา</th>
+            <th class="text-center">วัน</th>
+            <th>เหตุผล</th>
+            <th class="text-center">สถานะ</th>
+            <th class="text-center">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody id="leaveAdminTableBody">
+          <tr><td colspan="7" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Edit Leave -->
+<div class="modal fade pssms-modal" id="leaveEditModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-edit me-2" style="color:var(--p-accent);"></i>แก้ไขรายการลา</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3">
+        <input type="hidden" id="editLeaveId">
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">ประเภทการลา</label>
+          <select class="form-select form-select-sm" id="editLeaveType">
+            <option>ลาป่วย</option><option>ลากิจ</option><option>ลาพักร้อน</option>
+            <option>ลาคลอด</option><option>ลาบวช</option><option>ลาไปช่วยราชการ</option>
+          </select>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันที่เริ่ม</label>
+            <input type="date" class="form-control form-control-sm" id="editLeaveStartDate">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันที่สิ้นสุด</label>
+            <input type="date" class="form-control form-control-sm" id="editLeaveEndDate">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">จำนวนวัน</label>
+          <input type="number" class="form-control form-control-sm" id="editLeaveDays" min="0.5" step="0.5">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">เหตุผล</label>
+          <textarea class="form-control form-control-sm" id="editLeaveReason" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer gap-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-sm btn-accent" onclick="submitLeaveEdit()">
+          <i class="fas fa-save me-1"></i>บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Review -->
+<div class="modal fade pssms-modal" id="leaveReviewModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-gavel me-2"></i>พิจารณาคำร้องลา</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="leaveReviewDetail" class="mb-3 p-3 rounded-2" style="background:var(--p-subtle);font-size:.9rem;"></div>
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">หมายเหตุ (ถ้ามี)</label>
+          <textarea class="form-control" id="leaveReviewComment" rows="2" placeholder="เหตุผลเพิ่มเติม..."></textarea>
+        </div>
+        <input type="hidden" id="leaveReviewId">
+      </div>
+      <div class="modal-footer gap-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-sm btn-danger" onclick="submitLeaveReview('ปฏิเสธ')">
+          <i class="fas fa-times me-1"></i>ปฏิเสธ
+        </button>
+        <button class="btn btn-sm btn-success" onclick="submitLeaveReview('อนุมัติ')">
+          <i class="fas fa-check me-1"></i>อนุมัติ
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

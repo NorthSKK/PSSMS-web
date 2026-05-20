@@ -1,0 +1,72 @@
+<div class="container">
+  <div class="row min-vh-100 align-items-center justify-content-center">
+    <div class="col-md-5 col-lg-4">
+      <div class="pssms-card p-4 text-center" style="background: #fff;">
+        <div class="mb-4">
+          <div id="loginLogoWrap" class="rounded-circle d-inline-flex justify-content-center align-items-center mb-3 overflow-hidden" style="width: 72px; height: 72px; background: var(--p-accent-soft); border: 1px solid var(--p-border); position:relative;">
+            <i id="loginLogoIcon" class="fas fa-school fa-lg" style="color: var(--p-accent);"></i>
+            <img id="loginLogoImg" src="" alt="logo" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;">
+          </div>
+          <h4 class="fw-bold mb-1" style="letter-spacing: -0.01em;">PSSMS</h4>
+          <p id="loginSchoolName" class="text-muted small mb-0">โรงเรียนภูพระบาทวิทยา</p>
+        </div>
+
+        <div class="mb-3 text-start position-relative" id="usernameWrapper">
+          <div class="form-floating">
+            <input type="text" class="form-control" id="username" placeholder="Username"
+                   autocomplete="off"
+                   onkeydown="if(event.key==='Enter'){hideSavedAccounts();document.getElementById('password').focus();}"
+                   oninput="filterSavedAccounts(this.value)"
+                   onfocus="showSavedAccounts()">
+            <label for="username"><i class="fas fa-user me-2"></i>รหัสผู้ใช้งาน</label>
+          </div>
+          <div id="savedAccountsList" class="position-absolute w-100 bg-white border rounded-3 shadow"
+               style="top:100%;left:0;z-index:1050;display:none;max-height:220px;overflow-y:auto;margin-top:2px;">
+          </div>
+        </div>
+
+        <div class="form-floating mb-3 text-start position-relative">
+          <input type="password" class="form-control" id="password" placeholder="Password"
+                 style="padding-right: 45px;"
+                 onkeydown="if(event.key === 'Enter') processLogin()">
+          <label for="password"><i class="fas fa-lock me-2"></i>รหัสผ่าน</label>
+
+          <span class="position-absolute top-50 end-0 translate-middle-y me-3"
+                style="cursor: pointer; color: var(--p-text-muted); z-index: 10;"
+                onclick="togglePasswordVisibility()">
+            <i id="toggleIcon" class="fas fa-eye-slash"></i>
+          </span>
+        </div>
+
+        <button class="btn btn-accent w-100 py-2 fw-medium" onclick="hideSavedAccounts();processLogin()">
+          เข้าสู่ระบบ
+        </button>
+
+        <div class="mt-4 small text-muted">
+          พัฒนาโดย: ครูน๊อต ศิกษก เดินรีบรัมย์
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('password');
+    const toggleIcon = document.getElementById('toggleIcon');
+    if (passwordInput.type === 'password') {
+      passwordInput.type = 'text';
+      toggleIcon.classList.replace('fa-eye-slash', 'fa-eye');
+    } else {
+      passwordInput.type = 'password';
+      toggleIcon.classList.replace('fa-eye', 'fa-eye-slash');
+    }
+  }
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!document.getElementById('usernameWrapper')?.contains(e.target)) {
+      hideSavedAccounts();
+    }
+  });
+</script>

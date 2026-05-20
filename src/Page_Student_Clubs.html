@@ -1,0 +1,163 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-flag-checkered me-2" style="color: var(--p-accent);"></i>ลงทะเบียนชุมนุม</h4>
+      <p class="pssms-subtitle">เทอม <span id="studentClubTerm">-</span>/<span id="studentClubYear">-</span> · เลือกชุมนุมได้ 1 อย่างต่อภาคเรียน</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="initStudentClubs()"><i class="fas fa-sync me-1"></i>รีเฟรช</button>
+    </div>
+  </div>
+
+  <div id="myClubCard" class="pssms-card mb-3 d-none">
+    <div class="p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <small class="text-muted">ชุมนุมของฉัน</small>
+        <h5 class="fw-medium mb-0 text-success"><i class="fas fa-check-circle me-2"></i><span id="myClubName">-</span></h5>
+        <div class="small text-muted"><span id="myClubAdvisors"></span></div>
+      </div>
+      <button class="btn btn-outline-danger btn-sm" id="myClubUnregisterBtn" onclick="studentUnregister()">
+        <i class="fas fa-times me-1"></i>ยกเลิกการลงทะเบียน
+      </button>
+    </div>
+  </div>
+
+  <div class="pssms-card p-0">
+    <div class="pssms-card-header">
+      <span><i class="fas fa-list me-2" style="color:var(--p-text-muted);"></i>ชุมนุมที่เปิดรับสมัคร</span>
+      <input type="text" id="studentClubSearch" class="form-control form-control-sm w-auto" placeholder="ค้นหา..." onkeyup="filterStudentClubList()">
+    </div>
+    <div class="p-3" id="studentClubCards" style="min-height: 200px;">
+      <div class="pssms-skel mb-2" style="height:80px;border-radius:12px;"></div>
+      <div class="pssms-skel mb-2" style="height:80px;border-radius:12px;"></div>
+      <div class="pssms-skel" style="height:80px;border-radius:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _studentClubList = [];
+let _studentMyClub = null;
+
+function initStudentClubs() {
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  if (!user) return;
+  document.getElementById('studentClubTerm').textContent = user.currentTerm;
+  document.getElementById('studentClubYear').textContent = user.currentYear;
+
+  google.script.run.withSuccessHandler(my => {
+    _studentMyClub = my;
+    renderMyClubCard(my);
+    loadStudentClubList();
+  }).getMyClub(user.id, user.currentTerm, user.currentYear);
+}
+
+function renderMyClubCard(c) {
+  const card = document.getElementById('myClubCard');
+  if (!card) return;
+  if (!c) { card.classList.add('d-none'); return; }
+  card.classList.remove('d-none');
+  document.getElementById('myClubName').textContent = c.clubName;
+  const advText = (c.advisors || []).map(a => a.teacherName).filter(Boolean).join(', ');
+  document.getElementById('myClubAdvisors').textContent = advText ? 'ครูที่ปรึกษา: ' + advText : '';
+}
+
+function loadStudentClubList() {
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  google.script.run.withSuccessHandler(list => {
+    _studentClubList = list || [];
+    renderStudentClubCards(_studentClubList);
+  }).getClubList(user.currentTerm, user.currentYear);
+}
+
+function renderStudentClubCards(list) {
+  const wrap = document.getElementById('studentClubCards');
+  if (!list || list.length === 0) {
+    wrap.innerHTML = '<div class="text-center text-muted p-5"><i class="fas fa-inbox fa-3x opacity-25 mb-2 d-block"></i>ยังไม่มีชุมนุมเปิดในเทอมนี้</div>';
+    return;
+  }
+  const myClubId = _studentMyClub ? _studentMyClub.clubId : null;
+
+  let html = '<div class="row g-3">';
+  list.forEach(c => {
+    const isMine = c.clubId === myClubId;
+    const advText = (c.advisors || []).map(a => a.teacherName).filter(Boolean).join(', ');
+    const seatPercent = c.capacity > 0 ? Math.min(100, Math.round((c.memberCount / c.capacity) * 100)) : 0;
+    const seatColor = c.full ? 'bg-danger' : (seatPercent > 80 ? 'bg-warning' : 'bg-success');
+    const cardBorder = isMine ? 'border-success border-2' : 'border-0';
+    const btn = isMine
+      ? '<button class="btn btn-success btn-sm w-100" disabled><i class="fas fa-check me-1"></i>คุณอยู่ในชุมนุมนี้</button>'
+      : (myClubId
+        ? '<button class="btn btn-outline-secondary btn-sm w-100" disabled><i class="fas fa-lock me-1"></i>มีชุมนุมแล้ว</button>'
+        : (c.full || c.status !== 'open'
+          ? `<button class="btn btn-outline-secondary btn-sm w-100" disabled><i class="fas fa-ban me-1"></i>${c.full ? 'เต็มแล้ว' : 'ปิดรับสมัคร'}</button>`
+          : `<button class="btn btn-primary btn-sm w-100" onclick="studentRegister('${c.clubId}', '${_esc(c.clubName)}')"><i class="fas fa-edit me-1"></i>ลงทะเบียน</button>`));
+    html += `<div class="col-md-6 col-lg-4">
+      <div class="card shadow-sm h-100 ${cardBorder}">
+        <div class="card-body p-3 d-flex flex-column">
+          <h5 class="fw-bold mb-1">${_esc(c.clubName)} ${isMine ? '<span class="badge bg-success ms-1" style="font-size:0.6rem;">ของฉัน</span>' : ''}</h5>
+          ${c.description ? `<p class="small text-muted mb-2" style="min-height: 2.5em;">${_esc(c.description)}</p>` : '<p class="small text-muted mb-2" style="min-height: 2.5em;">&nbsp;</p>'}
+          <div class="small text-muted mb-2"><i class="fas fa-chalkboard-teacher me-1"></i>${_esc(advText) || '<em>ยังไม่มีครู</em>'}</div>
+          <div class="mb-2">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="text-muted">ที่นั่ง</span>
+              <span class="${c.full ? 'text-danger fw-bold' : 'text-success'}">${c.memberCount} / ${c.capacity || '∞'}</span>
+            </div>
+            <div class="progress" style="height: 6px;">
+              <div class="progress-bar ${seatColor}" style="width: ${seatPercent}%;"></div>
+            </div>
+          </div>
+          <div class="mt-auto">${btn}</div>
+        </div>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+window.filterStudentClubList = (typeof debounce === 'function') ? debounce(_filterStudentClubImpl, 180) : _filterStudentClubImpl;
+function _filterStudentClubImpl() {
+  const q = (document.getElementById('studentClubSearch').value || '').toLowerCase();
+  const filtered = _studentClubList.filter(c =>
+    c.clubName.toLowerCase().includes(q) ||
+    (c.description || '').toLowerCase().includes(q) ||
+    (c.advisors || []).some(a => (a.teacherName || '').toLowerCase().includes(q))
+  );
+  renderStudentClubCards(filtered);
+}
+
+function studentRegister(clubId, clubName) {
+  if (!confirm(`ยืนยันลงทะเบียนชุมนุม "${clubName}"?\nลงแล้วเปลี่ยนต้องยกเลิกก่อน — ขึ้นอยู่กับสิทธิ์ admin`)) return;
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  google.script.run.withSuccessHandler(res => {
+    if (res.status === 'success') {
+      alert('✅ ' + res.message);
+      initStudentClubs();
+    } else {
+      alert('❌ ' + res.message);
+    }
+  }).registerToClub(user.id, clubId, 'self');
+}
+
+function studentUnregister() {
+  if (!_studentMyClub) return;
+  if (!confirm(`ยกเลิกการลงทะเบียนชุมนุม "${_studentMyClub.clubName}"?`)) return;
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  google.script.run.withSuccessHandler(res => {
+    if (res.status === 'success') {
+      alert('✅ ' + res.message);
+      _studentMyClub = null;
+      initStudentClubs();
+    } else {
+      alert('❌ ' + res.message);
+    }
+  }).unregisterFromClub(user.id, _studentMyClub.clubId, 'self');
+}
+
+// Auto-init when page loads
+if (typeof initStudentClubs === 'function') setTimeout(initStudentClubs, 50);
+</script>
+

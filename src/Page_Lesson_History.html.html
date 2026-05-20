@@ -1,0 +1,133 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-history me-2" style="color: var(--p-accent);"></i>แฟ้มบันทึกหลังสอน</h4>
+      <p class="pssms-subtitle" id="history-header-info">กำลังโหลดข้อมูล...</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="analyzeProblems()">
+        <i class="fas fa-stethoscope me-1"></i>วิเคราะห์ปัญหาที่พบบ่อย
+      </button>
+    </div>
+  </div>
+
+  <div class="pssms-card mb-3 p-2">
+    <div class="input-group">
+      <span class="input-group-text border-0" style="background: transparent;"><i class="fas fa-search text-muted"></i></span>
+      <input type="text" id="searchLessonHistory" class="form-control border-0" placeholder="ค้นหาวิชา, ห้อง, หรือหัวข้อ..." onkeyup="filterLessonHistory()" style="box-shadow: none;">
+    </div>
+  </div>
+
+  <div id="lessonHistoryContainer" class="row g-3"></div>
+</div>
+
+<div class="modal fade pssms-modal" id="editLessonHistoryModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-edit me-2" style="color: var(--p-accent);"></i>แก้ไขบันทึกผลการจัดการเรียนรู้</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" style="background: var(--p-subtle);">
+        <form id="editLessonHistoryForm">
+          <input type="hidden" id="edit_dl_ts"> <div class="mb-3">
+            <label class="form-label fw-bold">หัวข้อที่สอน</label>
+            <input type="text" class="form-control" id="edit_dl_topic">
+          </div>
+
+          <div class="pssms-card mb-3">
+            <div class="pssms-card-header">1. ผลการจัดการเรียนรู้และปัญหา</div>
+            <div class="card-body">
+              <div class="mb-3"><label class="form-label fw-bold">1.1 ผลการจัดการเรียนรู้</label><textarea class="form-control" id="edit_dl_outcomes" rows="3"></textarea></div>
+              <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label fw-bold text-danger">1.2 ปัญหา/อุปสรรค</label><textarea class="form-control" id="edit_dl_problems" rows="3"></textarea></div>
+                <div class="col-md-6 mb-3"><label class="form-label fw-bold text-success">1.3 แนวทางแก้ไข</label><textarea class="form-control" id="edit_dl_solutions" rows="3"></textarea></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pssms-card mb-3">
+            <div class="pssms-card-header">2. การประเมินตนเอง (8 ตัวชี้วัด DPA)</div>
+            <div class="card-body">
+              <div class="row g-2">
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="ผู้เรียนเข้าถึงสิ่งที่เรียน" id="edpa1"><label class="form-check-label" for="edpa1">1. ผู้เรียนเข้าถึงสิ่งที่เรียน</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="ผู้เรียนเชื่อมโยงความรู้เดิม" id="edpa2"><label class="form-check-label" for="edpa2">2. ผู้เรียนเชื่อมโยงความรู้เดิม</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="สร้างความรู้เอง" id="edpa3"><label class="form-check-label" for="edpa3">3. ผู้เรียนสร้างความรู้เอง</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="กระตุ้นแรงจูงใจ" id="edpa4"><label class="form-check-label" for="edpa4">4. กระตุ้นแรงจูงใจให้เรียนรู้</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="พัฒนาทักษะ" id="edpa5"><label class="form-check-label" for="edpa5">5. ผู้เรียนได้รับการพัฒนาทักษะ</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="Feedback" id="edpa6"><label class="form-check-label" for="edpa6">6. มีการให้ Feedback แก่ผู้เรียน</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="บรรยากาศดี" id="edpa7"><label class="form-check-label" for="edpa7">7. บรรยากาศส่งเสริมการเรียนรู้</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input edit-dpa-check" type="checkbox" value="กำกับตนเอง" id="edpa8"><label class="form-check-label" for="edpa8">8. ผู้เรียนกำกับตนเองในการเรียน</label></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pssms-card mb-3">
+            <div class="pssms-card-header">3. ทักษะ 3R8C ที่เกิดขึ้น</div>
+            <div class="card-body">
+              <div class="row g-2">
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Reading" id="es1"><label class="form-check-label" for="es1">Reading (อ่านออก)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Writing" id="es2"><label class="form-check-label" for="es2">Writing (เขียนได้)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Arithmetic" id="es3"><label class="form-check-label" for="es3">Arithmetic (คิดเลขเป็น)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Critical Thinking" id="es4"><label class="form-check-label" for="es4">Critical Thinking</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Creativity" id="es5"><label class="form-check-label" for="es5">Creativity</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Cross-cultural" id="es6"><label class="form-check-label" for="es6">Cross-cultural</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Collaboration" id="es7"><label class="form-check-label" for="es7">Collaboration</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Communication" id="es8"><label class="form-check-label" for="es8">Communication</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Computing" id="es9"><label class="form-check-label" for="es9">Computing (ICT)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Career Skills" id="es10"><label class="form-check-label" for="es10">Career Skills</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input edit-skill-check" type="checkbox" value="Compassion" id="es11"><label class="form-check-label" for="es11">Compassion (คุณธรรม)</label></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pssms-card">
+            <div class="pssms-card-header">4. ผลลัพธ์และอัปเดตไฟล์แนบ</div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label fw-bold">ผลลัพธ์ที่เกิดกับผู้เรียน</label>
+                <textarea class="form-control" id="edit_dl_student_results" rows="2"></textarea>
+              </div>
+              <div class="p-2 rounded-3 small mb-3" style="background: #fefce8; border: 1px solid #fef08a; color: #854d0e;">
+                <i class="fas fa-info-circle me-1"></i>หากไม่ต้องการเปลี่ยนรูปภาพ ให้เว้นช่องเลือกไฟล์ด้านล่าง
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold">อัปเดตไฟล์ผลงาน (ถ้ามี)</label>
+                  <input class="form-control" type="file" id="edit_dl_work_file" accept="image/*,application/pdf">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold">อัปเดตภาพบรรยากาศ (ถ้ามี)</label>
+                  <input class="form-control" type="file" id="edit_dl_image_file" accept="image/*">
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-soft btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-accent btn-sm" id="btnSaveEditLesson" onclick="saveEditLessonHistory()">
+          <i class="fas fa-save me-1"></i>บันทึกการแก้ไข
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade pssms-modal" id="problemAnalysisModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-chart-pie me-2" style="color: var(--p-danger);"></i>สรุปปัญหาและแนวทางแก้ไข
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="problemAnalysisBody" style="background: var(--p-subtle);"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-soft btn-sm" data-bs-dismiss="modal">ปิด</button>
+      </div>
+    </div>
+  </div>
+</div>

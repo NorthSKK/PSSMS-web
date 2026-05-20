@@ -1,0 +1,992 @@
+<style>
+/* ==========================================
+   🎨 0. DESIGN TOKENS (70-20-10 minimal palette)
+   Used across all non-dashboard pages.
+========================================== */
+:root {
+  /* ── 60-30-10 System ── */
+  --p-dom:    #f4fbfc;   /* 60% Dominant — page background */
+  --p-sec:    #cce8eb;   /* 30% Secondary — card headers, labels */
+  --p-accent: #076874;   /* 10% Accent — CTA, icons, active */
+  --p-accent-hover: #054f59;
+  --p-accent-soft:  #e0f4f6;
+
+  /* Surface & structure */
+  --p-surface:       #ffffff;
+  --p-subtle:        var(--p-dom);
+  --p-border:        rgba(7,104,116,.13);
+  --p-border-strong: rgba(7,104,116,.24);
+  --p-hover:         rgba(7,104,116,.07);
+
+  /* Typography */
+  --p-text:       #1f2937;
+  --p-text-muted: #6c757d;
+  --p-chip-bg:    var(--p-dom);
+  --p-chip-text:  #444;
+
+  /* State colors — semantic only */
+  --p-info:    #0d6efd;
+  --p-success: #198754;
+  --p-warning: #d97706;
+  --p-danger:  #dc3545;
+
+  /* Geometry */
+  --p-radius:    14px;
+  --p-radius-sm: 8px;
+
+  /* Department palette (named refs for sidebar & legacy) */
+  --p-dept-academic:        #0d95a0;
+  --p-dept-academic-hover:  #0b7a84;
+  --p-dept-academic-soft:   #e4f8fa;
+
+  --p-dept-budget:          #4a8a54;
+  --p-dept-budget-hover:    #3c7244;
+  --p-dept-budget-soft:     #eaf4eb;
+
+  --p-dept-personnel:       #c4501e;
+  --p-dept-personnel-hover: #a84118;
+  --p-dept-personnel-soft:  #fdeee8;
+
+  --p-dept-general:         #7a5e00;
+  --p-dept-general-hover:   #624b00;
+  --p-dept-general-soft:    #fefdf0;
+}
+
+/* Department-scoped tokens.
+   .pssms-dept-* on page wrapper, body.dept-* set by JS routing in loadPage(). */
+.pssms-dept-academic, body.dept-academic {
+  --p-dom:#f0fbfd; --p-sec:#b8e2e7;
+  --p-accent:var(--p-dept-academic); --p-accent-hover:var(--p-dept-academic-hover); --p-accent-soft:var(--p-dept-academic-soft);
+  --p-border:rgba(13,149,160,.13); --p-border-strong:rgba(13,149,160,.24); --p-hover:rgba(13,149,160,.07);
+}
+.pssms-dept-budget, body.dept-budget {
+  --p-dom:#f2faf3; --p-sec:#c4e2c8;
+  --p-accent:var(--p-dept-budget); --p-accent-hover:var(--p-dept-budget-hover); --p-accent-soft:var(--p-dept-budget-soft);
+  --p-border:rgba(74,138,84,.13); --p-border-strong:rgba(74,138,84,.24); --p-hover:rgba(74,138,84,.07);
+}
+.pssms-dept-personnel, body.dept-personnel {
+  --p-dom:#fef6f3; --p-sec:#f7d0c4;
+  --p-accent:var(--p-dept-personnel); --p-accent-hover:var(--p-dept-personnel-hover); --p-accent-soft:var(--p-dept-personnel-soft);
+  --p-border:rgba(196,80,30,.13); --p-border-strong:rgba(196,80,30,.24); --p-hover:rgba(196,80,30,.07);
+}
+.pssms-dept-general, body.dept-general {
+  --p-dom:#fefdf0; --p-sec:#f0e5b0;
+  --p-accent:var(--p-dept-general); --p-accent-hover:var(--p-dept-general-hover); --p-accent-soft:var(--p-dept-general-soft);
+  --p-border:rgba(122,94,0,.13); --p-border-strong:rgba(122,94,0,.24); --p-hover:rgba(122,94,0,.07);
+}
+
+/* Page shell shared by every non-dashboard page */
+.pssms-page { padding: 1.5rem; }
+.pssms-page-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+.pssms-page-header h4 { font-weight: 700; letter-spacing: -0.01em; margin-bottom: 0.25rem; color: var(--p-text); }
+.pssms-page-header .pssms-subtitle { font-size: 0.85rem; color: var(--p-text-muted); margin-bottom: 0; }
+.pssms-page-header .pssms-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* Card pattern (replaces shadow-sm rounded-4 throughout) */
+.pssms-card {
+  background: var(--p-surface);
+  border: 1px solid var(--p-border);
+  border-radius: var(--p-radius);
+  padding: 1rem;
+  overflow: hidden;
+}
+.pssms-card-header {
+  font-weight: 700; font-size: 0.92rem; color: var(--p-text);
+  letter-spacing: .01em;
+  padding: 0.75rem 1rem .5rem;
+  border-bottom: 1px solid var(--p-border);
+  margin: -1rem -1rem .25rem -1rem;
+  display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+  background: var(--p-sec);
+}
+.pssms-card.p-0 > .pssms-card-header { margin: 0 0 .25rem 0; }
+
+/* Buttons — pill shape */
+.btn-accent { background: var(--p-accent); color: #fff; border: 1px solid var(--p-accent); font-weight: 600; border-radius: 999px; }
+.btn-accent:hover, .btn-accent:focus { background: var(--p-accent-hover); border-color: var(--p-accent-hover); color: #fff; }
+.btn-soft { background: var(--p-surface); border: 1px solid var(--p-border-strong); color: var(--p-text); font-weight: 500; border-radius: 999px; }
+.btn-soft:hover { background: var(--p-hover); border-color: var(--p-border-strong); color: var(--p-text); }
+.btn-soft i { color: var(--p-text-muted); }
+
+/* Forms */
+.form-control, .form-select, .input-group-text, .form-check-label {
+  font-size: 0.82rem;
+}
+.form-control, .form-select {
+  padding: 0.4rem 0.7rem;
+}
+select.form-select {
+  field-sizing: content;
+  min-width: 7rem;
+  max-width: 100%;
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--p-accent);
+  box-shadow: 0 0 0 0.15rem var(--p-accent-soft);
+}
+.form-label, label { font-size: 0.85rem; }
+.dropdown-menu { font-size: 0.85rem; }
+.dropdown-item { font-size: 0.85rem; padding: 0.4rem 0.9rem; }
+
+/* Tables — minimal */
+.pssms-table { width: 100%; }
+.pssms-table thead th,
+#page-content .table thead th,
+#page-content table.table thead th {
+  background: transparent !important;
+  background-color: transparent !important;
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+  color: var(--p-text-muted) !important;
+  font-weight: 500 !important;
+  border-bottom: 1px solid var(--p-border) !important;
+  padding: 0.25rem 0.75rem 0.5rem;
+  opacity: .75;
+  text-transform: none !important;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--p-text-muted);
+}
+.pssms-table tbody td,
+#page-content .table tbody td,
+#page-content table.table tbody td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--p-border); vertical-align: middle; font-size: 0.88rem; }
+.pssms-table tbody td .text-muted,
+.pssms-table tbody td small,
+#page-content .table tbody td .text-muted,
+#page-content .table tbody td small { font-size: 0.72rem; }
+.pssms-table tbody tr:hover td { background: var(--p-hover); }
+
+/* Chip / soft badge */
+.pssms-chip {
+  display: inline-block;
+  background: var(--p-chip-bg);
+  color: var(--p-chip-text);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+/* Icon circle */
+.pssms-icon-circle {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--p-accent-soft); color: var(--p-accent);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; flex-shrink: 0;
+}
+
+/* KPI display */
+.pssms-kpi-value { font-size: 1.75rem; font-weight: 700; color: var(--p-accent); line-height: 1.1; }
+.pssms-kpi-sub   { font-size: 0.78rem; color: var(--p-text-muted); margin-top: 2px; }
+
+/* Clickable card */
+.pssms-card-link { cursor: pointer; transition: box-shadow .15s, border-color .15s; }
+.pssms-card-link:hover { border-color: var(--p-accent); box-shadow: 0 0 0 3px var(--p-accent-soft); }
+
+/* Accent-tinted card */
+.pssms-card-accent { background: var(--p-accent-soft); border-color: var(--p-border); }
+
+/* Empty state */
+.pssms-empty { text-align: center; padding: 2rem 1rem; color: var(--p-text-muted); }
+.pssms-empty i { font-size: 2rem; margin-bottom: 0.5rem; opacity: .5; display: block; }
+
+/* Status chips */
+.pssms-status { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.pssms-status-pending  { background: #fef9c3; color: #854d0e; }
+.pssms-status-approved { background: #dcfce7; color: #166534; }
+.pssms-status-rejected { background: #fee2e2; color: #991b1b; }
+.pssms-status-info     { background: #dbeafe; color: #1e40af; }
+
+/* Progress bar */
+.pssms-progress { height: 6px; border-radius: 999px; background: var(--p-sec); overflow: hidden; }
+.pssms-progress-bar { height: 100%; background: var(--p-accent); border-radius: 999px; transition: width .3s; }
+
+/* Number badge */
+.pssms-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 20px; height: 20px; border-radius: 999px;
+  background: var(--p-accent); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 0 5px;
+}
+
+/* Nav pills (tab-style) */
+.pssms-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.pssms-pill {
+  padding: 4px 14px; border-radius: 999px; font-size: 0.82rem; font-weight: 500;
+  border: 1px solid var(--p-border); background: var(--p-surface); color: var(--p-text-muted);
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.pssms-pill:hover { background: var(--p-hover); color: var(--p-text); }
+.pssms-pill.active { background: var(--p-accent); color: #fff; border-color: var(--p-accent); }
+
+/* Modal — flat header */
+.pssms-modal .modal-content { border: 1px solid var(--p-border); border-radius: var(--p-radius); }
+.pssms-modal .modal-header { border-bottom: 1px solid var(--p-border); background: var(--p-surface); color: var(--p-text); }
+.pssms-modal .modal-header .modal-title { font-weight: 600; }
+
+/* ==========================================
+   🌐 1. BASE & TYPOGRAPHY (ตั้งค่าพื้นฐาน)
+========================================== */
+body {
+    font-family: 'IBM Plex Sans Thai', sans-serif;
+    background-color: var(--p-dom);
+    overflow-x: hidden !important; /* กันจอโยกซ้ายขวา */
+    transition: background-color .2s;
+}
+.wrapper { display: flex; width: 100%; align-items: stretch; }
+
+/* 🚨 CRITICAL FIX: ป้องกันตารางดันขอบจอทะลุ (Flexbox Bug Fix) */
+#page-content, .container-fluid, .tab-content, .tab-pane, .card {
+    min-width: 0 !important; /* บังคับให้ Flexbox ยอมหดตัว */
+    max-width: 100% !important;
+}
+
+/* ==========================================
+   🗂️ 2. SIDEBAR & MENU (เมนูซ้ายมือ)
+   Aligned with dept palette tokens (--p-dept-*).
+========================================== */
+/* Override Bootstrap .bg-dark / .text-white on sidebar (light mode default) */
+#sidebar.bg-dark { background-color: rgba(255,255,255,0.85) !important; }
+#sidebar.text-white { color: #1f2937 !important; }
+#sidebar.text-white h5.text-white,
+#sidebar.text-white .text-white { color: #111827 !important; }
+.dark-mode #sidebar.bg-dark { background-color: rgba(14,28,31,0.92) !important; }
+.dark-mode #sidebar.text-white { color: #f3f4f6 !important; }
+.dark-mode #sidebar.text-white h5.text-white,
+.dark-mode #sidebar.text-white .text-white { color: #ffffff !important; }
+
+#sidebar {
+    /* Force neutral Admin tokens — sidebar stays consistent across dept pages */
+    --p-surface: #ffffff;
+    --p-text: #1f2937;
+    --p-text-muted: #6b7280;
+    --p-border: #e5e7eb;
+    --p-hover: #f3f4f6;
+    --p-subtle: #f9fafb;
+    --p-sec: #f1f5f9;
+    --p-accent: #076874;
+
+    min-width: 250px; max-width: 250px;
+    transition: all 0.3s ease; z-index: 1030;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-right: 1px solid var(--p-border);
+    color: var(--p-text);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    align-self: flex-start;
+    scrollbar-width: thin;
+    /* fade-out mask at bottom — hints there's more content below */
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent 100%);
+            mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent 100%);
+}
+.dark-mode #sidebar {
+    --p-surface: #0e1c1f;
+    --p-text: #f3f4f6;
+    --p-text-muted: #b8bdc4;
+    --p-border: #1c2528;
+    --p-hover: rgba(255,255,255,0.06);
+    --p-subtle: #14252a;
+    --p-sec: #14252a;
+    --p-accent: #20bdc9;
+    background: rgba(14,28,31,0.92);
+    border-right-color: var(--p-border);
+}
+#sidebar.active { margin-left: -250px; }
+#sidebar .sidebar-header { background: var(--p-subtle); padding: 14px 16px; border-bottom: 1px solid var(--p-border); }
+#sidebar .sidebar-header h5 { color: var(--p-text) !important; }
+#sidebar .sidebar-header .text-info { color: var(--p-accent) !important; }
+#sidebar .sidebar-header .text-secondary { color: var(--p-text-muted) !important; }
+#sidebar ul.components { padding: .5rem !important; }
+#sidebar ul li { margin-bottom: 0 !important; }
+#sidebar ul li a {
+    padding: 7px 14px; display: block; color: var(--p-text);
+    text-decoration: none; transition: background 0.15s, color 0.15s; font-size: 0.88rem;
+}
+#sidebar ul li a:hover { background: var(--p-hover); color: var(--p-text); }
+
+.menu-divider {
+    font-size: 0.65rem; text-transform: uppercase; color: var(--p-text-muted);
+    margin: 10px 14px 4px 14px; letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--p-border); padding-bottom: 3px;
+}
+
+/* Reusable bottom fade overlay — fades to surface color, dark-mode aware */
+.pssms-fade-bottom {
+  height: 35px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, var(--p-surface) 90%);
+  border-radius: 0 0 12px 12px;
+}
+.dark-mode .pssms-fade-bottom {
+  background: linear-gradient(to bottom, rgba(30,32,36,0) 0%, var(--p-surface) 90%);
+}
+
+/* dept-btn — section label / clickable section (token-driven, compact) */
+.dept-btn {
+    display: flex !important; align-items: center; margin: 2px 10px;
+    padding: 6px 10px !important; border-radius: 7px !important;
+    border-left: 3px solid transparent !important;
+    background: transparent !important;
+    color: var(--p-text) !important; border-bottom: none !important;
+    font-size: 0.85rem; font-weight: 600;
+    transition: background 0.15s, color 0.15s;
+}
+.dept-btn i { width: 22px; font-size: 0.85rem; margin-right: 10px; text-align: center; }
+a.dept-btn:hover { background: var(--p-hover) !important; color: var(--p-text) !important; }
+div.dept-btn { cursor: default; pointer-events: none; }
+
+/* Dept accent — light mode uses dept tokens, dark mode brighter */
+.academic   { border-left-color: var(--p-dept-academic)   !important; } .academic i   { color: var(--p-dept-academic); }
+.budget     { border-left-color: var(--p-dept-budget)     !important; } .budget i     { color: var(--p-dept-budget); }
+.personnel  { border-left-color: var(--p-dept-personnel)  !important; } .personnel i  { color: var(--p-dept-personnel); }
+.general    { border-left-color: var(--p-dept-general)    !important; } .general i    { color: var(--p-dept-general); }
+
+/* Dark mode: brighter icon contrast on dark sidebar */
+.dark-mode .academic i  { color: #3de1ed; }
+.dark-mode .budget i    { color: #7dd383; }
+.dark-mode .personnel i { color: #ff8a5c; }
+.dark-mode .general i   { color: #e6c14a; }
+
+/* Force sidebar dept-btn text bright — guard against inherited tints/opacity */
+#sidebar .dept-btn,
+#sidebar .dept-btn span,
+#sidebar .nav-link-custom,
+#sidebar .nav-link-custom span,
+#sidebar .nav-link-sub,
+#sidebar .nav-link-sub span { color: var(--p-text) !important; opacity: 1 !important; }
+#sidebar .nav-link-sub,
+#sidebar .nav-link-sub span { color: var(--p-text-muted) !important; }
+
+/* nav-link-custom — top dashboard link */
+.nav-link-custom {
+    display: flex !important; align-items: center; margin: 2px 10px;
+    padding: 8px 12px !important; border-radius: 7px !important;
+    color: var(--p-text) !important; font-weight: 500;
+    background: var(--p-subtle) !important;
+}
+.nav-link-custom:hover { background: var(--p-hover) !important; color: var(--p-text) !important; }
+
+/* nav-link-sub — sub items under dept */
+.nav-link-sub {
+    display: flex !important; align-items: center;
+    font-size: 0.8rem !important;
+    padding: 4px 12px 4px 13px !important;
+    color: var(--p-text-muted) !important;
+    border-radius: 6px !important;
+    margin: 0 10px 0 22px !important;
+    transition: background 0.15s, color 0.15s;
+}
+.nav-link-sub i { width: 20px; text-align: center; flex-shrink: 0; font-size: 0.75rem !important; }
+.nav-link-sub:hover { background: var(--p-hover) !important; color: var(--p-text) !important; }
+
+/* pssms-tabs — unified tab bar */
+.pssms-tabs { border-bottom: 1px solid var(--p-border); }
+.pssms-tabs .nav-link {
+  color: var(--p-text-muted) !important; border: none !important;
+  background: transparent !important; border-radius: 6px 6px 0 0 !important;
+  font-weight: 500; font-size: 0.82rem; padding: 0.3rem 0.65rem;
+}
+.pssms-tabs .nav-link.active {
+  border-bottom: 2px solid var(--p-accent) !important;
+  color: var(--p-accent) !important; background: transparent !important;
+}
+.pssms-tabs .nav-link:hover:not(.active) { background: var(--p-hover) !important; color: var(--p-text) !important; }
+
+/* ==========================================
+   📦 3. UI COMPONENTS (การ์ด & ปุ่ม & อื่นๆ)
+========================================== */
+.card { border: none; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+.stat-card { transition: transform 0.2s; }
+.stat-card:hover { transform: translateY(-5px); }
+
+.nav-pills .nav-link { color: #6c757d; border-radius: 50rem; transition: all 0.3s; }
+.nav-pills .nav-link.active { background-color: #0d6efd; color: #fff; box-shadow: 0 4px 10px rgba(13,110,253,0.3); }
+
+/* ==========================================
+   📊 4. SCORE TABLE (ตาราง ปพ.5 Notion Style)
+========================================== */
+.grid-wrapper {
+  position: relative; width: 100%; height: 60vh; 
+  border: 1px solid #dee2e6; border-radius: 0 0 12px 12px;
+  background: #fff; overflow: hidden;
+}
+
+.grid-scroll-container {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  overflow: auto; -webkit-overflow-scrolling: touch;
+}
+
+.grid-scroll-container table {
+  width: max-content !important; min-width: 100%;
+  border-collapse: separate !important; border-spacing: 0; margin-bottom: 0;
+}
+
+.grid-scroll-container::-webkit-scrollbar { width: 14px; height: 14px; }
+.grid-scroll-container::-webkit-scrollbar-track { background: #f8f9fa; }
+.grid-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 3px solid #f8f9fa; }
+.grid-scroll-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+#allInOneTable th { border-bottom: 2px solid #e2e8f0; font-weight: 600; color: #475569; padding: 8px; }
+#allInOneTable td { border-bottom: 1px solid #f1f5f9; vertical-align: middle; padding: 4px; }
+
+/* ==========================================
+   🌟 5. การตรึงหัวตาราง 2 ชั้น (Multi-row Sticky Header)
+========================================== */
+/* แถวที่ 1: รหัสตัวชี้วัด / ชื่อชิ้นงาน */
+#scoreTableHeader tr:nth-child(1) th, .eval-header tr:nth-child(1) th { 
+    position: sticky; top: 0; z-index: 10; 
+    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6; 
+    height: 60px; /* ล็อกความสูงแถวแรกให้คงที่ */
+    vertical-align: middle;
+}
+
+/* แถวที่ 2: คะแนนเต็ม */
+#scoreTableHeader tr:nth-child(2) th, .eval-header tr:nth-child(2) th { 
+    position: sticky; top: 60px; z-index: 10; /* ตรึงต่อจากแถวแรกพอดีเป๊ะ */
+    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6; 
+    vertical-align: middle;
+}
+
+/* ตรึงคอลัมน์ซ้ายสุด (เลขที่ และ ชื่อ-สกุล) */
+.sticky-col-1, .sticky-head-1 { position: sticky !important; left: 0; min-width: 45px; max-width: 45px; z-index: 11; background: #fff !important; box-shadow: inset -1px 0 0 #e2e8f0; }
+.sticky-col-2, .sticky-head-2 { position: sticky !important; left: 45px; min-width: 180px; max-width: 180px; z-index: 11; background: #fff !important; box-shadow: inset -1px 0 0 #e2e8f0, 4px 0 6px -2px rgba(0,0,0,0.05) !important; }
+
+/* มุมบนซ้ายต้องอยู่บนสุดเสมอ (กันการทับซ้อน) */
+.sticky-head-1, .sticky-head-2 { z-index: 15 !important; background: #f8fafc !important; }
+
+/* ==========================================
+   ช่องกรอกคะแนน & ไฮไลท์สี
+========================================== */
+.score-cell-input, .eval-input {
+    width: 50px; height: 32px; border-radius: 6px; background-color: #f8fafc;
+    border: 1px solid transparent; text-align: center; font-size: 0.85rem; font-weight: 600;
+    color: #334155; transition: all 0.2s ease;
+}
+.score-cell-input:hover, .eval-input:hover { background-color: #e2e8f0; cursor: text; }
+.score-cell-input:focus, .eval-input:focus { background-color: #ffffff; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); outline: none; }
+.eval-input { width: 45px !important; border-color: #ced4da; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+.qual-select { width: 60px; text-align: center; border: 1px solid transparent; background: #f8fafc; border-radius: 6px; font-weight: 600; font-size: 0.8rem; color: #475569; transition: all 0.2s; cursor: pointer; }
+.qual-select:hover { background: #e2e8f0; }
+.qual-select:focus { background: #ffffff; box-shadow: 0 0 0 3px rgba(13,202,240,0.15); outline: none; }
+
+.col-highlight-f { background-color: #f0f9ff !important; } 
+.col-highlight-m { background-color: #fffbeb !important; } 
+.col-highlight-mr { background-color: #fef2f2 !important; } 
+.col-highlight-e { background-color: #fff1f2 !important; } 
+.col-highlight-total { background-color: #f8fafc !important; } 
+.col-highlight-grade { background-color: #f0fdf4 !important; } 
+
+/* ==========================================
+   🌙 6. DARK MODE
+========================================== */
+
+/* --- Override design tokens for dark surfaces (pssms-* auto-inherits) --- */
+body.dark-mode {
+  --p-dom:    #0e1c1f;
+  --p-sec:    #1c3237;
+  --p-accent: #20bdc9;
+  --p-accent-hover: #1aa6b0;
+  --p-accent-soft:  #0e3038;
+  --p-surface: #1e2024;
+  --p-subtle: #25282d;
+  --p-border: #2c2f35;
+  --p-border-strong: #3a3e45;
+  --p-hover: #2a2d33;
+  --p-text: #e8eaed;
+  --p-text-muted: #9aa0a6;
+  --p-chip-bg: #2c2f35;
+  --p-chip-text: #cdd1d8;
+}
+
+/* Explicit pssms-* surfaces in dark (most inherit via tokens) */
+.dark-mode .pssms-card { background: var(--p-surface); border-color: var(--p-border); color: var(--p-text); }
+.dark-mode .pssms-card-header { background: var(--p-sec) !important; color: var(--p-text); border-color: var(--p-border); }
+.dark-mode .pssms-table thead th { background: var(--p-subtle); color: var(--p-text-muted); border-color: var(--p-border); }
+.dark-mode .pssms-table tbody td { color: var(--p-text); border-color: var(--p-border); }
+.dark-mode .pssms-table tbody tr:hover td { background: var(--p-hover); }
+.dark-mode .pssms-chip { background: var(--p-chip-bg); color: var(--p-chip-text); }
+.dark-mode .btn-soft { background: var(--p-surface); border-color: var(--p-border); color: var(--p-text); }
+.dark-mode .btn-soft:hover { background: var(--p-hover); border-color: var(--p-border-strong); color: var(--p-text); }
+.dark-mode .btn-soft i { color: var(--p-text-muted); }
+.dark-mode .pssms-page-header h4 { color: var(--p-text); }
+.dark-mode .pssms-subtitle { color: var(--p-text-muted); }
+
+/* Sticky thead — frosted glass, floats over scrolling rows
+   Applies to score grid + any table inside .grid-scroll-container */
+#allInOneTable thead th,
+.grid-scroll-container table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: rgba(255,255,255,0.85) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 0 var(--p-border);
+}
+.dark-mode #allInOneTable thead th,
+.dark-mode .grid-scroll-container table thead th {
+  background-color: rgba(30,32,36,0.85) !important;
+}
+
+/* Top navbar — sticky on scroll, token-driven, matches sidebar approach */
+#content > .navbar {
+  /* Neutral Admin tokens — navbar stays consistent across dept pages */
+  --p-surface-rgb: 255,255,255;
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background-color: rgba(var(--p-surface-rgb), 0.85) !important;
+  border-bottom: 1px solid #e5e7eb;
+  color: #1f2937;
+}
+.dark-mode #content > .navbar {
+  --p-surface-rgb: 14,28,31;
+  background-color: rgba(var(--p-surface-rgb), 0.92) !important;
+  border-bottom-color: #1c2528;
+  color: #f3f4f6;
+}
+.dark-mode #content > .navbar .btn-primary {
+  background-color: var(--p-accent);
+  border-color: var(--p-accent);
+}
+
+/* Top navbar in dark */
+.dark-mode .navbar.bg-white {
+  background-color: var(--p-surface) !important;
+  border-bottom: 1px solid var(--p-border);
+  box-shadow: none !important;
+}
+.dark-mode #user-display .fw-bold,
+.dark-mode #user-display .theme-text { color: var(--p-text) !important; }
+.dark-mode #user-display .text-muted { color: var(--p-text-muted) !important; }
+.dark-mode .navbar .btn-light {
+  background-color: var(--p-subtle) !important;
+  border-color: var(--p-border) !important;
+  color: var(--p-text) !important;
+}
+.dark-mode .navbar .btn-light:hover {
+  background-color: var(--p-hover) !important;
+  color: var(--p-text) !important;
+}
+
+/* --- Base: override Bootstrap 5.3 CSS variables --- */
+body.dark-mode {
+  background-color: var(--p-dom) !important;
+  color: #e8eaed !important;
+  --bs-body-color: #e0e0e0;
+  --bs-body-bg: #121212;
+  --bs-emphasis-color: #fff;
+  --bs-secondary-color: #9ba3ab;
+  --bs-tertiary-color: #666;
+  --bs-heading-color: #e0e0e0;
+  --bs-link-color: #8bb9fe;
+  --bs-link-hover-color: #abc8ff;
+  --bs-border-color: #333;
+  --bs-border-color-translucent: rgba(255,255,255,0.15);
+  color-scheme: dark;
+}
+/* Bootstrap table variables */
+.dark-mode .table {
+  --bs-table-color: #e0e0e0;
+  --bs-table-bg: transparent;
+  --bs-table-border-color: #333;
+  --bs-table-striped-color: #e0e0e0;
+  --bs-table-active-color: #e0e0e0;
+  --bs-table-hover-color: #fff;
+  color: #e0e0e0 !important;
+  border-color: #333 !important;
+}
+/* Bootstrap form variables */
+.dark-mode {
+  --bs-form-control-bg: #2d2d2d;
+  --bs-form-control-disabled-bg: #1e1e1e;
+}
+
+/* --- Sidebar already dark by default — no override needed --- */
+
+/* --- Cards & Modals (legacy Bootstrap; pssms-card auto-inherits via tokens) --- */
+.dark-mode .card, .dark-mode .modal-content { background-color: var(--p-surface) !important; border: 1px solid var(--p-border) !important; color: var(--p-text); }
+.dark-mode .card-header, .dark-mode .modal-header { background-color: var(--p-surface) !important; border-bottom: 1px solid var(--p-border) !important; color: var(--p-text); }
+.dark-mode .modal-footer { background-color: var(--p-surface) !important; border-top: 1px solid var(--p-border) !important; }
+.dark-mode .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+.dark-mode .modal-body { background-color: var(--p-surface) !important; color: var(--p-text); }
+
+/* --- Contextual Backgrounds (dimmed for dark) --- */
+.dark-mode .bg-white   { background-color: #1e1e1e !important; color: #e0e0e0 !important; }
+.dark-mode .bg-light   { background-color: #252525 !important; color: #e0e0e0 !important; }
+.dark-mode .bg-primary { background-color: #1a4080 !important; }
+.dark-mode .bg-success { background-color: #0f4020 !important; }
+.dark-mode .bg-danger  { background-color: #6e1515 !important; }
+.dark-mode .bg-warning { background-color: #5c3c00 !important; }
+.dark-mode .bg-info    { background-color: #0a3d52 !important; }
+.dark-mode .bg-dark    { background-color: #111 !important; }
+/* Bootstrap 5.3 subtle */
+.dark-mode .bg-primary-subtle { background-color: #0d1f3c !important; }
+.dark-mode .bg-success-subtle { background-color: #0a2010 !important; }
+.dark-mode .bg-danger-subtle  { background-color: #250a0a !important; }
+.dark-mode .bg-warning-subtle { background-color: #251500 !important; }
+.dark-mode .bg-info-subtle    { background-color: #06202c !important; }
+
+/* --- Text Colors --- */
+.dark-mode .text-dark, .dark-mode .fw-bold.text-dark { color: #f0f0f0 !important; }
+.dark-mode .text-primary   { color: #8bb9fe !important; }
+.dark-mode .text-success   { color: #86c4a3 !important; }
+.dark-mode .text-danger    { color: #f29b9b !important; }
+.dark-mode .text-warning   { color: #ffc773 !important; }
+.dark-mode .text-info      { color: #7de1f7 !important; }
+.dark-mode .text-muted, .dark-mode .text-secondary { color: #9ba3ab !important; }
+.dark-mode h1,.dark-mode h2,.dark-mode h3,.dark-mode h4,.dark-mode h5,.dark-mode h6,.dark-mode label { color: #e0e0e0 !important; }
+/* text inside colored bg: ensure contrast */
+.dark-mode .bg-warning .text-dark, .dark-mode .card-header.bg-warning .text-dark { color: #ffc107 !important; }
+.dark-mode .bg-info    .text-dark, .dark-mode .card-header.bg-info    .text-dark { color: #7de1f7 !important; }
+.dark-mode .bg-success .text-dark, .dark-mode .card-header.bg-success .text-dark { color: #86c4a3 !important; }
+
+/* --- Alerts --- */
+.dark-mode .alert-primary { background-color: #0d1f3c !important; border-color: #1a4080 !important; color: #8bb9fe !important; }
+.dark-mode .alert-success { background-color: #0a2010 !important; border-color: #0f4020 !important; color: #86c4a3 !important; }
+.dark-mode .alert-danger  { background-color: #250a0a !important; border-color: #6e1515 !important; color: #f29b9b !important; }
+.dark-mode .alert-warning { background-color: #251500 !important; border-color: #5c3c00 !important; color: #ffc773 !important; }
+.dark-mode .alert-info    { background-color: #06202c !important; border-color: #0a3d52 !important; color: #7de1f7 !important; }
+.dark-mode .alert.bg-info-subtle { background-color: #06202c !important; color: #7de1f7 !important; }
+.dark-mode .alert .text-dark { color: #e0e0e0 !important; }
+.dark-mode .alert .text-info  { color: #7de1f7 !important; }
+
+/* --- Badges --- */
+.dark-mode .badge.bg-light, .dark-mode span.bg-light.badge { background-color: #333 !important; color: #e0e0e0 !important; }
+.dark-mode .badge.bg-white  { background-color: #2d2d2d !important; color: #e0e0e0 !important; }
+.dark-mode .badge.text-dark, .dark-mode .badge.text-bg-light { color: #e0e0e0 !important; }
+
+/* --- Tables --- */
+.dark-mode .table { color: #e0e0e0 !important; border-color: #333 !important; }
+.dark-mode .table th, .dark-mode .table td { border-color: #333 !important; }
+.dark-mode .table th:not([class*="col-highlight"]), .dark-mode .table td:not([class*="col-highlight"]) { background-color: transparent !important; }
+.dark-mode .table-hover tbody tr:hover { background-color: #2a2a2a !important; }
+/* Bootstrap table contextual rows */
+.dark-mode .table-primary { --bs-table-bg:#0d1f3c; --bs-table-striped-bg:#102240; --bs-table-hover-bg:#122545; --bs-table-color:#e0e0e0; border-color:#333; }
+.dark-mode .table-success { --bs-table-bg:#0a2010; --bs-table-color:#e0e0e0; border-color:#333; }
+.dark-mode .table-danger  { --bs-table-bg:#250a0a; --bs-table-color:#e0e0e0; border-color:#333; }
+.dark-mode .table-warning { --bs-table-bg:#251500; --bs-table-color:#e0e0e0; border-color:#333; }
+.dark-mode .table-info    { --bs-table-bg:#06202c; --bs-table-color:#e0e0e0; border-color:#333; }
+.dark-mode .table-light   { --bs-table-bg:#252525; --bs-table-color:#e0e0e0; border-color:#333; }
+.dark-mode .table-dark    { --bs-table-bg:#111;    --bs-table-color:#e0e0e0; border-color:#222; }
+
+/* --- Forms --- */
+.dark-mode input, .dark-mode select, .dark-mode textarea,
+.dark-mode .form-control, .dark-mode .form-select {
+  background-color: #2d2d2d !important; color: #fff !important; border-color: #444 !important;
+}
+.dark-mode input:focus, .dark-mode select:focus, .dark-mode textarea:focus,
+.dark-mode .form-control:focus, .dark-mode .form-select:focus {
+  background-color: #222 !important; border-color: #0d6efd !important;
+}
+.dark-mode input:disabled, .dark-mode input[readonly] { background-color: transparent !important; color: #8bb9fe !important; }
+.dark-mode ::placeholder { color: #666 !important; opacity: 1; }
+.dark-mode input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+.dark-mode .input-group-text { background-color: #252525 !important; border-color: #444 !important; color: #adb5bd !important; }
+.dark-mode .form-check-label { color: #e0e0e0 !important; }
+.dark-mode .border-secondary-subtle { border-color: #444 !important; }
+
+/* --- Buttons --- */
+.dark-mode .btn-light { background-color: #2d2d2d !important; border-color: #444 !important; color: #e0e0e0 !important; }
+.dark-mode .btn-light:hover { background-color: #3d3d3d !important; color: #fff !important; }
+.dark-mode .btn-outline-secondary { color: #adb5bd !important; border-color: #555 !important; }
+.dark-mode .btn-outline-secondary:hover { background-color: #2d2d2d !important; color: #fff !important; }
+.dark-mode .btn-outline-dark { color: #e0e0e0 !important; border-color: #555 !important; }
+.dark-mode .btn-outline-dark:hover { background-color: #2d2d2d !important; color: #fff !important; }
+
+/* --- Tabs --- */
+.dark-mode .nav-tabs { border-color: #333 !important; }
+.dark-mode .nav-tabs .nav-link { color: #adb5bd !important; border-color: transparent !important; }
+.dark-mode .nav-tabs .nav-link:hover { background-color: #2d2d2d !important; border-color: #333 !important; color: #fff !important; }
+.dark-mode .nav-tabs .nav-link.active { background-color: #1e1e1e !important; color: #fff !important; border-color: #333 #333 #1e1e1e !important; }
+.dark-mode .nav-pills .nav-link { color: #a0a0a0; }
+.dark-mode .nav-pills .nav-link:hover { background-color: #2d2d2d; color: #fff; }
+.dark-mode .nav-pills .nav-link.active { background-color: #0d6efd; color: #fff; }
+
+/* --- List Group --- */
+.dark-mode .list-group-item { background-color: #1e1e1e !important; border-color: #333 !important; color: #e0e0e0 !important; }
+.dark-mode .list-group-item-action:hover, .dark-mode .list-group-item-action:focus { background-color: #2d2d2d !important; color: #fff !important; }
+.dark-mode .list-group-item.active { background-color: #0d6efd !important; border-color: #0d6efd !important; }
+
+/* --- Dropdown --- */
+.dark-mode .dropdown-menu { background-color: #1e1e1e !important; border-color: #333 !important; box-shadow: 0 4px 16px rgba(0,0,0,0.6) !important; }
+.dark-mode .dropdown-item { color: #e0e0e0 !important; }
+.dark-mode .dropdown-item:hover, .dark-mode .dropdown-item:focus { background-color: #2d2d2d !important; color: #fff !important; }
+.dark-mode .dropdown-divider { border-color: #333 !important; }
+.dark-mode .dropdown-header { color: #adb5bd !important; }
+
+/* --- Borders & Dividers --- */
+.dark-mode hr { border-color: #333 !important; opacity: 1; }
+.dark-mode .border, .dark-mode .border-bottom, .dark-mode .border-top,
+.dark-mode .border-start, .dark-mode .border-end { border-color: #333 !important; }
+
+/* --- Progress --- */
+.dark-mode .progress { background-color: #333 !important; }
+
+/* --- Accordion --- */
+.dark-mode .accordion-item { background-color: #1e1e1e !important; border-color: #333 !important; }
+.dark-mode .accordion-button { background-color: #1e1e1e !important; color: #e0e0e0 !important; box-shadow: none !important; }
+.dark-mode .accordion-button:not(.collapsed) { background-color: #252525 !important; color: #8bb9fe !important; }
+.dark-mode .accordion-button::after { filter: invert(0.8); }
+.dark-mode .accordion-body { background-color: #1e1e1e !important; color: #e0e0e0 !important; }
+
+/* --- Pagination --- */
+.dark-mode .page-link { background-color: #1e1e1e !important; border-color: #333 !important; color: #8bb9fe !important; }
+.dark-mode .page-item.active .page-link { background-color: #0d6efd !important; border-color: #0d6efd !important; color: #fff !important; }
+.dark-mode .page-item.disabled .page-link { background-color: #1a1a1a !important; color: #555 !important; }
+
+/* --- Score Table (ปพ.5) --- */
+.dark-mode .grid-wrapper { border-color: #333; background: #1e1e1e; }
+.dark-mode .grid-scroll-container::-webkit-scrollbar-track { background: #1a1a1a; border-top: 1px solid #333; }
+.dark-mode .grid-scroll-container::-webkit-scrollbar-thumb { background: #444; border: 3px solid #1a1a1a; }
+.dark-mode .grid-scroll-container::-webkit-scrollbar-thumb:hover { background: #666; }
+.dark-mode .sticky-col-1, .dark-mode .sticky-col-2, .dark-mode .sticky-head-1, .dark-mode .sticky-head-2 { background: #1e1e1e !important; box-shadow: inset -1px 0 0 #333, inset 0 -1px 0 #333 !important; }
+.dark-mode .sticky-col-2, .dark-mode .sticky-head-2 { box-shadow: inset -1px 0 0 #333, inset 0 -1px 0 #333, 4px 0 6px -2px rgba(0,0,0,0.5) !important; }
+.dark-mode #scoreTableHeader tr:nth-child(1) th, .dark-mode .eval-header tr:nth-child(1) th,
+.dark-mode #scoreTableHeader tr:nth-child(2) th, .dark-mode .eval-header tr:nth-child(2) th {
+  background: #1e1e1e !important; box-shadow: inset 0 -1px 0 #333; border-color: #333 !important;
+}
+.dark-mode .score-cell-input, .dark-mode .eval-input, .dark-mode .qual-select { background-color: #2d2d2d !important; color: #fff !important; border-color: #444 !important; }
+.dark-mode .score-cell-input:focus, .dark-mode .eval-input:focus { background-color: #1a1a1a !important; color: #fff !important; }
+.dark-mode .col-highlight-f     { background-color: #0b151f !important; }
+.dark-mode .col-highlight-m     { background-color: #1a1607 !important; }
+.dark-mode .col-highlight-mr    { background-color: #1a0b0b !important; }
+.dark-mode .col-highlight-e     { background-color: #1f0f15 !important; }
+.dark-mode .col-highlight-total { background-color: #1e1e1e !important; }
+.dark-mode .col-highlight-grade { background-color: #0a1a10 !important; }
+
+/* --- JS-rendered content: catch inline light backgrounds --- */
+/* card-body or div with white/light inline background */
+.dark-mode [style*="background: linear-gradient(to right, #ffffff"],
+.dark-mode [style*="background: linear-gradient(to right, #fff"],
+.dark-mode [style*="background-color: #e7f1ff"],
+.dark-mode [style*="background-color: #fff5f5"],
+.dark-mode [style*="background-color: #ffecec"],
+.dark-mode [style*="background: #fff5f5"],
+.dark-mode [style*="background: #ffecec"] {
+  background: #1e2a3a !important;
+  color: #e0e0e0 !important;
+}
+/* generic: any div/span/td with explicit white/light bg inline style */
+.dark-mode .card-body[style*="background"],
+.dark-mode div[style*="background-color: #f"],
+.dark-mode div[style*="background-color: rgb(255"],
+.dark-mode div[style*="background-color: white"] {
+  background-color: #1e1e1e !important;
+  color: #e0e0e0 !important;
+}
+/* progress background inline */
+.dark-mode div[style*="background-color: #e9ecef"] { background-color: #333 !important; }
+/* table row with inline light bg (JS-rendered report rows) */
+.dark-mode tr[style*="background-color: #e7f1ff"] { background-color: #0d1f3c !important; color: #e0e0e0 !important; }
+/* fw-bold without explicit color — ensure readable */
+.dark-mode .fw-bold:not([class*="text-"]):not([style*="color"]) { color: inherit; }
+/* small text divs */
+.dark-mode .small { color: inherit; }
+/* links */
+.dark-mode a:not(.btn):not(.nav-link):not(.nav-link-custom):not(.dropdown-item) { color: #8bb9fe; }
+
+/* Dept-aware dark mode */
+body.dark-mode.dept-academic {
+  --p-dom:#0a1e22; --p-sec:#163840;
+  --p-accent:#22ccd8; --p-accent-hover:#1ab8c4; --p-accent-soft:#0d3038;
+  --p-border:rgba(34,204,216,.18); --p-border-strong:rgba(34,204,216,.3); --p-hover:rgba(34,204,216,.1);
+}
+body.dark-mode.dept-budget {
+  --p-dom:#0a1c0d; --p-sec:#153220;
+  --p-accent:#5bbf68; --p-accent-hover:#4da659; --p-accent-soft:#102214;
+  --p-border:rgba(91,191,104,.18); --p-border-strong:rgba(91,191,104,.3); --p-hover:rgba(91,191,104,.1);
+}
+body.dark-mode.dept-personnel {
+  --p-dom:#1f100a; --p-sec:#3a1c11;
+  --p-accent:#e07045; --p-accent-hover:#d05e32; --p-accent-soft:#2a140a;
+  --p-border:rgba(224,112,69,.18); --p-border-strong:rgba(224,112,69,.3); --p-hover:rgba(224,112,69,.1);
+}
+body.dark-mode.dept-general {
+  --p-dom:#1c1800; --p-sec:#302a00;
+  --p-accent:#d4a520; --p-accent-hover:#b88c14; --p-accent-soft:#201c00;
+  --p-border:rgba(212,165,32,.18); --p-border-strong:rgba(212,165,32,.3); --p-hover:rgba(212,165,32,.1);
+}
+
+/* Dept wrapper overrides in dark — page wrappers like .pssms-dept-academic
+   reset --p-sec to LIGHT values locally; re-apply dark dept tokens so deeper elements get dark bg */
+body.dark-mode .pssms-dept-academic {
+  --p-dom:#0a1e22; --p-sec:#163840;
+  --p-accent:#22ccd8; --p-accent-hover:#1ab8c4; --p-accent-soft:#0d3038;
+  --p-border:rgba(34,204,216,.18); --p-border-strong:rgba(34,204,216,.3); --p-hover:rgba(34,204,216,.1);
+}
+body.dark-mode .pssms-dept-budget {
+  --p-dom:#0a1c0d; --p-sec:#153220;
+  --p-accent:#5bbf68; --p-accent-hover:#4da659; --p-accent-soft:#102214;
+  --p-border:rgba(91,191,104,.18); --p-border-strong:rgba(91,191,104,.3); --p-hover:rgba(91,191,104,.1);
+}
+body.dark-mode .pssms-dept-personnel {
+  --p-dom:#1f100a; --p-sec:#3a1c11;
+  --p-accent:#e07045; --p-accent-hover:#d05e32; --p-accent-soft:#2a140a;
+  --p-border:rgba(224,112,69,.18); --p-border-strong:rgba(224,112,69,.3); --p-hover:rgba(224,112,69,.1);
+}
+body.dark-mode .pssms-dept-general {
+  --p-dom:#1c1800; --p-sec:#302a00;
+  --p-accent:#d4a520; --p-accent-hover:#b88c14; --p-accent-soft:#201c00;
+  --p-border:rgba(212,165,32,.18); --p-border-strong:rgba(212,165,32,.3); --p-hover:rgba(212,165,32,.1);
+}
+
+/* Status chips in dark mode */
+.dark-mode .pssms-status-pending  { background: #2e2400; color: #f0c840; }
+.dark-mode .pssms-status-approved { background: #0a2010; color: #86c4a3; }
+.dark-mode .pssms-status-rejected { background: #250a0a; color: #f29b9b; }
+.dark-mode .pssms-status-info     { background: #0d1f3c; color: #8bb9fe; }
+
+/* Dark mode new components */
+.dark-mode .pssms-icon-circle { background: var(--p-accent-soft); color: var(--p-accent); }
+.dark-mode .pssms-kpi-value { color: var(--p-accent); }
+.dark-mode .pssms-card-link:hover { border-color: var(--p-accent); box-shadow: 0 0 0 3px var(--p-accent-soft); }
+.dark-mode .pssms-card-accent { background: var(--p-accent-soft); }
+.dark-mode .pssms-progress { background: var(--p-sec); }
+.dark-mode .pssms-pill { background: var(--p-surface); border-color: var(--p-border); color: var(--p-text-muted); }
+.dark-mode .pssms-pill:hover { background: var(--p-hover); color: var(--p-text); }
+.dark-mode .pssms-pill.active { background: var(--p-accent); color: #fff; border-color: var(--p-accent); }
+
+/* ==========================================
+   📱 7. RESPONSIVE (มือถือ)
+========================================== */
+@media (max-width: 768px) {
+    #sidebar { margin-left: -250px; }
+    #sidebar.active { margin-left: 0; }
+    .score-cell-input { width: 50px !important; padding: 2px !important; font-size: 0.85rem !important; }
+    .sticky-col-1, .sticky-head-1 { min-width: 40px !important; max-width: 40px !important; }
+    .sticky-col-2, .sticky-head-2 { min-width: 140px !important; max-width: 140px !important; left: 40px !important; }
+    .grid-wrapper { height: 70vh; }
+}
+
+/* iOS PWA standalone — safe area for notch / Dynamic Island */
+@media (display-mode: standalone) {
+  #sidebar { padding-top: env(safe-area-inset-top); }
+  .navbar { padding-top: calc(0.5rem + env(safe-area-inset-top)); }
+  #page-content { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+  button, .btn, a { touch-action: manipulation; }
+}
+
+/* ==========================================
+   🖨️ 8. PRINT STYLES
+========================================== */
+@media print {
+    body * { visibility: hidden; }
+    #scoreGridCard, #scoreGridCard * { visibility: visible; }
+    #scoreGridCard { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none !important; }
+    .d-print-none { display: none !important; }
+    .grid-wrapper, .grid-scroll-container { position: static !important; overflow: visible !important; height: auto !important; border: none !important; }
+    table { border-collapse: collapse !important; }
+    th, td { border: 1px solid #000 !important; }
+    .sticky-col-1, .sticky-col-2, .sticky-head-1, .sticky-head-2 { position: static !important; box-shadow: none !important; }
+    .score-cell-input, .qual-select { border: none !important; background: transparent !important; }
+}
+
+/* ==========================================
+   🦴 9. SKELETON ANIMATION
+========================================== */
+.skeleton-box { display: inline-block; position: relative; overflow: hidden; background-color: #e9ecef; border-radius: 4px; }
+.dark-mode .skeleton-box { background-color: #333; }
+.skeleton-box::after {
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0; transform: translateX(-100%);
+    background-image: linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,0.4) 20%, rgba(255,255,255,0.8) 60%, rgba(255,255,255,0));
+    animation: shimmer 1.5s infinite; content: '';
+}
+.dark-mode .skeleton-box::after { background-image: linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,0.1) 20%, rgba(255,255,255,0.2) 60%, rgba(255,255,255,0)); }
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+/* ==========================================
+   🚀 PROFESSIONAL TOP PROGRESS BAR (YouTube Style Loader)
+========================================== */
+/* ซ่อนกล่องโหลดแบบเก่าที่บังเต็มจอ และเปลี่ยนเป็นแถบบางๆ ติดขอบบน */
+.loader-container, #loader {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 3px !important; /* เส้นโหลดหนา 3px */
+    background: transparent !important;
+    z-index: 9999 !important;
+    display: block !important;
+    pointer-events: none !important;
+}
+
+/* ซ่อนไอคอนหรือข้อความโหลดเดิมที่อยู่ข้างใน */
+.loader-container *, #loader * {
+    display: none !important;
+}
+
+/* สร้างเส้นวิ่ง (Progress Bar) */
+#loader:not(.d-none)::before,
+.loader-container:not(.d-none)::before {
+    content: '';
+    display: block;
+    position: absolute;
+    top: 0;
+    left: -30%;
+    height: 100%;
+    width: 30%;
+    background-color: #0d6efd;
+    box-shadow: 0 0 10px rgba(13, 110, 253, 0.8), 0 0 5px rgba(13, 110, 253, 0.4);
+    border-radius: 0 3px 3px 0;
+    animation: topProgressBar 1.2s infinite ease-in-out;
+}
+
+/* แอนิเมชันให้เส้นวิ่งจากซ้ายไปขวาอย่างสมูท */
+@keyframes toastIn { from { opacity:0; transform:translateX(110%); } to { opacity:1; transform:translateX(0); } }
+@keyframes toastOut { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(110%); } }
+@keyframes toastProgress { from { transform:scaleX(1); } to { transform:scaleX(0); } }
+
+@keyframes topProgressBar {
+    0% { left: -30%; width: 30%; }
+    50% { left: 30%; width: 70%; }
+    100% { left: 100%; width: 30%; }
+}
+
+/* 🌙 รองรับ Dark Mode (เปลี่ยนเส้นเป็นสีฟ้าเรืองแสง) */
+.dark-mode #loader:not(.d-none)::before,
+.dark-mode .loader-container:not(.d-none)::before {
+    background-color: #8bb9fe;
+    box-shadow: 0 0 10px rgba(139, 185, 254, 0.8), 0 0 5px rgba(139, 185, 254, 0.4);
+}
+
+/* ==========================================
+   ✨ SKELETON FADE EFFECT (ทำให้หน้าเว็บดูนุ่มนวลตอนเปลี่ยนหน้า)
+========================================== */
+#page-content {
+    transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+#page-content.page-loading {
+    opacity: 0.5;
+    filter: blur(1px);
+    pointer-events: none;
+}
+
+/* ==========================================
+   💀 SKELETON LOADERS
+========================================== */
+.pssms-skel {
+  background: linear-gradient(90deg,
+    var(--p-sec) 25%,
+    var(--p-dom) 50%,
+    var(--p-sec) 75%);
+  background-size: 300% 100%;
+  animation: skelShimmer 1.5s infinite linear;
+  border-radius: 6px;
+  display: block;
+}
+@keyframes skelShimmer {
+  0%   { background-position: 150% 0; }
+  100% { background-position: -150% 0; }
+}
+.pssms-skel-circle {
+  border-radius: 50% !important;
+}
+
+</style>

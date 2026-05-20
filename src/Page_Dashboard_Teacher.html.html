@@ -1,0 +1,152 @@
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h4 class="fw-bold mb-0">ยินดีต้อนรับคุณครู <span id="dashTeacherName" class="text-primary">...</span></h4>
+    <div id="dashTodayDate" class="badge bg-white text-dark shadow-sm p-2 border"></div>
+  </div>
+
+  <div id="dashCalendarStrip" class="mb-4">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <small class="text-muted fw-semibold text-nowrap"><i class="fas fa-calendar-check me-1 text-danger"></i>กิจกรรมที่กำลังจะมาถึง:</small>
+      <div id="dashCalendarBadges" class="d-flex flex-wrap gap-2">
+        <span class="pssms-skel rounded-pill" style="width:95px;height:26px;display:inline-block;"></span>
+        <span class="pssms-skel rounded-pill" style="width:115px;height:26px;display:inline-block;"></span>
+        <span class="pssms-skel rounded-pill" style="width:80px;height:26px;display:inline-block;"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-12">
+      <div id="nextClassCard" class="card border-0 shadow-sm bg-primary text-white overflow-hidden">
+        <div class="card-body p-4 position-relative">
+          <div style="position: absolute; right: -20px; top: -20px; opacity: 0.1;">
+            <i class="fas fa-clock fa-10x"></i>
+          </div>
+          <div class="row align-items-center">
+            <div class="col-md-8">
+              <h6 class="text-uppercase opacity-75 mb-2" style="letter-spacing: 1px;">คาบเรียนถัดไป</h6>
+              <h2 id="nextClassTitle" class="fw-bold mb-1">กำลังตรวจสอบ...</h2>
+              <p id="nextClassDetail" class="mb-0 opacity-75"></p>
+            </div>
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
+              <button class="btn btn-light btn-lg shadow" onclick="loadPage('Page_Academic')">
+                <i class="fas fa-edit me-2"></i>ไปที่การเช็คชื่อ
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-8">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white fw-bold py-3">
+          <i class="fas fa-calendar-day me-2 text-primary"></i>ตารางจัดการเรียนรู้วันนี้
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th class="ps-3">คาบ</th>
+                  <th>วิชา/ห้องเรียน</th>
+                  <th class="text-center">สถานะ</th>
+                </tr>
+              </thead>
+              <tbody id="todayScheduleBody">
+                <tr><td colspan="3" class="text-center p-5">กำลังดึงข้อมูลตารางสอน...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+          <div class="card shadow-sm border-0 h-100" style="border-radius: 12px; overflow: hidden;">
+            <div class="card-header bg-white p-3 d-flex justify-content-between align-items-center border-bottom">
+              <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-tasks text-primary me-2"></i>To-Do List 🌻</h6>
+              <span class="badge bg-secondary text-white fw-bold shadow-sm" id="todoCount">0/0</span>
+            </div>
+            <div class="card-body bg-white p-0 d-flex flex-column position-relative">
+              
+              <div class="p-3 border-bottom bg-light">
+                <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
+                  <input type="text" id="newTodoInput" class="form-control border-0" placeholder="📝 เพิ่มงานที่ต้องทำ..." onkeypress="if(event.key === 'Enter') addTodoItem()">
+                  <button class="btn btn-primary px-3 fw-bold" onclick="addTodoItem()"><i class="fas fa-plus"></i></button>
+                </div>
+              </div>
+              
+              <div class="flex-grow-1" style="max-height: 220px; overflow-y: auto; padding-bottom: 25px;">
+                <ul class="list-group list-group-flush" id="todoListContainer">
+                  </ul>
+              </div>
+
+              <div class="position-absolute bottom-0 start-0 w-100 pe-none pssms-fade-bottom"></div>
+              
+            </div>
+          </div>
+        </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-4 mb-4 mt-3">
+    <div class="card-header bg-white border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <h5 class="fw-bold text-danger mb-1"><i class="fas fa-exclamation-triangle me-2"></i>นักเรียนกลุ่มเสี่ยง (0, ร, มส.)</h5>
+        <p class="text-muted small mb-0">สรุปข้อมูลนักเรียนที่ต้องติดตามแก้ไขผลการเรียนในวิชาของคุณ (ภาคเรียนปัจจุบัน)</p>
+      </div>
+      <button class="btn btn-outline-danger shadow-sm rounded-pill fw-bold px-4 py-2" onclick="printRiskStudents()">
+        <i class="fas fa-print me-2"></i>พิมพ์แบบรายงาน
+      </button>
+    </div>
+    
+    <div class="card-body px-4">
+      
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <div class="card bg-danger text-white border-0 shadow-sm rounded-3 h-100" style="background: linear-gradient(135deg, #dc3545, #b02a37);">
+            <div class="card-body d-flex align-items-center justify-content-between p-4">
+              <div>
+                <h6 class="mb-1 fw-bold opacity-75">ติด "0"</h6>
+                <h2 class="mb-0 fw-bold" id="riskCount0">...</h2>
+              </div>
+              <i class="fas fa-times-circle fa-3x opacity-25"></i>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card bg-warning text-dark border-0 shadow-sm rounded-3 h-100" style="background: linear-gradient(135deg, #ffc107, #d39e00);">
+            <div class="card-body d-flex align-items-center justify-content-between p-4">
+              <div>
+                <h6 class="mb-1 fw-bold opacity-75">ติด "ร"</h6>
+                <h2 class="mb-0 fw-bold" id="riskCountR">...</h2>
+              </div>
+              <i class="fas fa-hourglass-half fa-3x opacity-25"></i>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card bg-secondary text-white border-0 shadow-sm rounded-3 h-100" style="background: linear-gradient(135deg, #6c757d, #545b62);">
+            <div class="card-body d-flex align-items-center justify-content-between p-4">
+              <div>
+                <h6 class="mb-1 fw-bold opacity-75">ติด "มส"</h6>
+                <h2 class="mb-0 fw-bold" id="riskCountMS">...</h2>
+              </div>
+              <i class="fas fa-user-slash fa-3x opacity-25"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="riskCardsContainer" class="p-3 bg-light rounded-bottom-4" style="min-height: 150px;">
+          <div class="text-center text-muted py-4">
+              <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+              <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+              <div class="pssms-skel" style="height:48px;border-radius:8px;"></div>
+          </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>

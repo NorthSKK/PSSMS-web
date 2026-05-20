@@ -1,0 +1,253 @@
+<div class="container-fluid pssms-page pssms-dept-academic" style="max-width: 100%; overflow: hidden;">
+
+  <div id="adminPrintSettingsPanel" class="d-none mb-4 d-print-none">
+    <div class="card shadow border-0" style="background: linear-gradient(to right, #212529, #343a40);">
+      <div class="card-header border-0 bg-transparent text-white fw-bold d-flex justify-content-between align-items-center p-3">
+        <span><i class="fas fa-user-shield text-warning me-2"></i>ส่วนจัดการของผู้ดูแลระบบ (ตั้งค่า ปพ.5)</span>
+        <button class="btn btn-sm btn-outline-light rounded-pill px-3 shadow-sm" type="button" data-bs-toggle="collapse" data-bs-target="#adminSettingsCollapse">
+          <i class="fas fa-compress-arrows-alt me-1"></i> ย่อ/ขยาย
+        </button>
+      </div>
+      <div id="adminSettingsCollapse" class="collapse show bg-light rounded-bottom">
+        <div class="card-body p-4">
+          <div class="row g-3">
+            <div class="col-xl-4">
+              <div class="fw-bold mb-2 text-primary"><i class="fas fa-signature me-1"></i> 1. ผู้ลงนามหลัก</div>
+              <form id="formSignatory" class="bg-white p-3 rounded shadow-sm border h-100">
+                <label class="small text-muted fw-bold mb-1">ชื่อโรงเรียน</label>
+                <input type="text" class="form-control form-control-sm mb-3" id="cfg_school_name" placeholder="ชื่อโรงเรียน">
+                <label class="small text-muted fw-bold mb-1">ผู้อำนวยการโรงเรียน</label>
+                <select class="form-select form-select-sm mb-3 head-dept-select" id="cfg_principal_name"></select>
+                <label class="small text-muted fw-bold mb-1">หัวหน้างานวัดและประเมินผล</label>
+                <select class="form-select form-select-sm head-dept-select" id="cfg_measure_head"></select>
+              </form>
+            </div>
+            <div class="col-xl-8">
+              <div class="fw-bold mb-2 text-info"><i class="fas fa-users-cog me-1"></i> 2. หัวหน้ากลุ่มสาระการเรียนรู้</div>
+              <div class="bg-white p-3 rounded shadow-sm border" style="max-height: 250px; overflow-y: auto;">
+                <div class="row g-2">
+                  <div class="col-6"><label class="small text-muted mb-1">ภาษาไทย</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_thai"></select></div>
+                  <div class="col-6"><label class="small text-muted mb-1">คณิตศาสตร์</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_math"></select></div>
+                  <div class="col-6"><label class="small text-muted mb-1">วิทยาศาสตร์ฯ</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_sci"></select></div>
+                  <div class="col-6"><label class="small text-muted mb-1">สังคมศึกษาฯ</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_soc"></select></div>
+                  <div class="col-6"><label class="small text-muted mb-1">สุขศึกษา พลศึกษา</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_pe"></select></div>
+                  <div class="col-6"><label class="small text-muted mb-1">ศิลปะ</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_art"></select></div>
+                  <div class="col-6"><label class="small text-muted mb-1">การงานอาชีพ</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_occ"></select></div>
+                  <div class="col-6"><label class="small text-muted mb-1">ภาษาต่างประเทศ</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_eng"></select></div>
+                  <div class="col-12"><label class="small text-muted mb-1">กิจกรรมพัฒนาผู้เรียน</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_act"></select></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="text-end mt-3 border-top pt-3">
+             <button type="button" class="btn btn-dark rounded-pill shadow px-5 fw-bold" id="btnSaveConfigAll" onclick="saveAllPrintConfig()"><i class="fas fa-save me-2"></i>บันทึกการตั้งค่า</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pssms-page-header d-print-none">
+    <div class="flex-grow-1" style="min-width: 280px;">
+      <h4><i class="fas fa-book me-2" style="color: var(--p-accent);"></i>บันทึกคะแนน (ปพ.5)</h4>
+      <select id="scoreClassSelect" class="form-select form-select-sm mt-2" style="max-width: 480px;" onchange="loadScoreGrid()">
+        <option value="">⏳ กำลังโหลดวิชา...</option>
+      </select>
+    </div>
+    <div class="pssms-actions">
+      <button type="button" class="btn btn-soft btn-sm" id="btnEditHeader" onclick="event.preventDefault(); toggleHeaderEditMode()" title="แก้ไขหัวตาราง">
+        <i class="fas fa-th me-1"></i>หัวตาราง
+      </button>
+      <button type="button" class="btn btn-soft btn-sm" id="btnExportSGS" onclick="event.preventDefault(); openSGSExportModal()" title="ส่งออกคะแนนไป SGS">
+        <i class="fas fa-file-export me-1"></i>SGS
+      </button>
+      <button type="button" class="btn btn-soft btn-sm" id="btnPrintPP5" onclick="preparePrintPorPor5(event)" title="พิมพ์ ปพ.5">
+        <i class="fas fa-print me-1"></i>พิมพ์ ปพ.5
+      </button>
+      <button type="button" class="btn btn-accent btn-sm" id="btnSaveScores" onclick="event.preventDefault(); saveAllInOneScores()" disabled>
+        <i class="fas fa-save me-1"></i>บันทึก
+      </button>
+    </div>
+  </div>
+
+  <ul class="nav pssms-tabs mb-3 d-none d-print-none gap-2" id="scoreTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active fw-medium px-3" id="tab-subject" data-bs-toggle="pill" data-bs-target="#pane-subject" type="button" role="tab">
+        <i class="fas fa-tasks me-2"></i>คะแนนรายวิชา (ปพ.5)
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link fw-medium px-3" id="tab-eval" data-bs-toggle="pill" data-bs-target="#pane-eval" type="button" role="tab">
+        <i class="fas fa-star me-2"></i>คุณลักษณะ / อ่านคิดวิเคราะห์
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="scoreTabsContent">
+    
+    <div class="tab-pane fade show active" id="pane-subject" role="tabpanel">
+      <div class="pssms-card p-0 d-none w-100" id="scoreGridCard">
+
+        <div class="pssms-card-header mb-0 print-header" style="font-size: 0.85rem; align-items: flex-end;">
+          <span class="text-truncate" id="scoreGridTitle" style="max-width: 70%; padding-left: 0.5rem;"><i class="fas fa-users me-2" style="color: var(--p-text-muted);"></i>คะแนนเก็บและสอบ</span>
+          <span class="pssms-chip d-print-none" id="scoreRatioBadge" style="background: var(--p-accent-soft); color: var(--p-accent);">สัดส่วน -</span>
+        </div>
+        
+        <div class="grid-wrapper">
+          <div class="grid-scroll-container">
+            <table class="table align-middle mb-0 text-nowrap" id="allInOneTable">
+              <thead class="text-center" id="scoreTableHeader"></thead>
+              <tbody id="scoreTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="pane-eval" role="tabpanel">
+      <div class="pssms-card p-0 w-100">
+        <div class="pssms-card-header mb-0" style="font-size: 0.95rem;">
+          <span><i class="fas fa-star me-2" style="color: var(--p-text-muted);"></i>ประเมินคุณลักษณะอันพึงประสงค์ และ อ่านคิดวิเคราะห์เขียน</span>
+        </div>
+
+        <div class="m-3 p-3 rounded-3" style="background: var(--p-subtle); border: 1px solid var(--p-border); font-size: 0.88rem;">
+          <div class="fw-semibold mb-2"><i class="fas fa-info-circle me-2" style="color: var(--p-text-muted);"></i>คำชี้แจง</div>
+          <ul class="mb-0 ps-3 text-muted small">
+            <li class="mb-1">การประเมินแบ่งออกเป็น <b>4 ช่วง ทุกๆ 5 สัปดาห์</b> ช่วงละ <b>25 คะแนน</b></li>
+            <li>ตัดสินระดับอัตโนมัติ:
+              <span class="text-danger fw-semibold">0-49=0</span> |
+              <span class="fw-semibold" style="color: var(--p-info);">50-69=1</span> |
+              <span class="text-success fw-semibold">70-79=2</span> |
+              <span class="fw-semibold" style="color: #b08400;">80-100=3</span>
+            </li>
+          </ul>
+        </div>
+        
+        <div class="grid-wrapper" style="border-radius: 0 0 12px 12px;">
+          <div class="grid-scroll-container">
+            <table class="table table-hover align-middle mb-0 text-nowrap table-bordered" style="font-size: 0.85rem;">
+              <thead class="text-center align-middle eval-header">
+                <tr>
+                  <th rowspan="2" class="sticky-head-1">ที่</th>
+                  <th rowspan="2" class="sticky-head-2">รหัส / ชื่อ-สกุล</th>
+                  <th colspan="6" class="table-primary">คุณลักษณะอันพึงประสงค์ (8 ข้อ)</th>
+                  <th colspan="6" class="table-success">อ่าน คิดวิเคราะห์ และเขียน (3 ด้าน)</th>
+                </tr>
+                <tr>
+                  <th class="table-primary fw-normal">ช่วง 1 (25)</th>
+                  <th class="table-primary fw-normal">ช่วง 2 (25)</th>
+                  <th class="table-primary fw-normal">ช่วง 3 (25)</th>
+                  <th class="table-primary fw-normal">ช่วง 4 (25)</th>
+                  <th class="table-primary text-dark border-start">รวม (100)</th>
+                  <th class="table-primary text-dark fw-bold">ระดับ (0-3)</th>
+                  
+                  <th class="table-success fw-normal border-start">ช่วง 1 (25)</th>
+                  <th class="table-success fw-normal">ช่วง 2 (25)</th>
+                  <th class="table-success fw-normal">ช่วง 3 (25)</th>
+                  <th class="table-success fw-normal">ช่วง 4 (25)</th>
+                  <th class="table-success text-dark border-start">รวม (100)</th>
+                  <th class="table-success text-dark fw-bold">ระดับ (0-3)</th>
+                </tr>
+              </thead>
+              <tbody id="evalTableBody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div> 
+
+  <div id="scoreEmptyState" class="text-center p-5 text-muted d-none d-print-none">
+    <div class="rounded-circle d-inline-flex justify-content-center align-items-center mb-3" style="width: 64px; height: 64px; background: var(--p-subtle); border: 1px solid var(--p-border);">
+        <i class="fas fa-cogs fa-lg" style="color: var(--p-text-muted);"></i>
+    </div>
+    <h6 class="fw-semibold mb-1" style="color: var(--p-text);">ยังไม่ได้ตั้งค่า "โครงสร้างวิชา"</h6>
+    <p class="small mb-3">กำหนดสัดส่วนคะแนนและตัวชี้วัดก่อนบันทึก</p>
+    <button class="btn btn-accent btn-sm" onclick="loadPage('Page_Subject_Config')">
+       <i class="fas fa-cog me-2"></i>ไปที่หน้าตั้งค่าโครงสร้างวิชา
+    </button>
+  </div>
+
+  <div id="printArea" class="d-none d-print-block bg-white text-dark"></div>
+
+  <div class="modal fade pssms-modal" id="indicatorDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title" id="indicatorModalTitle"><i class="fas fa-info-circle me-2" style="color: var(--p-accent);"></i>รายละเอียดตัวชี้วัด</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div id="indicatorModalDesc" style="white-space: pre-wrap; font-size: 0.95rem; line-height: 1.6; color: var(--p-text);"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade pssms-modal" id="indicatorEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title" id="indicatorEditModalTitle"><i class="fas fa-edit me-2" style="color: var(--p-accent);"></i>รายละเอียดตัวชี้วัด/จุดประสงค์</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <input type="hidden" id="editIndIdx">
+          <div class="mb-3">
+            <label class="form-label fw-medium text-muted small">คำอธิบาย / จุดประสงค์การเรียนรู้</label>
+            <textarea id="editIndDesc" class="form-control" rows="5"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <span class="text-muted small"><i class="fas fa-database me-1"></i>เก็บเป็นฐานข้อมูลวิชา</span>
+          <div>
+            <button type="button" class="btn btn-soft btn-sm me-2" data-bs-dismiss="modal">ยกเลิก</button>
+            <button type="button" class="btn btn-accent btn-sm" onclick="saveIndicatorDetail()"><i class="fas fa-save me-1"></i>บันทึก</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade pssms-modal" id="sgsExportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title"><i class="fas fa-file-export me-2" style="color: var(--p-success);"></i>ข้อมูลส่งออก SGS</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-3 p-md-4">
+           <div class="rounded-3 p-3 mb-3 small" style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;">
+             <i class="fas fa-lightbulb me-1"></i> คลิกปุ่ม <b>"คัดลอก <i class="fas fa-copy"></i>"</b> แล้วกด <b>Ctrl+V</b> ที่โปรแกรม SGS
+           </div>
+           <div id="sgsActionButtons" class="d-flex flex-wrap gap-2 mb-3"></div>
+           <div class="table-responsive bg-white border rounded shadow-sm" style="max-height: 50vh;">
+             <table class="table table-hover table-bordered align-middle mb-0 text-center text-nowrap" style="font-size: 0.85rem;" id="sgsPreviewTable">
+               <thead class="table-light sticky-top" id="sgsPreviewHead" style="z-index: 5;"></thead>
+               <tbody id="sgsPreviewBody"></tbody>
+             </table>
+           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="scoreHistoryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+        <div class="modal-header bg-dark text-white border-0 p-3">
+          <h6 class="modal-title fw-bold" id="historyModalTitle"><i class="fas fa-history me-2 text-warning"></i>ประวัติการแก้ไข</h6>
+          <button type="button" class="btn-close btn-close-white shadow-none" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body bg-light p-0">
+           <div id="historyModalBody" class="p-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

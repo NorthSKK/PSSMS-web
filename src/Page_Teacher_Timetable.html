@@ -1,0 +1,185 @@
+<div class="container-fluid pssms-page pssms-dept-academic" id="teacherTimetablePage">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-calendar-week me-2" style="color:var(--p-accent);"></i>ตารางสอนของฉัน</h4>
+      <p class="pssms-subtitle" id="ttSubtitle">กำลังโหลด...</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="initTeacherTimetable()"><i class="fas fa-sync me-1"></i>รีเฟรช</button>
+    </div>
+  </div>
+
+  <!-- Filter + Conflict summary -->
+  <div class="pssms-card mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small fw-medium text-muted">ภาคเรียน</label>
+        <select class="form-select form-select-sm" id="ttTerm" onchange="initTeacherTimetable()">
+          <option value="1">ภาคเรียนที่ 1</option>
+          <option value="2">ภาคเรียนที่ 2</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small fw-medium text-muted">ปีการศึกษา</label>
+        <input type="number" class="form-control form-control-sm" id="ttYear" style="width:100px;" onchange="initTeacherTimetable()">
+      </div>
+      <div class="col-auto ms-auto" id="ttConflictSummary"></div>
+    </div>
+  </div>
+
+  <!-- States -->
+  <div id="ttLoadingState" class="p-3">
+    <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+    <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+    <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+    <div class="pssms-skel" style="height:48px;border-radius:8px;"></div>
+  </div>
+
+  <!-- Main -->
+  <div id="ttMainContent" class="d-none">
+    <ul class="nav pssms-tabs mb-3 gap-2" id="ttNavTabs">
+      <li class="nav-item">
+        <button class="nav-link active fw-medium px-3" onclick="ttTabSwitch('grid',this)">
+          <i class="fas fa-th me-1"></i>ตารางสอน
+          <span class="badge bg-secondary ms-1" id="ttPeriodBadge">0</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link fw-medium px-3" onclick="ttTabSwitch('swap',this)">
+          <i class="fas fa-exchange-alt me-1"></i>แลกคาบ
+        </button>
+      </li>
+    </ul>
+
+    <!-- Tab: ตารางสอน -->
+    <div id="ttTabGrid">
+      <div class="pssms-card p-0">
+        <div class="table-responsive">
+          <table class="pssms-table mb-0 text-center" style="min-width:900px;font-size:.82rem;table-layout:fixed;width:100%;">
+            <colgroup>
+              <col style="width:88px;">
+              <col><col><col><col>
+              <col style="width:44px;">
+              <col><col><col><col>
+            </colgroup>
+            <thead>
+              <tr>
+                <th>วัน</th>
+                <th>คาบ 1</th><th>คาบ 2</th><th>คาบ 3</th><th>คาบ 4</th>
+                <th style="background:var(--p-subtle);color:var(--p-text-muted);font-size:.72rem;">พัก</th>
+                <th>คาบ 5</th><th>คาบ 6</th><th>คาบ 7</th><th>คาบ 8</th>
+              </tr>
+            </thead>
+            <tbody id="ttGridBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: แลกคาบ -->
+    <div id="ttTabSwap" class="d-none">
+      <div class="row g-3">
+        <!-- My slots -->
+        <div class="col-md-5">
+          <div class="pssms-card h-100">
+            <div class="pssms-card-header" style="color:var(--p-accent);"><i class="fas fa-user me-2"></i>คาบของฉัน</div>
+            <div class="p-3" id="ttMySlotsList"></div>
+          </div>
+        </div>
+
+        <!-- Middle -->
+        <div class="col-md-2 d-flex flex-column align-items-center justify-content-start pt-4 gap-2">
+          <div style="font-size:1.6rem;color:var(--p-text-muted);"><i class="fas fa-exchange-alt"></i></div>
+          <div id="ttSwapPreview" class="d-none w-100">
+            <div class="pssms-card p-2 text-center" style="border:2px solid var(--p-accent);font-size:.76rem;">
+              <div class="fw-bold text-muted small mb-1">ตัวอย่างการแลก</div>
+              <div id="ttPreviewMy" class="text-primary fw-bold mb-1" style="font-size:.78rem;line-height:1.3;"></div>
+              <i class="fas fa-arrows-alt-v text-muted my-1 d-block"></i>
+              <div id="ttPreviewOther" class="fw-bold mt-1" style="color:#198754;font-size:.78rem;line-height:1.3;"></div>
+            </div>
+            <div id="ttSwapConflictMsg" class="d-none mt-2 p-2 rounded small"></div>
+            <button class="btn btn-accent btn-sm w-100 mt-2" id="ttSwapConfirmBtn" onclick="ttConfirmSwap()">
+              <i class="fas fa-check me-1"></i>ยืนยันแลกตาราง
+            </button>
+          </div>
+        </div>
+
+        <!-- Other teacher -->
+        <div class="col-md-5">
+          <div class="pssms-card h-100">
+            <div class="pssms-card-header" style="color:#198754;"><i class="fas fa-user-friends me-2"></i>ครูที่ต้องการแลก</div>
+            <div class="p-3">
+              <select class="form-select form-select-sm mb-3" id="ttOtherTeacher" onchange="ttLoadOtherTeacherSlots()">
+                <option value="">-- เลือกครู --</option>
+              </select>
+              <div id="ttOtherSlotsList"><div class="text-muted small text-center py-3">เลือกครูเพื่อดูตาราง</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade pssms-modal" id="ttEditModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-edit me-2" style="color:var(--p-accent);"></i>แก้ไขคาบเรียน</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <input type="hidden" id="ttEditRowIdx">
+        <input type="hidden" id="ttEditOrigData">
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">ชื่อวิชา</label>
+          <input type="text" class="form-control" id="ttEditSubjectName">
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-4">
+            <label class="form-label small fw-medium text-muted">ระดับชั้น</label>
+            <input type="text" class="form-control" id="ttEditLevel" placeholder="เช่น ม.1" oninput="ttCheckEditConflict()">
+          </div>
+          <div class="col-4">
+            <label class="form-label small fw-medium text-muted">ห้อง</label>
+            <input type="text" class="form-control" id="ttEditRoom" placeholder="เช่น 1" oninput="ttCheckEditConflict()">
+          </div>
+          <div class="col-4">
+            <label class="form-label small fw-medium text-muted">สถานที่</label>
+            <input type="text" class="form-control" id="ttEditLocation">
+          </div>
+        </div>
+        <div class="row g-3 mb-2">
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันสอน</label>
+            <select class="form-select" id="ttEditDay" onchange="ttCheckEditConflict()">
+              <option>จันทร์</option><option>อังคาร</option><option>พุธ</option>
+              <option>พฤหัสบดี</option><option>ศุกร์</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">คาบที่</label>
+            <select class="form-select" id="ttEditPeriod" onchange="ttCheckEditConflict()">
+              <option value="1">1 — 08.30–09.20</option>
+              <option value="2">2 — 09.20–10.10</option>
+              <option value="3">3 — 10.20–11.10</option>
+              <option value="4">4 — 11.10–12.00</option>
+              <option value="5">5 — 13.00–13.50</option>
+              <option value="6">6 — 13.50–14.40</option>
+              <option value="7">7 — 14.40–15.30</option>
+              <option value="8">8 — 15.30–16.00</option>
+            </select>
+          </div>
+        </div>
+        <div id="ttEditConflictMsg" class="d-none p-2 rounded small mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-soft btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-accent btn-sm" id="ttEditSaveBtn" onclick="ttSaveEdit()">
+          <i class="fas fa-save me-1"></i>บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

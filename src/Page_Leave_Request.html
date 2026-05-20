@@ -1,0 +1,90 @@
+<div class="container-fluid pssms-page pssms-dept-personnel">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-calendar-minus me-2" style="color:var(--p-accent);"></i>แจ้งลา</h4>
+      <p class="pssms-subtitle">ยื่นคำร้องลาและดูประวัติการลา</p>
+    </div>
+  </div>
+
+  <!-- สถิติวันลา -->
+  <div id="leaveStatsStrip" class="row g-2 mb-3">
+    <div class="col-12"><div class="p-2 d-flex gap-2 flex-wrap">
+      <div class="pssms-skel" style="height:64px;width:130px;border-radius:10px;"></div>
+      <div class="pssms-skel" style="height:64px;width:130px;border-radius:10px;"></div>
+      <div class="pssms-skel" style="height:64px;width:130px;border-radius:10px;"></div>
+      <div class="pssms-skel" style="height:64px;width:130px;border-radius:10px;"></div>
+      <div class="pssms-skel" style="height:64px;width:130px;border-radius:10px;"></div>
+    </div></div>
+  </div>
+
+  <div class="row g-3">
+    <!-- ฟอร์มยื่นลา -->
+    <div class="col-12 col-lg-5">
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header"><span><i class="fas fa-pen me-2" style="color:var(--p-text-muted);"></i>ยื่นคำร้องลา</span></div>
+        <div class="p-3">
+          <div class="mb-3">
+            <label class="form-label small fw-medium text-muted">ประเภทการลา</label>
+            <select class="form-select" id="leaveType" onchange="leaveUpdateDaysPreview()">
+              <option value="">-- เลือกประเภท --</option>
+              <option value="ลาป่วย">ลาป่วย (สูงสุด 60 วัน/ปี)</option>
+              <option value="ลากิจ">ลากิจ (สูงสุด 45 วัน/ปี)</option>
+              <option value="ลาพักร้อน">ลาพักร้อน (สูงสุด 10 วัน/ปี)</option>
+              <option value="ลาคลอด">ลาคลอด (สูงสุด 90 วัน)</option>
+              <option value="ลาบวช">ลาบวช (สูงสุด 120 วัน)</option>
+              <option value="ลาไปช่วยราชการ">ลาไปช่วยราชการ</option>
+            </select>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label small fw-medium text-muted">วันที่เริ่มลา</label>
+              <input type="date" class="form-control" id="leaveStart" onchange="leaveUpdateDaysPreview()">
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-medium text-muted">วันที่สิ้นสุด</label>
+              <input type="date" class="form-control" id="leaveEnd" onchange="leaveUpdateDaysPreview()">
+            </div>
+          </div>
+
+          <div id="leaveDaysPreview" class="d-none mb-3 p-2 rounded-2 text-center fw-bold"
+               style="background:var(--p-accent-soft);color:var(--p-accent);font-size:1.05rem;"></div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-medium text-muted">เหตุผล / รายละเอียด</label>
+            <textarea class="form-control" id="leaveReason" rows="3" placeholder="ระบุเหตุผลการลา..."></textarea>
+          </div>
+
+          <div id="leaveFormStatus" class="d-none mb-2 small p-2 rounded-2"></div>
+
+          <div class="text-end">
+            <button class="btn btn-accent btn-sm" onclick="submitLeave()">
+              <i class="fas fa-paper-plane me-1"></i>ยื่นคำร้อง
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ประวัติการลา -->
+    <div class="col-12 col-lg-7">
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-history me-2" style="color:var(--p-text-muted);"></i>ประวัติการลาปีนี้</span>
+          <span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);" id="leaveYearBadge"></span>
+        </div>
+        <div class="px-3 pt-3 pb-0 d-flex gap-2 flex-wrap">
+          <button class="btn btn-sm btn-accent" id="leaveTabAll" onclick="leaveHistoryFilter('all')">ทั้งหมด</button>
+          <button class="btn btn-sm" id="leaveTabPending" onclick="leaveHistoryFilter('รอพิจารณา')" style="background:var(--p-subtle);color:var(--p-text);">⏳ รอพิจารณา <span id="leaveCountPending" class="badge bg-danger ms-1" style="display:none;"></span></button>
+          <button class="btn btn-sm" id="leaveTabApproved" onclick="leaveHistoryFilter('อนุมัติ')" style="background:var(--p-subtle);color:var(--p-text);">✅ อนุมัติ</button>
+          <button class="btn btn-sm" id="leaveTabRejected" onclick="leaveHistoryFilter('ปฏิเสธ')" style="background:var(--p-subtle);color:var(--p-text);">❌ ปฏิเสธ</button>
+        </div>
+        <div id="leaveHistoryContainer" class="p-3">
+          <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+          <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+          <div class="pssms-skel" style="height:48px;border-radius:8px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

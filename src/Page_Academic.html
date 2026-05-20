@@ -1,0 +1,247 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-clipboard-check me-2" style="color: var(--p-accent);"></i>เช็คเวลาเรียน</h4>
+      <p class="pssms-subtitle" id="academic-header-info">กำลังโหลดข้อมูลปีการศึกษา...</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header"><span><i class="fas fa-list-ul me-2" style="color: var(--p-text-muted);"></i>เลือกวิชาและห้องเรียน</span></div>
+
+        <div class="mb-3">
+          <label class="form-label fw-medium small text-muted">วันที่ทำการสอน</label>
+          <input type="date" id="teachingDate" class="form-control" onchange="reloadTimetableByDate()">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-medium small text-muted">วิชา</label>
+          <select id="selectClass" class="form-select" onchange="loadStudentList()">
+            <option value="">-- เลือกวิชา --</option>
+          </select>
+        </div>
+
+        <div id="classInfoCard" class="d-none">
+          <div class="p-3 rounded-3 mb-3" style="background: var(--p-subtle); border: 1px solid var(--p-border);">
+            <div class="small text-muted mb-1" style="text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.7rem;">รายละเอียดคาบเรียน</div>
+            <div class="fw-bold h6 mb-1" id="dispSubject" style="color: var(--p-text);"></div>
+            <div class="fw-medium" id="dispClass"></div>
+            <div class="small text-muted" id="dispPeriod"></div>
+          </div>
+
+          <button class="btn btn-soft w-100 btn-sm" onclick="viewAllHistory()">
+            <i class="fas fa-history me-2"></i>ดูประวัติการสอน / แก้ไขย้อนหลัง
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-8">
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header"><span><i class="fas fa-edit me-2" style="color: var(--p-text-muted);"></i>บันทึกการจัดการเรียนรู้</span></div>
+
+        <div class="mb-3">
+          <label class="form-label fw-medium small text-muted">หัวข้อ / เนื้อหาที่จัดการเรียนรู้วันนี้</label>
+          <input type="text" id="inputTopic" class="form-control" placeholder="เช่น การเคลื่อนที่แนวตรง, การเขียนโปรแกรมเบื้องต้น">
+        </div>
+
+        <div class="row">
+          <div class="col-md-7 mb-3">
+            <label class="form-label fw-medium small text-muted d-flex justify-content-between">
+              <span>ลายเซ็นครูผู้สอน</span>
+              <button class="btn btn-sm btn-link text-muted p-0 text-decoration-none" onclick="clearSignature()" style="font-size: 0.78rem;">
+                <i class="fas fa-eraser me-1"></i>ล้าง
+              </button>
+            </label>
+            <div class="signature-wrapper rounded-3 overflow-hidden">
+              <canvas id="sig-canvas" width="450" height="150" style="touch-action: none; width: 100%; height: 100%;"></canvas>
+            </div>
+          </div>
+
+          <div class="col-md-5 mb-3">
+            <label class="form-label fw-medium small text-muted">สรุปยอด</label>
+            <div id="attendance-summary" class="d-flex flex-wrap gap-2 mt-1">
+              <div class="badge-summary" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;">
+                <small>มา</small> <span id="sumPresent" class="fw-bold d-block">0</span>
+              </div>
+              <div class="badge-summary" style="background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;">
+                <small>ขาด</small> <span id="sumAbsent" class="fw-bold d-block">0</span>
+              </div>
+              <div class="badge-summary" style="background: #fefce8; color: #854d0e; border: 1px solid #fef08a;">
+                <small>ลา/สาย</small> <span id="sumOther" class="fw-bold d-block">0</span>
+              </div>
+            </div>
+
+            <button class="btn btn-accent w-100 mt-3 py-2 fw-medium" id="btnSubmitAll" onclick="submitAcademicData()" disabled>
+              <i class="fas fa-cloud-upload-alt me-2"></i>บันทึกข้อมูลทั้งหมด
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 mt-2 d-none" id="studentListSection">
+      <div class="pssms-card p-0">
+        <div class="pssms-card-header p-3 mb-0">
+          <span><i class="fas fa-users me-2" style="color: var(--p-text-muted);"></i>รายชื่อนักเรียนและการเช็คชื่อ</span>
+          <span class="pssms-chip">ค่าเริ่มต้น: มาเรียนทุกคน</span>
+        </div>
+        <div class="table-responsive">
+          <table class="pssms-table mb-0">
+            <thead>
+              <tr>
+                <th class="text-center" style="width: 80px;">เลขที่</th>
+                <th>ชื่อ-นามสกุล (รหัสประจำตัว)</th>
+                <th class="text-center" style="width: 380px;">สถานะการเข้าเรียน</th>
+              </tr>
+            </thead>
+            <tbody id="studentRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="text-center mt-3 text-muted small">
+        <i class="fas fa-info-circle me-1"></i>ตรวจสอบสถานะนักเรียนให้ครบถ้วนก่อนกดบันทึก
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* การตกแต่งส่วนลายเซ็น */
+  .signature-wrapper {
+    background-color: var(--p-subtle);
+    cursor: crosshair;
+    position: relative;
+    height: 150px;
+    border: 1px dashed var(--p-border-strong) !important;
+  }
+
+  /* Badge สรุปยอด */
+  .badge-summary {
+    padding: 8px;
+    border-radius: 8px;
+    flex: 1;
+    text-align: center;
+    min-width: 70px;
+    line-height: 1.2;
+    transition: all 0.2s ease;
+  }
+
+  .badge-summary small {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* ปุ่มสถานะ มา ขาด ลา สาย — flat states */
+  .btn-check:checked + .btn-outline-success { background-color: #198754; color: white; border-color: #198754; }
+  .btn-check:checked + .btn-outline-danger { background-color: #dc3545; color: white; border-color: #dc3545; }
+  .btn-check:checked + .btn-outline-warning { background-color: #ffc107; color: black; border-color: #ffc107; }
+  .btn-check:checked + .btn-outline-info { background-color: #0dcaf0; color: white; border-color: #0dcaf0; }
+
+  .btn-group .btn {
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 6px 5px;
+  }
+</style>
+
+<div class="modal fade pssms-modal" id="detailedLessonModal" tabindex="-1" aria-labelledby="detailedLessonModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="detailedLessonModalLabel">
+          <i class="fas fa-book-reader me-2" style="color: var(--p-accent);"></i>บันทึกผลการจัดการเรียนรู้ (แบบละเอียด)
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="detailedLessonForm">
+
+          <div class="pssms-card mb-3">
+            <div class="pssms-card-header"><span><i class="fas fa-edit me-2" style="color:var(--p-text-muted);"></i>1. ผลการจัดการเรียนรู้และปัญหา</span></div>
+            <div class="p-3">
+              <div class="mb-3">
+                <label class="form-label fw-bold">1.1 ผลการจัดการเรียนรู้</label>
+                <textarea class="form-control" id="dl_outcomes" rows="3" placeholder="อธิบายผลที่เกิดจากการจัดกิจกรรม..."></textarea>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold text-danger">1.2 ปัญหา/อุปสรรค</label>
+                  <textarea class="form-control" id="dl_problems" rows="3" placeholder="ปัญหาที่พบระหว่างสอน..."></textarea>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold text-success">1.3 แนวทางแก้ไข</label>
+                  <textarea class="form-control" id="dl_solutions" rows="3" placeholder="วิธีแก้ไขปัญหา หรือสิ่งที่ต้องปรับปรุงในคาบต่อไป..."></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pssms-card mb-3">
+            <div class="pssms-card-header"><span><i class="fas fa-check-double me-2" style="color:var(--p-text-muted);"></i>2. การประเมินตนเอง (8 ตัวชี้วัด DPA)</span></div>
+            <div class="p-3">
+              <div class="row g-2">
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="ผู้เรียนเข้าถึงสิ่งที่เรียน" id="dpa1"><label class="form-check-label" for="dpa1">1. ผู้เรียนเข้าถึงสิ่งที่เรียน</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="ผู้เรียนเชื่อมโยงความรู้เดิม" id="dpa2"><label class="form-check-label" for="dpa2">2. ผู้เรียนเชื่อมโยงความรู้เดิม</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="สร้างความรู้เอง" id="dpa3"><label class="form-check-label" for="dpa3">3. ผู้เรียนสร้างความรู้เอง</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="กระตุ้นแรงจูงใจ" id="dpa4"><label class="form-check-label" for="dpa4">4. กระตุ้นแรงจูงใจให้เรียนรู้</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="พัฒนาทักษะ" id="dpa5"><label class="form-check-label" for="dpa5">5. ผู้เรียนได้รับการพัฒนาทักษะ</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="Feedback" id="dpa6"><label class="form-check-label" for="dpa6">6. มีการให้ Feedback แก่ผู้เรียน</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="บรรยากาศดี" id="dpa7"><label class="form-check-label" for="dpa7">7. บรรยากาศส่งเสริมการเรียนรู้</label></div></div>
+                <div class="col-md-6"><div class="form-check"><input class="form-check-input dpa-check" type="checkbox" value="กำกับตนเอง" id="dpa8"><label class="form-check-label" for="dpa8">8. ผู้เรียนกำกับตนเองในการเรียน</label></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pssms-card mb-3">
+            <div class="pssms-card-header"><span><i class="fas fa-cogs me-2" style="color:var(--p-text-muted);"></i>3. ทักษะ 3R8C ที่เกิดขึ้น</span></div>
+            <div class="p-3">
+              <div class="row g-2">
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Reading" id="s1"><label class="form-check-label" for="s1">Reading (อ่านออก)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Writing" id="s2"><label class="form-check-label" for="s2">Writing (เขียนได้)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Arithmetic" id="s3"><label class="form-check-label" for="s3">Arithmetic (คิดเลขเป็น)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Critical Thinking" id="s4"><label class="form-check-label" for="s4">Critical Thinking</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Creativity" id="s5"><label class="form-check-label" for="s5">Creativity</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Cross-cultural" id="s6"><label class="form-check-label" for="s6">Cross-cultural</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Collaboration" id="s7"><label class="form-check-label" for="s7">Collaboration</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Communication" id="s8"><label class="form-check-label" for="s8">Communication</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Computing" id="s9"><label class="form-check-label" for="s9">Computing (ICT)</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Career Skills" id="s10"><label class="form-check-label" for="s10">Career Skills</label></div></div>
+                <div class="col-md-4"><div class="form-check"><input class="form-check-input skill-check" type="checkbox" value="Compassion" id="s11"><label class="form-check-label" for="s11">Compassion (คุณธรรม)</label></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pssms-card">
+            <div class="pssms-card-header"><span><i class="fas fa-paperclip me-2" style="color:var(--p-text-muted);"></i>4. ผลลัพธ์และไฟล์แนบ</span></div>
+            <div class="p-3">
+              <div class="mb-3">
+                <label class="form-label fw-bold">ผลลัพธ์ที่เกิดกับผู้เรียน</label>
+                <textarea class="form-control" id="dl_student_results" rows="2" placeholder="เช่น ชิ้นงานนักเรียน, พฤติกรรมที่เปลี่ยนไป..."></textarea>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold">ไฟล์ผลงานนักเรียน (ถ้ามี)</label>
+                  <input class="form-control" type="file" id="dl_work_file" accept="image/*,application/pdf">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label fw-bold">ภาพบรรยากาศการสอน (ถ้ามี)</label>
+                  <input class="form-control" type="file" id="dl_image_file" accept="image/*">
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </form>
+      </div>
+      <div class="modal-footer gap-2">
+        <button type="button" class="btn btn-sm btn-soft" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-sm btn-accent" onclick="submitDetailedLesson()"><i class="fas fa-save me-1"></i>บันทึกแบบละเอียดครบถ้วน</button>
+      </div>
+    </div>
+  </div>
+</div>

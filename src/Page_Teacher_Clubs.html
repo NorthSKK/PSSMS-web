@@ -1,0 +1,117 @@
+<div class="container-fluid pssms-page pssms-dept-academic" id="teacherClubsPage">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-users me-2" style="color:var(--p-accent);"></i>ชุมนุมที่ดูแล</h4>
+      <p class="pssms-subtitle">เทอม <span id="tcTerm">-</span>/<span id="tcYear">-</span></p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="initTeacherClubs()"><i class="fas fa-sync me-1"></i>รีเฟรช</button>
+    </div>
+  </div>
+
+  <!-- Club selector (ถ้ามีหลายชุมนุม) -->
+  <div id="tcClubSelector" class="d-none mb-3"></div>
+
+  <!-- Loading state -->
+  <div id="tcLoadingState" class="p-3">
+    <div class="pssms-skel mb-2" style="height:80px;border-radius:12px;"></div>
+    <div class="pssms-skel mb-2" style="height:80px;border-radius:12px;"></div>
+    <div class="pssms-skel" style="height:80px;border-radius:12px;"></div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="tcEmptyState" class="d-none text-center text-muted p-5">
+    <i class="fas fa-inbox fa-3x opacity-25 mb-3 d-block"></i>
+    ยังไม่ได้รับมอบหมายให้ดูแลชุมนุมในเทอมนี้
+  </div>
+
+  <!-- Error state -->
+  <div id="tcErrorState" class="d-none text-center text-danger p-5">
+    <i class="fas fa-exclamation-triangle fa-2x mb-3 d-block"></i>
+    <span id="tcErrorMsg">โหลดข้อมูลไม่สำเร็จ</span>
+  </div>
+
+  <!-- Main content -->
+  <div id="tcMainContent" class="d-none">
+    <!-- Club Hero Card -->
+    <div class="pssms-card mb-3 p-3">
+      <div class="d-flex align-items-start gap-3">
+        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:52px;height:52px;background:var(--p-accent-soft);border:1px solid var(--p-border);">
+          <i class="fas fa-users" style="color:var(--p-accent);font-size:20px;"></i>
+        </div>
+        <div class="flex-grow-1">
+          <h5 class="fw-bold mb-1" id="tcHeroName">-</h5>
+          <p class="text-muted small mb-2" id="tcHeroDesc"></p>
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <span class="badge bg-primary" id="tcHeroRole">-</span>
+            <span class="text-muted small" id="tcHeroAdvisors"></span>
+          </div>
+        </div>
+        <div class="text-end flex-shrink-0">
+          <div class="fw-bold fs-5" id="tcHeroCount">-</div>
+          <div class="text-muted small" id="tcHeroCapacity"></div>
+          <div class="progress mt-1" style="width:80px;height:6px;">
+            <div class="progress-bar" id="tcHeroBar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav pssms-tabs mb-3 gap-2" id="tcTabs">
+      <li class="nav-item">
+        <button class="nav-link active fw-medium px-3" onclick="tcShowTab('members',this)">
+          <i class="fas fa-list me-1"></i>สมาชิก <span class="badge bg-secondary ms-1" id="tcMemberTabCount">0</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link fw-medium px-3" onclick="tcShowTab('attendance',this)">
+          <i class="fas fa-calendar-check me-1"></i>เช็คชื่อ
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link fw-medium px-3" onclick="tcShowTab('stats',this)">
+          <i class="fas fa-chart-bar me-1"></i>สถิติ
+        </button>
+      </li>
+    </ul>
+
+    <!-- Tab: สมาชิก -->
+    <div id="tcTabMembers">
+      <div class="d-flex gap-2 mb-3">
+        <input type="text" class="form-control form-control-sm" id="tcMemberSearch"
+               placeholder="ค้นหาชื่อ / รหัส..." oninput="tcFilterMembers(this.value)">
+        <button class="btn btn-outline-primary btn-sm flex-shrink-0" onclick="tcPrintMembers()">
+          <i class="fas fa-print me-1"></i>พิมพ์
+        </button>
+      </div>
+      <div id="tcMembersBody"></div>
+    </div>
+
+    <!-- Tab: เช็คชื่อ -->
+    <div id="tcTabAttendance" class="d-none">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <input type="date" class="form-control form-control-sm" id="tcAttDate" style="max-width:180px;"
+               onchange="tcShowAttendanceForDate(this.value)">
+        <span class="text-muted small" id="tcAttSessionCount"></span>
+        <button class="btn btn-accent btn-sm ms-auto" onclick="tcGoToAttendance()">
+          <i class="fas fa-external-link-alt me-1"></i>ไปที่เช็คชื่อ
+        </button>
+      </div>
+      <div id="tcAttBody">
+        <div class="text-center text-muted py-4"><i class="fas fa-calendar-alt fa-2x opacity-25 mb-2 d-block"></i>เลือกวันที่เพื่อดูข้อมูล</div>
+      </div>
+    </div>
+
+    <!-- Tab: สถิติ -->
+    <div id="tcTabStats" class="d-none">
+      <div id="tcStatsBody">
+        <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+        <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+        <div class="pssms-skel" style="height:48px;border-radius:8px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+

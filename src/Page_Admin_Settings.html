@@ -1,0 +1,102 @@
+<div class="container-fluid pssms-page">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-cogs me-2" style="color: var(--p-accent);"></i>ตั้งค่าระบบ</h4>
+      <p class="pssms-subtitle">จัดการปีการศึกษาและข้อมูลแกนกลางของระบบ</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-6">
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header"><span><i class="fas fa-calendar-check me-2" style="color: var(--p-text-muted);"></i>ภาคเรียนและปีการศึกษาปัจจุบัน</span></div>
+
+        <div class="p-3 rounded-3 mb-3" style="background: var(--p-accent-soft); border: 1px solid var(--p-border);">
+          <div class="small text-muted mb-1" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;">ปัจจุบันในระบบ</div>
+          <div class="fw-bold fs-4 mb-1" style="color: var(--p-accent);" id="currentTermDisplay">-/-</div>
+          <div class="small text-muted" id="currentRangeDisplay">กำลังโหลด...</div>
+        </div>
+
+        <form id="systemConfigForm">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-medium text-muted">ภาคเรียนที่</label>
+              <select class="form-select" id="inputTerm">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3 (ฤดูร้อน)</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-medium text-muted">ปีการศึกษา (พ.ศ.)</label>
+              <input type="number" class="form-control" id="inputYear" placeholder="เช่น 2568" min="2560" max="2600">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-medium text-muted">วันที่เปิดภาคเรียน</label>
+              <input type="date" class="form-control" id="inputStartDate">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-medium text-muted">วันที่ปิดภาคเรียน</label>
+              <input type="date" class="form-control" id="inputEndDate">
+            </div>
+          </div>
+
+          <hr style="opacity: 0.1; margin: 1.25rem 0;">
+
+          <div class="text-end">
+            <button type="button" class="btn btn-accent btn-sm" onclick="saveConfig()">
+              <i class="fas fa-save me-1"></i>บันทึกและตั้งเป็นปีปัจจุบัน
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header"><span><i class="fas fa-school me-2" style="color: var(--p-text-muted);"></i>ข้อมูลโรงเรียน &amp; Logo</span></div>
+        <div class="p-3">
+
+          <!-- preview -->
+          <div class="text-center mb-3">
+            <div id="logoPreviewWrap" class="d-inline-flex align-items-center justify-content-center rounded-circle mx-auto mb-2"
+                 style="width:80px;height:80px;background:var(--p-subtle);border:2px dashed var(--p-border);overflow:hidden;">
+              <i id="logoPlaceholderIcon" class="fas fa-school fa-2x" style="color:var(--p-text-muted);"></i>
+              <img id="logoPreviewImg" src="" alt="logo" style="width:100%;height:100%;object-fit:contain;display:none;">
+            </div>
+            <div class="text-muted small">ตัวอย่าง Logo</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-medium text-muted">ชื่อโรงเรียน</label>
+            <input type="text" class="form-control" id="inputSchoolName" placeholder="โรงเรียนภูพระบาทวิทยา">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-medium text-muted">Logo โรงเรียน</label>
+            <div class="d-flex gap-2 align-items-center">
+              <label class="btn btn-soft btn-sm mb-0 flex-grow-1" style="cursor:pointer;">
+                <i class="fas fa-upload me-1"></i>เลือกไฟล์รูป
+                <input type="file" id="logoFileInput" accept="image/*" class="d-none" onchange="previewLogoFile(this)">
+              </label>
+              <button class="btn btn-soft btn-sm text-danger" onclick="clearLogo()" title="ลบ Logo">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+            <div class="text-muted mt-1" style="font-size:.72rem;">PNG / JPG / SVG · แนะนำ 200×200px ขึ้นไป</div>
+          </div>
+
+          <div id="logoSaveStatus" class="d-none mb-2 small p-2 rounded-2"></div>
+
+          <div class="text-end">
+            <button class="btn btn-accent btn-sm" onclick="saveSchoolInfoSettings()">
+              <i class="fas fa-save me-1"></i>บันทึกข้อมูลโรงเรียน
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>

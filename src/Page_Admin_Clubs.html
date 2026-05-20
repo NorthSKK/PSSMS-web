@@ -1,0 +1,148 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-users-cog me-2" style="color: var(--p-accent);"></i>จัดการชุมนุม</h4>
+      <p class="pssms-subtitle">สร้าง/แก้ไขชุมนุม + เลือกครูที่ปรึกษา + จัดสมาชิก (เทอม <span id="clubTermLabel">-</span>/<span id="clubYearLabel">-</span>)</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="initAdminClubs()"><i class="fas fa-sync me-1"></i>รีเฟรช</button>
+      <button class="btn btn-soft btn-sm" onclick="exportClubsPrint()"><i class="fas fa-print me-1"></i>พิมพ์ทุกชุมนุม</button>
+      <button class="btn btn-soft btn-sm" onclick="exportClubsCSV()"><i class="fas fa-file-excel me-1"></i>CSV</button>
+      <button class="btn btn-soft btn-sm" onclick="setupClubDb()"><i class="fas fa-database me-1"></i>สร้างฐานข้อมูล</button>
+      <button class="btn btn-accent btn-sm" data-bs-toggle="modal" data-bs-target="#clubModal" onclick="openClubModal()"><i class="fas fa-plus me-1"></i>เพิ่มชุมนุม</button>
+    </div>
+  </div>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-3">
+      <div class="pssms-card p-3">
+        <div class="small text-muted mb-1">ชุมนุมทั้งหมด</div>
+        <div class="fw-bold fs-4" style="color:var(--p-accent);" id="statClubTotal">0</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="pssms-card p-3">
+        <div class="small text-muted mb-1">เปิดรับสมัคร</div>
+        <div class="fw-bold fs-4 text-success" id="statClubOpen">0</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="pssms-card p-3">
+        <div class="small text-muted mb-1">สมาชิกรวม</div>
+        <div class="fw-bold fs-4" style="color:var(--p-text);" id="statClubMembers">0</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="pssms-card p-3">
+        <div class="small text-muted mb-1">ที่ว่างคงเหลือ</div>
+        <div class="fw-bold fs-4 text-warning" id="statClubSeats">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pssms-card p-0">
+    <div class="pssms-card-header">
+      <span><i class="fas fa-list me-2" style="color:var(--p-text-muted);"></i>รายชื่อชุมนุม</span>
+      <input type="text" id="clubSearchInput" class="form-control form-control-sm w-auto" placeholder="ค้นหา..." onkeyup="filterClubList()">
+    </div>
+    <div class="table-responsive">
+      <table class="pssms-table mb-0">
+        <thead>
+          <tr>
+            <th class="ps-3">ชื่อชุมนุม</th>
+            <th>ครูที่ปรึกษา</th>
+            <th class="text-center">สมาชิก</th>
+            <th class="text-center">สถานะ</th>
+            <th class="text-end pe-3" style="width: 130px; white-space: nowrap">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody id="clubListBody">
+          <tr><td colspan="5" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Create / Edit Club -->
+<div class="modal fade pssms-modal" id="clubModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="clubModalTitle"><i class="fas fa-users-cog me-2" style="color:var(--p-accent);"></i>เพิ่มชุมนุม</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="clubFormId">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label small fw-medium text-muted">ชื่อชุมนุม</label>
+            <input type="text" class="form-control" id="clubFormName" placeholder="เช่น ชุมนุมหุ่นยนต์">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-medium text-muted">จำนวนรับสูงสุด</label>
+            <input type="number" class="form-control" id="clubFormCapacity" min="0" value="30">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small fw-medium text-muted">รายละเอียด</label>
+            <textarea class="form-control" id="clubFormDesc" rows="2" placeholder="กิจกรรม / เนื้อหา / ข้อกำหนด"></textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-medium text-muted">สถานะ</label>
+            <select class="form-select" id="clubFormStatus">
+              <option value="open">เปิดรับสมัคร</option>
+              <option value="closed">ปิดรับสมัคร</option>
+              <option value="locked">ล็อค (ไม่ให้ admin override)</option>
+            </select>
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small fw-medium text-muted">ครูที่ปรึกษา <small class="text-muted">(เลือกได้หลายคน)</small></label>
+            <div id="clubFormAdvisors" class="rounded p-2" style="max-height: 220px; overflow-y: auto; background:var(--p-subtle); border:1px solid var(--p-border);">
+              <div class="pssms-skel mb-2" style="height:36px;border-radius:6px;"></div>
+              <div class="pssms-skel mb-2" style="height:36px;border-radius:6px;"></div>
+              <div class="pssms-skel" style="height:36px;border-radius:6px;"></div>
+            </div>
+            <input type="text" class="form-control form-control-sm mt-2" id="clubAdvisorSearch" placeholder="ค้นหาครู..." onkeyup="filterAdvisorList()">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer gap-2">
+        <button class="btn btn-sm btn-soft" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-sm btn-accent" id="clubFormSubmit" onclick="submitClubForm()"><i class="fas fa-save me-1"></i>บันทึก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Members -->
+<div class="modal fade pssms-modal" id="clubMembersModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-users me-2" style="color:var(--p-accent);"></i>สมาชิกชุมนุม: <span id="clubMembersName"></span></h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-7">
+            <h6 class="fw-medium mb-2 text-muted">สมาชิกปัจจุบัน <span class="badge ms-1" style="background:var(--p-accent-soft);color:var(--p-accent);" id="clubMembersCount">0</span></h6>
+            <div id="clubMembersList" style="max-height: 420px; overflow-y: auto;" class="rounded p-2" style="background:var(--p-subtle);border:1px solid var(--p-border);">
+              <div class="pssms-skel mb-2" style="height:36px;border-radius:6px;"></div>
+              <div class="pssms-skel mb-2" style="height:36px;border-radius:6px;"></div>
+              <div class="pssms-skel" style="height:36px;border-radius:6px;"></div>
+            </div>
+          </div>
+          <div class="col-md-5" style="border-left:1px solid var(--p-border);">
+            <h6 class="fw-medium mb-2 text-muted">เพิ่มนักเรียน (Admin override)</h6>
+            <select class="form-select form-select-sm mb-2" id="clubMembersClassFilter" onchange="loadMembersStudentList()">
+              <option value="">-- เลือกชั้น --</option>
+            </select>
+            <div id="clubMembersStudentList" style="max-height: 360px; overflow-y: auto;" class="rounded p-2" style="background:var(--p-subtle);border:1px solid var(--p-border);">
+              <div class="text-muted text-center p-3 small">เลือกชั้นเรียนเพื่อเริ่มเพิ่มนักเรียน</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

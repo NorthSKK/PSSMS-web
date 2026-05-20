@@ -1,0 +1,1312 @@
+<script>
+// ==========================================
+// 1. TEACHER DASHBOARD LOGIC
+// ==========================================
+// ==========================================
+// 1. TEACHER DASHBOARD LOGIC
+// ==========================================
+let todoRetryCount = 0; // 🌟 เพิ่มตัวนับรอบ
+
+function loadTodoList() {
+  const user = getSessionUser();
+  if (!user) return;
+  
+  const container = document.getElementById('todoListContainer');
+  
+  // 🌟 ดักรอแบบมีลิมิต: ป้องกันการวนลูปค้าง (Memory Leak) ถ้าย้ายหน้าหนี
+  if (!container) {
+      todoRetryCount++;
+      if (todoRetryCount < 10) { // ลองหา 10 ครั้ง (ประมาณ 5 วินาที) ถ้าไม่เจอก็เลิกหา
+          setTimeout(loadTodoList, 500);
+      }
+      return;
+  }
+  todoRetryCount = 0; // รีเซ็ตค่าเมื่อหากล่องเจอ
+
+  const storageKey = `todo_list_${user.id}`;
+  let localTodos = [];
+  
+  try {
+      localTodos = JSON.parse(localStorage.getItem(storageKey));
+      if (!Array.isArray(localTodos)) localTodos = [];
+  } catch(e) { localTodos = []; }
+  
+  renderTodoList(localTodos);
+  
+  google.script.run.withSuccessHandler(function(serverData) {
+    if (serverData) { 
+        let parsed = [];
+        try {
+            parsed = typeof serverData === 'string' ? JSON.parse(serverData) : serverData;
+            if (!Array.isArray(parsed)) parsed = [];
+        } catch(e) { parsed = []; }
+        localStorage.setItem(storageKey, JSON.stringify(parsed)); 
+        renderTodoList(parsed); 
+    }
+  }).getTodoList(user.id);
+}
+
+function syncTodoToServer(todos) {
+  const user = getSessionUser();
+  if (!user) return;
+  if (!Array.isArray(todos)) todos = [];
+  
+  const storageKey = `todo_list_${user.id}`;
+  localStorage.setItem(storageKey, JSON.stringify(todos));
+  renderTodoList(todos);
+  google.script.run.saveTodoList(user.id, JSON.stringify(todos));
+}
+
+function renderTodoList(todos) {
+  if (!Array.isArray(todos)) todos = [];
+  
+  const container = document.getElementById('todoListContainer');
+  const countEl = document.getElementById('todoCount');
+  if (!container) return;
+  
+  const card = container.closest('.card');
+  if (card) {
+      card.classList.remove('h-100'); 
+      card.style.height = "fit-content"; 
+  }
+
+  container.style.maxHeight = "550px"; 
+  container.style.overflowY = "auto";
+  container.style.overflowX = "hidden";
+  container.style.paddingRight = "5px"; 
+
+  if (todos.length === 0) {
+    container.innerHTML = `<div class="d-flex align-items-center justify-content-center w-100 animate__animated animate__fadeIn" style="min-height: 100px; background-color: transparent; border: none;"><div class="text-center"><i class="fas fa-check-double fa-lg mb-2 text-success" style="opacity: 0.12;"></i><br><span class="text-muted" style="font-size: 0.82rem; opacity: 0.4; letter-spacing: 0.5px;">เคลียร์งานหมดแล้วครับ 🎉</span></div></div>`; 
+    if (countEl) countEl.innerText = `0 งานค้าง`;
+    return;
+  }
+
+  const pending = todos.filter(t => !t.done);
+  const completed = todos.filter(t => t.done);
+  const sortedTodos = [...pending, ...completed];
+  let html = '';
+  
+  sortedTodos.forEach((todo, index) => {
+    const isDone = todo.done;
+    const textStyle = isDone ? 'text-muted text-decoration-line-through opacity-50' : 'text-dark';
+    const bgStyle = isDone ? 'bg-light' : 'bg-transparent'; 
+    const animationClass = "animate__animated animate__fadeIn animate__faster";
+    
+    html += `<li class="list-group-item d-flex justify-content-between align-items-center ${bgStyle} border-0 border-bottom px-2 py-1 mb-0 w-100 ${animationClass}" style="border-color: #f5f5f5 !important; border-radius: 0;">
+      <div class="form-check d-flex align-items-center mb-0" style="flex-grow: 1; min-width: 0;">
+        <input class="form-check-input me-3 rounded-circle border-secondary" type="checkbox" id="todo_${index}" ${isDone ? 'checked' : ''} onchange="toggleTodoByObject('${encodeURIComponent(JSON.stringify(todo))}')" style="cursor:pointer; width:1rem; height:1rem; margin-top: 0; flex-shrink: 0; opacity: 0.7;">
+        <label class="form-check-label text-truncate ${textStyle}" for="todo_${index}" style="font-size: 0.85rem; cursor:pointer; line-height: 1.4; width: 100%;">${todo.text}</label>
+      </div>
+      <button class="btn btn-link btn-sm text-danger p-0 ms-2" onclick="deleteTodoByText('${encodeURIComponent(todo.text)}')" style="border: none; text-decoration: none; opacity: 0.3; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.3'" title="ลบ"><i class="fas fa-times" style="font-size: 0.8rem;"></i></button>
+    </li>`;
+  });
+  
+  container.innerHTML = html;
+  if (countEl) countEl.innerText = `${pending.length} งานค้าง`;
+}
+
+function addTodoItem() {
+  const user = getSessionUser();
+  if (!user) return;
+  const input = document.getElementById('newTodoInput');
+  const text = input.value.trim();
+  if (!text) return; 
+  
+  const storageKey = `todo_list_${user.id}`;
+  let todos = [];
+  try {
+      todos = JSON.parse(localStorage.getItem(storageKey));
+      if (!Array.isArray(todos)) todos = [];
+  } catch(e) { todos = []; }
+
+  const newTodo = { text: text, done: false, notionId: null };
+  todos.unshift(newTodo);
+  input.value = ''; 
+  syncTodoToServer(todos);
+
+  if (user.id === 'teacher12') {
+    google.script.run.withSuccessHandler(function(response) {
+      const result = JSON.parse(response);
+      if (result.id) {
+        let currentTodos = [];
+        try { currentTodos = JSON.parse(localStorage.getItem(storageKey)); if(!Array.isArray(currentTodos)) currentTodos=[]; } catch(e){}
+        const idx = currentTodos.findIndex(t => t.text === text && !t.notionId);
+        if (idx !== -1) { currentTodos[idx].notionId = result.id; syncTodoToServer(currentTodos); }
+      }
+    }).sendTaskToNotion(text);
+  }
+}
+
+function toggleTodoByObject(encodedObj) {
+  const todoObj = JSON.parse(decodeURIComponent(encodedObj));
+  const user = getSessionUser();
+  const storageKey = `todo_list_${user.id}`;
+  let todos = [];
+  try {
+      todos = JSON.parse(localStorage.getItem(storageKey));
+      if (!Array.isArray(todos)) todos = [];
+  } catch(e) { todos = []; }
+  
+  const target = todos.find(t => t.text === todoObj.text);
+  if (target) {
+    target.done = !target.done;
+    syncTodoToServer(todos);
+    if (user.id === 'teacher12' && target.notionId) {
+        google.script.run.updateTaskStatus(target.notionId, target.done);
+    }
+  }
+}
+
+function deleteTodoByText(encodedText) {
+  const text = decodeURIComponent(encodedText);
+  const user = getSessionUser();
+  const storageKey = `todo_list_${user.id}`;
+  let todos = [];
+  try {
+      todos = JSON.parse(localStorage.getItem(storageKey));
+      if (!Array.isArray(todos)) todos = [];
+  } catch(e) { todos = []; }
+  
+  const newTodos = todos.filter(t => t.text !== text);
+  syncTodoToServer(newTodos);
+}
+
+function initTeacherDashboard() {
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  if(!user) return;
+
+  if(document.getElementById('dashTeacherName')) document.getElementById('dashTeacherName').innerText = user.name;
+  if(document.getElementById('dashTodayDate')) document.getElementById('dashTodayDate').innerText = new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  // Bundle 4 calls into 1 GAS round-trip (Phase 5).
+  // Falls back to legacy per-call loaders ถ้า bundle fail.
+  const now = new Date();
+  const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  const scheduleCacheKey = `today_schedule_v2_${user.id}_${localDate}`;
+  const riskCacheKey = `grade_risk_v2_${user.id}_${user.currentTerm}_${user.currentYear}`;
+  const atRiskCacheKey = `risk_dash_${user.id}_${user.currentTerm}_${user.currentYear}`;
+
+  // Show cached pieces immediately while bundle loads.
+  if (sessionStorage.getItem(scheduleCacheKey)) {
+    try { renderTeacherTodaySchedule(JSON.parse(sessionStorage.getItem(scheduleCacheKey))); } catch (e) {}
+  }
+  if (sessionStorage.getItem(riskCacheKey)) {
+    try { renderTeacherRiskFromCache(JSON.parse(sessionStorage.getItem(riskCacheKey))); } catch (e) {}
+  }
+  if (sessionStorage.getItem(atRiskCacheKey)) {
+    try {
+      if (document.getElementById('dashTeacherName')) {
+        const c = document.getElementById('atRiskDashboardContainer') || (function() {
+          const pc = document.getElementById('page-content');
+          if (pc) pc.insertAdjacentHTML('beforeend', '<div id="atRiskDashboardContainer" class="mt-4 pb-5"></div>');
+          return document.getElementById('atRiskDashboardContainer');
+        })();
+        if (c) renderTeacherAtRiskDashboard(JSON.parse(sessionStorage.getItem(atRiskCacheKey)), c);
+      }
+    } catch (e) {}
+  }
+
+  safeRun(2).withSuccessHandler(function(bundle) {
+    if (!bundle) { loadTeacherDashboardLegacy(user); return; }
+
+    if (bundle.timetable && bundle.timetable.ok && bundle.timetable.data) {
+      sessionStorage.setItem(scheduleCacheKey, JSON.stringify(bundle.timetable.data));
+      if (document.getElementById('dashTeacherName')) renderTeacherTodaySchedule(bundle.timetable.data);
+    }
+    if (bundle.riskDashboard && bundle.riskDashboard.ok && bundle.riskDashboard.data) {
+      const res = bundle.riskDashboard.data;
+      if (res.status === 'success') {
+        sessionStorage.setItem(riskCacheKey, JSON.stringify(res));
+        if (document.getElementById('dashTeacherName')) renderTeacherRiskFromCache(res);
+      }
+    }
+    if (bundle.atRiskDashboard && bundle.atRiskDashboard.ok && bundle.atRiskDashboard.data) {
+      sessionStorage.setItem(atRiskCacheKey, JSON.stringify(bundle.atRiskDashboard.data));
+      if (!document.getElementById('dashTeacherName')) return;
+      const c = document.getElementById('atRiskDashboardContainer') || (function() {
+        const pc = document.getElementById('page-content');
+        if (pc) pc.insertAdjacentHTML('beforeend', '<div id="atRiskDashboardContainer" class="mt-4 pb-5"></div>');
+        return document.getElementById('atRiskDashboardContainer');
+      })();
+      if (c) renderTeacherAtRiskDashboard(bundle.atRiskDashboard.data, c);
+    }
+    if (bundle.calendarEvents && bundle.calendarEvents.ok && bundle.calendarEvents.data) {
+      if (document.getElementById('dashTeacherName')) renderDashboardCalendarEvents(bundle.calendarEvents.data);
+    }
+    if (bundle.substitutes && bundle.substitutes.ok && document.getElementById('dashTeacherName')) {
+      renderDashboardSubstitutes(bundle.substitutes.data || []);
+    }
+  }).withFailureHandler(function() {
+    loadTeacherDashboardLegacy(user);
+  }).getTeacherDashboardBundle(user.id, user.currentTerm, user.currentYear);
+
+  // ToDo loads independently (lightweight, per-user)
+  setTimeout(loadTodoList, 300);
+}
+
+// Fallback: original sequential loaders if bundle endpoint fails or missing.
+function loadTeacherDashboardLegacy(user) {
+  try {
+    const now = new Date();
+    const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    const scheduleCacheKey = `today_schedule_v2_${user.id}_${localDate}`;
+    if (!sessionStorage.getItem(scheduleCacheKey)) {
+      google.script.run.withSuccessHandler(data => {
+        sessionStorage.setItem(scheduleCacheKey, JSON.stringify(data));
+        renderTeacherTodaySchedule(data);
+      }).getTeacherTimetableWithStatus(user.id);
+    }
+  } catch (e) { console.error(e); }
+  try { loadTeacherRiskDashboard(user.id, user.currentTerm, user.currentYear); } catch(e) { console.error(e); }
+  try { loadTeacherAtRiskDashboard(user.id, user.currentTerm, user.currentYear); } catch(e) { console.error(e); }
+  try { loadDashboardCalendarEvents(); } catch(e) { console.error(e); }
+}
+
+// Render helper extracted so bundle path can reuse render logic for risk cache.
+function renderTeacherRiskFromCache(res) {
+  const el0 = document.getElementById('riskCount0');
+  const elR = document.getElementById('riskCountR');
+  const elMS = document.getElementById('riskCountMS');
+  if (!el0 || !elR || !elMS) return;
+  el0.innerHTML = `<span class="fs-1">${res.summary.zero}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+  elR.innerHTML = `<span class="fs-1">${res.summary.r}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+  elMS.innerHTML = `<span class="fs-1">${res.summary.ms}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+  if (typeof renderRiskCards === 'function') renderRiskCards(res.details);
+}
+
+// Extracted from loadDashboardCalendarEvents so bundle path can reuse render logic.
+function renderDashboardCalendarEvents(events) {
+  const strip = document.getElementById('dashCalendarStrip');
+  const badges = document.getElementById('dashCalendarBadges');
+  if (!strip || !badges || !events) { if (strip) strip.classList.add('d-none'); return; }
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const limit = new Date(today); limit.setDate(limit.getDate() + 14);
+  const upcoming = events.filter(function(ev) {
+    if (!ev.start) return false;
+    const start = new Date(ev.start);
+    const end = ev.end ? new Date(ev.end) : start;
+    return start <= limit && end >= today;
+  }).sort(function(a, b) { return new Date(a.start) - new Date(b.start); });
+  if (upcoming.length === 0) { strip.classList.add('d-none'); return; }
+  badges.innerHTML = upcoming.map(function(ev) {
+    const d = new Date(ev.start);
+    const isToday = d.toDateString() === today.toDateString();
+    const dayLabel = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    const color = ev.backgroundColor || '#6c757d';
+    const dot = isToday ? '<i class="fas fa-circle me-1" style="font-size:0.5rem;vertical-align:middle;"></i>' : '';
+    return '<span class="badge rounded-pill shadow-sm" style="background-color:' + color + ';font-size:0.78rem;padding:5px 11px;cursor:default;" title="' + (ev.description || '') + '">'
+      + dot + '<i class="fas fa-calendar-day me-1"></i>' + dayLabel + ' · ' + ev.title + '</span>';
+  }).join('');
+}
+
+function renderDashboardSubstitutes(rows) {
+  var pc = document.getElementById('page-content');
+  if (!pc) return;
+  var holder = document.getElementById('dashSubstituteStrip');
+  if (!holder) {
+    pc.insertAdjacentHTML('afterbegin',
+      '<div id="dashSubstituteStrip" class="mb-3 d-none"></div>');
+    holder = document.getElementById('dashSubstituteStrip');
+  }
+  if (!rows || !rows.length) { holder.classList.add('d-none'); holder.innerHTML = ''; return; }
+  var html = '<div class="pssms-card" style="border-left:4px solid #14b8a6;">' +
+    '<div class="pssms-card-header d-flex justify-content-between align-items-center">' +
+      '<span><i class="fas fa-user-friends me-2" style="color:#14b8a6;"></i>คาบสอนแทนของฉัน (7 วันข้างหน้า)</span>' +
+      '<span class="badge" style="background:#ccfbf1;color:#0f766e;">' + rows.length + ' คาบ</span>' +
+    '</div>' +
+    '<div class="p-2"><div class="d-flex flex-wrap gap-2">';
+  rows.forEach(function(r) {
+    var d = new Date(r.date);
+    var dayLabel = d.toLocaleDateString('th-TH', { weekday:'short', day:'numeric', month:'short' });
+    html += '<div class="p-2 rounded-2" style="background:#f0fdfa;border:1px solid #99f6e4;min-width:220px;">' +
+      '<div class="small fw-bold" style="color:#0f766e;">' + dayLabel + ' · คาบ ' + (r.period||'-') + '</div>' +
+      '<div class="small">' + (r.subjectName||'') + ' <span class="text-muted">' + (r.className||'') + '</span></div>' +
+      '<div class="small text-muted">แทน ' + (r.originalTeacherName||'-') + ' · ห้อง ' + (r.room||'-') + '</div>' +
+    '</div>';
+  });
+  html += '</div></div></div>';
+  holder.innerHTML = html;
+  holder.classList.remove('d-none');
+}
+
+function loadDashboardCalendarEvents() {
+  google.script.run.withSuccessHandler(function(events) {
+    const strip = document.getElementById('dashCalendarStrip');
+    const badges = document.getElementById('dashCalendarBadges');
+    if (!strip || !badges || !events) { if (strip) strip.classList.add('d-none'); return; }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const limit = new Date(today);
+    limit.setDate(limit.getDate() + 14);
+
+    const upcoming = events.filter(function(ev) {
+      if (!ev.start) return false;
+      const start = new Date(ev.start);
+      const end = ev.end ? new Date(ev.end) : start;
+      return start <= limit && end >= today;
+    }).sort(function(a, b) { return new Date(a.start) - new Date(b.start); });
+
+    if (upcoming.length === 0) { strip.classList.add('d-none'); return; }
+
+    badges.innerHTML = upcoming.map(function(ev) {
+      const d = new Date(ev.start);
+      const isToday = d.toDateString() === today.toDateString();
+      const dayLabel = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+      const color = ev.backgroundColor || '#6c757d';
+      const dot = isToday ? '<i class="fas fa-circle me-1" style="font-size:0.5rem;vertical-align:middle;"></i>' : '';
+      return '<span class="badge rounded-pill shadow-sm" style="background-color:' + color + ';font-size:0.78rem;padding:5px 11px;cursor:default;" title="' + (ev.description || '') + '">'
+        + dot + '<i class="fas fa-calendar-day me-1"></i>' + dayLabel + ' · ' + ev.title + '</span>';
+    }).join('');
+  }).getCalendarEvents();
+}
+
+function renderTeacherTodaySchedule(timetable) {
+  const tbody = document.getElementById('todayScheduleBody');
+  const nextTitle = document.getElementById('nextClassTitle');
+  const nextDetail = document.getElementById('nextClassDetail');
+  if(!tbody) return;
+  
+  if(!timetable || timetable.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center p-5 text-muted">ไม่มีตารางสอนในวันนี้</td></tr>';
+    if(nextTitle) nextTitle.innerText = "ไม่มีภาระงานสอนวันนี้";
+    return;
+  }
+  
+  timetable.sort((a,b) => parseInt(a[5]) - parseInt(b[5]));
+  
+  const timeMap = { 
+    0: "08:00-08:30", 1: "08:30-09:20", 2: "09:20-10:10", 3: "10:20-11:10", 
+    4: "11:10-12:00", 5: "13:00-13:50", 6: "13:50-14:40", 7: "14:40-15:30", 8: "15:30-16:00" 
+  };
+  
+  const now = new Date(); 
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  let nextClass = null; let html = '';
+
+  timetable.forEach(r => {
+    const p = parseInt(r[5]); 
+    const timeRange = timeMap[p] || "00:00-00:00"; 
+    const times = timeRange.split('-');
+    
+    let startTotalMinutes = 0, endTotalMinutes = 0;
+    if(times.length === 2) {
+       const [startH, startM] = times[0].split(':').map(Number); 
+       startTotalMinutes = (startH * 60) + startM;
+       const [endH, endM] = times[1].split(':').map(Number); 
+       endTotalMinutes = (endH * 60) + endM;
+    }
+
+    if (!nextClass && startTotalMinutes > currentMinutes) nextClass = r;
+    const isTeaching = (currentMinutes >= startTotalMinutes && currentMinutes < endTotalMinutes);
+    const encodedItem = encodeURIComponent(JSON.stringify(r));
+    
+    html += `<tr class="${isTeaching ? 'table-primary' : ''}" style="cursor: pointer; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f1f3f5'" onmouseout="this.style.backgroundColor=''" onclick="jumpToAttendance('${encodedItem}')" title="👆 คลิกเพื่อไปหน้าเช็คชื่อวิชานี้">
+      <td class="ps-3 fw-bold align-middle">คาบ ${p}</td>
+      <td class="align-middle">
+        <div class="fw-bold text-primary">${String(r[0]).indexOf('CLUB_') === 0 ? '<span class="badge bg-success me-1" style="font-size:0.7rem;">ชุมนุม</span>' + r[1] : r[0] + ' - ' + r[1]}</div>
+        <div class="small text-muted"><i class="fas fa-door-open me-1"></i>ห้อง ${r[2]} (${r[4]}) | <i class="fas fa-clock me-1"></i>${timeRange} น.</div>
+      </td>
+      <td class="text-center align-middle">
+        ${isTeaching ? '<span class="badge bg-danger pulse mb-1">กำลังสอน</span>' : (startTotalMinutes > currentMinutes ? '<span class="badge bg-light text-dark border mb-1">รอสอน</span>' : '<span class="badge bg-success mb-1">สอนเสร็จแล้ว</span>')}
+        <br>${r[7]
+          ? '<span class="badge bg-success rounded-pill" style="font-size:0.65rem;"><i class="fas fa-check-circle me-1"></i>เช็คชื่อแล้ว</span>'
+          : '<span class="badge bg-primary rounded-pill" style="font-size:0.65rem;"><i class="fas fa-hand-pointer me-1"></i>คลิกเช็คชื่อ</span>'}
+      </td>
+    </tr>`;
+  });
+  
+  tbody.innerHTML = html;
+  
+  if(nextTitle && nextClass) {
+    const _nc0 = String(nextClass[0]); const _ncIsClub = _nc0.indexOf('CLUB_') === 0;
+    nextTitle.innerHTML = `คาบ ${nextClass[5]}: ${_ncIsClub ? '<span class="badge bg-success me-1">ชุมนุม</span>' : `<span class="text-warning">${_nc0}</span>`} ${nextClass[1]}`;
+    nextDetail.innerHTML = `<i class="fas fa-door-open me-1"></i>ห้อง ${nextClass[2]} (${nextClass[4]}) | <i class="fas fa-clock me-1"></i>${timeMap[nextClass[5]]} น.`;
+  } else if(nextTitle) { 
+    nextTitle.innerText = "สอนเสร็จสิ้นแล้ว"; nextDetail.innerText = "ไม่มีภาระงานสอนเพิ่มในวันนี้แล้ว"; 
+  }
+}
+
+function jumpToAttendance(encodedData) {
+  const item = JSON.parse(decodeURIComponent(encodedData));
+  sessionStorage.setItem('pending_attendance_item', JSON.stringify(item));
+  const now = new Date();
+  const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  sessionStorage.setItem('pending_teaching_date', localDate);
+  loadPage('Page_Academic');
+}
+
+function loadTeacherAtRiskDashboard(teacherId, term, year) {
+  if (!document.getElementById('dashTeacherName')) return; // guard: user navigated away
+  let container = document.getElementById('atRiskDashboardContainer');
+  if (!container) {
+    const pageContent = document.getElementById('page-content');
+    if(pageContent) {
+      pageContent.insertAdjacentHTML('beforeend', '<div id="atRiskDashboardContainer" class="mt-4 animate__animated animate__fadeInUp pb-5"></div>');
+      container = document.getElementById('atRiskDashboardContainer');
+    }
+  }
+  if(!container) return;
+  const riskCacheKey = `risk_dash_${teacherId}_${term}_${year}`;
+  if (sessionStorage.getItem(riskCacheKey)) {
+    renderTeacherAtRiskDashboard(JSON.parse(sessionStorage.getItem(riskCacheKey)), container); return; 
+  }
+  
+  container.innerHTML = _skelCards(4, 40);
+  google.script.run.withSuccessHandler(function(data) {
+    sessionStorage.setItem(riskCacheKey, JSON.stringify(data));
+    renderTeacherAtRiskDashboard(data, container);
+  }).getTeacherAtRiskDashboard(teacherId, term, year);
+}
+
+function renderTeacherAtRiskDashboard(data, container) {
+  const { critical, ms, risk } = data;
+  const renderList = (arr, colorClass) => {
+    if(arr.length === 0) return `<div class="text-center text-muted small py-4">ยอดเยี่ยม! ไม่มีนักเรียนในกลุ่มนี้ 🎉</div>`;
+    return arr.map(s => `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div style="flex-grow:1; padding-right:10px;"><div class="fw-bold text-dark" style="font-size: 0.85rem;">${s.id} ${s.name}</div><div class="text-primary" style="font-size: 0.75rem;"><i class="fas fa-book me-1"></i>${s.subjectCode} (${s.className})</div><div class="text-muted" style="font-size: 0.7rem;">สอนไป ${s.taught} คาบ (ขาด <span class="text-danger fw-bold">${s.absent}</span>, ลา <span class="text-info">${s.leave}</span>)</div></div><div><span class="badge bg-${colorClass} rounded-pill shadow-sm" style="font-size: 0.85rem;">${s.percent}%</span></div></div>`).join('');
+  };
+  
+  const html = `<h6 class="fw-bold text-danger mb-3 border-bottom pb-2 border-danger border-2 d-inline-block mt-2"><i class="fas fa-exclamation-triangle me-2"></i>กระดานแจ้งเตือนกลุ่มเสี่ยง (รวมทุกวิชาที่สอน)</h6><div class="row g-3"><div class="col-md-4"><div class="card border-danger shadow-sm h-100"><div class="card-header bg-danger text-white fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-ban me-1"></i> หมดสิทธิ์ (< 60%)</span><span class="badge bg-white text-danger">${critical.length}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(critical, 'danger')}</div></div></div><div class="col-md-4"><div class="card border-warning shadow-sm h-100"><div class="card-header bg-warning text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-exclamation-circle me-1"></i> ติด มส. (60-79%)</span><span class="badge bg-white text-dark">${ms.length}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(ms, 'warning text-dark')}</div></div></div><div class="col-md-4"><div class="card border-info shadow-sm h-100"><div class="card-header bg-info text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-search me-1"></i> กลุ่มเสี่ยง (80-85%)</span><span class="badge bg-white text-dark">${risk.length}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(risk, 'info text-dark')}</div></div></div></div>`;
+  container.innerHTML = html;
+}
+
+// ==========================================
+// 🚨 ดึงข้อมูลกลุ่มเสี่ยงมาแสดงที่ Dashboard (จัดกลุ่มตามห้อง + รวบรายชื่อเด็ก)
+// ==========================================
+function loadTeacherRiskDashboard(teacherId, term, year) {
+  const el0 = document.getElementById('riskCount0');
+  const elR = document.getElementById('riskCountR');
+  const elMS = document.getElementById('riskCountMS');
+  const container = document.getElementById('riskCardsContainer');
+  if (!el0 || !elR || !elMS || !container) return;
+
+  const cacheKey = `grade_risk_v2_${teacherId}_${term}_${year}`;
+  if (sessionStorage.getItem(cacheKey)) {
+    const cached = JSON.parse(sessionStorage.getItem(cacheKey));
+    el0.innerHTML = `<span class="fs-1">${cached.summary.zero}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+    elR.innerHTML = `<span class="fs-1">${cached.summary.r}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+    elMS.innerHTML = `<span class="fs-1">${cached.summary.ms}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+    renderRiskCards(cached.details);
+    return;
+  }
+
+  el0.innerHTML = '<span class="pssms-skel d-inline-block" style="height:22px;width:44px;border-radius:4px;"></span>';
+  elR.innerHTML = '<span class="pssms-skel d-inline-block" style="height:22px;width:44px;border-radius:4px;"></span>';
+  elMS.innerHTML = '<span class="pssms-skel d-inline-block" style="height:22px;width:44px;border-radius:4px;"></span>';
+  container.innerHTML = _skelCards(4, 40);
+
+  safeRun(3).withSuccessHandler(function(res) {
+    if (res.status === 'success') {
+      sessionStorage.setItem(cacheKey, JSON.stringify(res));
+      el0.innerHTML = `<span class="fs-1">${res.summary.zero}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+      elR.innerHTML = `<span class="fs-1">${res.summary.r}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+      elMS.innerHTML = `<span class="fs-1">${res.summary.ms}</span> <span class="fs-6 fw-normal">รายการ</span>`;
+      renderRiskCards(res.details);
+    } else {
+      container.innerHTML = `<div class="text-center text-danger py-4 border rounded-3 bg-white shadow-sm">❌ เกิดข้อผิดพลาด: ${res.message}</div>`;
+    }
+  }).getTeacherRiskDashboard(teacherId, term, year);
+}
+
+// ==========================================
+// 📱 ฟังก์ชันย่อย: วาดการ์ดกลุ่มเสี่ยงแบบ "พร้อมแคปจอ" 
+// ==========================================
+window.renderRiskCards = function(details) {
+    const container = document.getElementById('riskCardsContainer');
+    if(!container) return; 
+
+    window.currentRiskDetails = details;
+
+    if (!details || details.length === 0) {
+        container.innerHTML = `
+            <div class="text-center p-5 bg-white border border-success border-opacity-25 rounded-4 shadow-sm">
+                <div class="bg-success bg-opacity-10 text-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                    <i class="fas fa-check-circle fa-3x"></i>
+                </div>
+                <h5 class="fw-bold text-success mb-1">ยอดเยี่ยม! ไม่มีนักเรียนกลุ่มเสี่ยง</h5>
+                <p class="text-muted small mb-0">ระบบไม่พบนักเรียนที่ติด 0, ร, หรือ มส. ในรายวิชาของคุณ</p>
+            </div>`;
+        return;
+    }
+
+    let grouped = {};
+    details.forEach(r => {
+        let cls = r.className || 'ไม่ระบุห้อง';
+        let subKey = `${r.subjectCode}|||${r.subjectName}`; 
+        let type = r.type; 
+        
+        if(!grouped[cls]) grouped[cls] = {};
+        if(!grouped[cls][subKey]) grouped[cls][subKey] = { '0': [], 'ร': [], 'มส': [] };
+        
+        grouped[cls][subKey][type].push(`<span class="fw-bold text-dark text-nowrap">${r.stdName}</span>`);
+    });
+
+    let html = `<div class="row g-3">`;
+    let classes = Object.keys(grouped).sort((a,b) => a.localeCompare(b)); 
+    
+    classes.forEach(cls => {
+        html += `
+        <div class="col-12 col-md-6 col-xl-4 animate__animated animate__fadeInUp">
+          <div class="card border-0 shadow-sm h-100" style="border-radius: 12px; border-top: 4px solid #dc3545 !important;">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom-0">
+              <h6 class="mb-0 fw-bold text-danger"><i class="fas fa-door-open me-2"></i>ห้อง ${cls}</h6>
+              <button class="btn btn-sm btn-light text-primary rounded-circle shadow-sm" title="คัดลอกรายชื่อส่งไลน์" onclick="copyRiskListByClass('${cls}')">
+                <i class="fas fa-copy"></i>
+              </button>
+            </div>
+            <div class="card-body p-0">
+               <ul class="list-group list-group-flush" style="font-size: 0.85rem;">
+        `;
+        
+        let subs = Object.keys(grouped[cls]).sort(); 
+        subs.forEach(subKey => {
+            let [subCode, subName] = subKey.split('|||'); 
+            let rec = grouped[cls][subKey];
+            
+            html += `<li class="list-group-item px-3 py-2 d-flex justify-content-between align-items-center" 
+                         style="background-color: #fff5f5; border-left: 3px solid #dc3545; cursor: pointer; transition: 0.2s;" 
+                         onmouseover="this.style.backgroundColor='#ffecec'" 
+                         onmouseout="this.style.backgroundColor='#fff5f5'" 
+                         onclick="jumpToScoreEntry('${subCode}', '${cls}')" 
+                         title="👆 คลิกเพื่อเปิดหน้าบันทึกคะแนน ปพ.5">
+                        <div>
+                            <span class="fw-bold text-danger">${subName}</span> 
+                            <span class="text-danger small opacity-75">(${subCode})</span>
+                        </div>
+                        <i class="fas fa-external-link-alt text-danger opacity-50"></i>
+                     </li>`;
+                     
+            html += `<li class="list-group-item px-3 pb-3 pt-2 border-bottom-0">`;
+            
+            if(rec['0'].length > 0) {
+               html += `<div class="mb-2"><span class="badge bg-danger shadow-sm mb-1 px-3">ติด 0</span><div class="ps-2 border-start border-danger border-2 lh-base" style="font-size: 0.85rem; line-height: 1.8 !important;">${rec['0'].join(', ')}</div></div>`;
+            }
+            if(rec['ร'].length > 0) {
+               html += `<div class="mb-2"><span class="badge bg-warning text-dark shadow-sm mb-1 px-3">ติด ร</span><div class="ps-2 border-start border-warning border-2 lh-base" style="font-size: 0.85rem; line-height: 1.8 !important;">${rec['ร'].join(', ')}</div></div>`;
+            }
+            if(rec['มส'].length > 0) {
+               html += `<div class="mb-1"><span class="badge bg-secondary shadow-sm mb-1 px-3">ติด มส</span><div class="ps-2 border-start border-secondary border-2 lh-base" style="font-size: 0.85rem; line-height: 1.8 !important;">${rec['มส'].join(', ')}</div></div>`;
+            }
+            
+            html += `</li>`;
+        });
+        
+        html += `
+               </ul>
+            </div>
+          </div>
+        </div>`;
+    });
+    
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+// 🌟 ฟังก์ชันส่งตัวข้ามมิติไปหน้าบันทึกคะแนน ปพ.5
+window.jumpToScoreEntry = function(subjectCode, className) {
+    sessionStorage.setItem('pending_score_subject', subjectCode);
+    sessionStorage.setItem('pending_score_class', className);
+    loadPage('Page_Score_Entry'); 
+};
+
+// ==========================================
+// 📋 ฟังก์ชันคัดลอกรายชื่อส่ง LINE แบบสวยงาม
+// ==========================================
+window.copyRiskListByClass = function(cls) {
+    if (!window.currentRiskDetails) return;
+    
+    const classData = window.currentRiskDetails.filter(r => (r.className || 'ไม่ระบุห้อง') === cls);
+    if (classData.length === 0) return;
+
+    let grouped = {};
+    classData.forEach(r => {
+        let sub = `${r.subjectName} (${r.subjectCode})`;
+        let type = r.type;
+        if (!grouped[sub]) grouped[sub] = { '0': [], 'ร': [], 'มส': [] };
+        grouped[sub][type].push(`${r.stdName}`); 
+    });
+
+    let textToCopy = `🚨 แจ้งเตือนนักเรียนกลุ่มเสี่ยง ห้อง ${cls} 🚨\n`;
+    textToCopy += `----------------------------------\n`;
+    
+    let subs = Object.keys(grouped).sort();
+    subs.forEach(sub => {
+        textToCopy += `📚 วิชา: ${sub}\n`;
+        let rec = grouped[sub];
+        
+        if (rec['0'].length > 0) {
+            textToCopy += `📌 ติด 0:\n` + rec['0'].map(name => `   - ${name}`).join('\n') + `\n`;
+        }
+        if (rec['ร'].length > 0) {
+            textToCopy += `📌 ติด ร:\n` + rec['ร'].map(name => `   - ${name}`).join('\n') + `\n`;
+        }
+        if (rec['มส'].length > 0) {
+            textToCopy += `📌 ติด มส:\n` + rec['มส'].map(name => `   - ${name}`).join('\n') + `\n`;
+        }
+        textToCopy += `\n`;
+    });
+    
+    textToCopy += `----------------------------------\n`;
+    textToCopy += `⚠️ รบกวนนักเรียนที่มีรายชื่อ ติดต่อครูผู้สอนด่วนครับ!`;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        if (typeof showToast === 'function') {
+            showToast(`✅ คัดลอกรายชื่อห้อง ${cls} สำเร็จ!`, 'success');
+        } else {
+            showAlert(`คัดลอกรายชื่อห้อง ${cls} สำเร็จ!`);
+        }
+    }).catch(err => {
+        showAlert('❌ เบราว์เซอร์ไม่รองรับการคัดลอก กรุณาเปลี่ยนเบราว์เซอร์ครับ: ' + err);
+    });
+}
+
+// ==========================================
+// 🖨️ ระบบพิมพ์รายงานนักเรียนกลุ่มเสี่ยง (0, ร, มส.) (แนวนอน)
+// ==========================================
+window.printRiskStudents = function() {
+    if (!window.currentRiskDetails || window.currentRiskDetails.length === 0) {
+        if(typeof showToast === 'function') showToast('✅ ไม่มีนักเรียนกลุ่มเสี่ยงในขณะนี้ครับ', 'success');
+        else showAlert('ไม่มีนักเรียนกลุ่มเสี่ยงในขณะนี้ครับ');
+        return;
+    }
+
+    const user = getSessionUser();
+    const term = user ? user.currentTerm : '-';
+    const year = user ? user.currentYear : '-';
+    const teacherName = user ? user.name : '-';
+
+    let sortedData = [...window.currentRiskDetails].sort((a, b) => {
+        if(a.className !== b.className) return a.className.localeCompare(b.className);
+        if(a.subjectCode !== b.subjectCode) return a.subjectCode.localeCompare(b.subjectCode);
+        if(a.type !== b.type) return a.type.localeCompare(b.type);
+        return a.stdName.localeCompare(b.stdName);
+    });
+
+    let trHtml = '';
+    sortedData.forEach((r, idx) => {
+        let badgeColor = r.type === '0' ? '#dc3545' : (r.type === 'ร' ? '#d39e00' : '#6c757d');
+        trHtml += '<tr>' +
+            '<td style="text-align: center; border: 1px solid #000; padding: 6px;">' + (idx + 1) + '</td>' +
+            '<td style="text-align: center; border: 1px solid #000; padding: 6px;">' + (r.stdId || '-') + '</td>' +
+            '<td style="border: 1px solid #000; padding: 6px;">' + r.stdName + '</td>' +
+            '<td style="text-align: center; border: 1px solid #000; padding: 6px;">' + r.className + '</td>' +
+            '<td style="border: 1px solid #000; padding: 6px;">' + r.subjectName + '</td>' +
+            '<td style="text-align: center; border: 1px solid #000; padding: 6px;">' + r.subjectCode + '</td>' +
+            '<td style="text-align: center; border: 1px solid #000; padding: 6px; font-weight: bold; color: ' + badgeColor + ';">' + r.type + '</td>' +
+        '</tr>';
+    });
+
+    const html = '<!DOCTYPE html>' +
+    '<html lang="th">' +
+    '<head>' +
+        '<meta charset="UTF-8">' +
+        '<title>รายงานนักเรียนที่มีผลการเรียนไม่สมบูรณ์</title>' +
+        '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">' +
+        '<style>' +
+            'body { font-family: "Sarabun", sans-serif; font-size: 14pt; padding: 20px; color: #000; background: #e8edf3; margin: 0; }' +
+            /* 🌟 ปรับกล่องจำลองกระดาษเป็นแนวนอน */
+            '.page-container { max-width: 297mm; margin: 0 auto; background: #fff; padding: 15mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); min-height: 210mm; }' +
+            '.header-title { text-align: center; font-size: 18pt; font-weight: bold; margin-bottom: 5px; }' +
+            '.sub-title { text-align: center; font-size: 14pt; margin-bottom: 20px; }' +
+            'table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12pt; }' +
+            'th { border: 1px solid #000; padding: 8px; background-color: #f2f2f2; font-weight: bold; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+            'td { border: 1px solid #000; padding: 6px; }' +
+            '.print-controls { text-align: center; margin-bottom: 20px; padding: 15px; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100; }' +
+            '.btn { padding: 8px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 14pt; font-family: "Sarabun", sans-serif; font-weight: bold; margin: 0 5px; transition: 0.2s; }' +
+            '.btn-primary { background: #0d6efd; color: #fff; }' +
+            '.btn-secondary { background: #6c757d; color: #fff; }' +
+            '.btn:hover { opacity: 0.8; }' +
+            '@media print {' +
+                /* 🌟 สั่งให้เครื่องปริ้นท์รับรู้ว่าเป็นแนวนอนอัตโนมัติ */
+                '@page { size: A4 landscape; margin: 15mm; }' +
+                'body { background: #fff; padding: 0; }' +
+                '.page-container { box-shadow: none; padding: 0; min-height: auto; }' +
+                '.print-controls { display: none !important; }' +
+            '}' +
+        '</style>' +
+    '</head>' +
+    '<body onload="setTimeout(function(){ window.print(); }, 500)">' +
+        '<div class="print-controls">' +
+            '<button class="btn btn-primary" onclick="window.print()">🖨️ พิมพ์รายงาน</button>' +
+            '<button class="btn btn-secondary" onclick="window.parent.document.getElementById(\'riskPrintIframe\').style.display=\'none\'">❌ ปิดหน้าต่าง</button>' +
+        '</div>' +
+        '<div class="page-container">' +
+            '<div class="header-title">แบบสรุปรายงานนักเรียนที่มีผลการเรียนไม่สมบูรณ์ (0, ร, มส.)</div>' +
+            '<div class="sub-title">' +
+                'ครูผู้สอน: ' + teacherName + ' &nbsp;&nbsp;&nbsp; ภาคเรียนที่ ' + term + ' / ' + year +
+            '</div>' +
+            '<table>' +
+                '<thead>' +
+                    '<tr>' +
+                        '<th style="width: 5%;">ที่</th>' +
+                        '<th style="width: 15%;">รหัสประจำตัว</th>' +
+                        '<th style="width: 25%;">ชื่อ - สกุล</th>' +
+                        '<th style="width: 15%;">ระดับชั้น</th>' +
+                        '<th style="width: 20%;">รายวิชา</th>' +
+                        '<th style="width: 10%;">รหัสวิชา</th>' +
+                        '<th style="width: 10%;">สถานะ</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                    trHtml +
+                '</tbody>' +
+            '</table>' +
+            '<div style="margin-top: 50px; text-align: right; padding-right: 30px;">' +
+                'ลงชื่อ......................................................ครูผู้สอน<br>' +
+                '( ' + teacherName + ' )<br>' +
+                '........ / ........ / ........' +
+            '</div>' +
+        '</div>' +
+    '</body>' +
+    '</html>';
+
+    let iframe = document.getElementById('riskPrintIframe');
+    if (!iframe) {
+         iframe = document.createElement('iframe');
+         iframe.id = 'riskPrintIframe';
+         iframe.style.position = 'fixed';
+         iframe.style.top = '0';
+         iframe.style.left = '0';
+         iframe.style.width = '100vw';
+         iframe.style.height = '100vh';
+         iframe.style.zIndex = '999999';
+         iframe.style.border = 'none';
+         iframe.style.backgroundColor = 'rgba(0,0,0,0.5)';
+         document.body.appendChild(iframe);
+    }
+    
+    iframe.style.display = 'block';
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+};
+
+// ==========================================
+// Teacher Clubs Page (Page_Teacher_Clubs)
+// ==========================================
+let _tcMyClubs = [];
+let _tcCurrentClub = null;
+let _tcMembers = [];
+let _tcAttSummary = null;
+
+function initTeacherClubs() {
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  if (!user) { _tcShowState('error', 'กรุณาเข้าสู่ระบบใหม่'); return; }
+  document.getElementById('tcTerm').textContent = user.currentTerm;
+  document.getElementById('tcYear').textContent = user.currentYear;
+  _tcMyClubs = []; _tcCurrentClub = null; _tcMembers = []; _tcAttSummary = null;
+  _tcShowState('loading');
+  google.script.run
+    .withSuccessHandler(function(list) {
+      _tcMyClubs = list || [];
+      if (!_tcMyClubs.length) { _tcShowState('empty'); return; }
+      if (_tcMyClubs.length === 1) { _tcSelectClub(_tcMyClubs[0]); }
+      else { _tcRenderSelector(_tcMyClubs); _tcSelectClub(_tcMyClubs[0]); }
+    })
+    .withFailureHandler(function(err) { _tcShowState('error', err.message || 'โหลดข้อมูลไม่สำเร็จ'); })
+    .getMyClubs(user.id, user.currentTerm, user.currentYear);
+}
+
+function _tcShowState(state, msg) {
+  ['tcLoadingState','tcEmptyState','tcErrorState','tcMainContent'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.classList.add('d-none');
+  });
+  var el;
+  if (state === 'loading') { el = document.getElementById('tcLoadingState'); if (el) el.classList.remove('d-none'); }
+  else if (state === 'empty') { el = document.getElementById('tcEmptyState'); if (el) el.classList.remove('d-none'); }
+  else if (state === 'error') {
+    var em = document.getElementById('tcErrorMsg'); if (em) em.textContent = msg || 'เกิดข้อผิดพลาด';
+    el = document.getElementById('tcErrorState'); if (el) el.classList.remove('d-none');
+  } else if (state === 'main') { el = document.getElementById('tcMainContent'); if (el) el.classList.remove('d-none'); }
+}
+
+function _tcRenderSelector(clubs) {
+  const sel = document.getElementById('tcClubSelector'); if (!sel) return;
+  sel.innerHTML = clubs.map(function(c, i) {
+    return '<button class="btn btn-sm me-2 mb-1 ' + (i===0?'btn-accent':'btn-outline-secondary') + '" onclick="_tcSelectClub(window._tcMyClubs[' + i + '],this)">' + _tcEsc(c.clubName) + '</button>';
+  }).join('');
+  sel.classList.remove('d-none');
+}
+
+function _tcSelectClub(club, btn) {
+  if (btn) {
+    document.querySelectorAll('#tcClubSelector button').forEach(function(b) { b.classList.replace('btn-accent','btn-outline-secondary'); });
+    btn.classList.replace('btn-outline-secondary','btn-accent');
+  }
+  _tcCurrentClub = club; _tcAttSummary = null;
+  _tcRenderHero(club);
+  _tcShowState('main');
+  tcShowTab('members', document.querySelector('#tcTabs .nav-link.active'));
+  _tcLoadMembers();
+}
+
+function _tcRenderHero(c) {
+  const advText = (c.advisors||[]).map(function(a){return a.teacherName;}).filter(Boolean).join(', ');
+  const pct = c.capacity > 0 ? Math.min(100, Math.round(c.memberCount/c.capacity*100)) : 0;
+  const barClass = c.full ? 'bg-danger' : pct > 80 ? 'bg-warning' : 'bg-success';
+  var set = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+  set('tcHeroName', c.clubName); set('tcHeroDesc', c.description || '');
+  set('tcHeroRole', c.myRole || 'ที่ปรึกษา');
+  set('tcHeroAdvisors', advText ? 'ที่ปรึกษา: ' + advText : '');
+  set('tcHeroCount', c.memberCount + ' คน');
+  set('tcHeroCapacity', c.capacity ? '/ ' + c.capacity + ' คน' : '');
+  const bar = document.getElementById('tcHeroBar');
+  if (bar) { bar.style.width = pct + '%'; bar.className = 'progress-bar ' + barClass; }
+}
+
+function _tcLoadMembers() {
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  if (!user || !_tcCurrentClub) return;
+  const body = document.getElementById('tcMembersBody'); if (!body) return;
+  body.innerHTML = _skelCards(3, 44);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.error) { body.innerHTML = '<div class="text-danger text-center py-3">❌ ' + res.error + '</div>'; return; }
+      _tcMembers = Array.isArray(res) ? res : [];
+      var cnt = document.getElementById('tcMemberTabCount'); if (cnt) cnt.textContent = _tcMembers.length;
+      tcFilterMembers('');
+    })
+    .withFailureHandler(function(err) { body.innerHTML = '<div class="text-danger text-center py-3">❌ ' + (err.message||'โหลดไม่สำเร็จ') + '</div>'; })
+    .getClubMembersForTeacher(user.id, user.currentTerm, user.currentYear);
+}
+
+function tcFilterMembers(q) {
+  const query = q.toLowerCase();
+  const filtered = query ? _tcMembers.filter(function(m) { return m.studentName.toLowerCase().includes(query)||m.studentId.includes(query)||m.className.includes(query); }) : _tcMembers;
+  const body = document.getElementById('tcMembersBody'); if (!body) return;
+  if (!filtered.length) { body.innerHTML = '<div class="text-muted text-center py-4"><i class="fas fa-inbox fa-2x opacity-25 mb-2 d-block"></i>' + (query?'ไม่พบที่ค้นหา':'ยังไม่มีสมาชิก') + '</div>'; return; }
+  const byClass = {};
+  filtered.forEach(function(m) { (byClass[m.className] = byClass[m.className]||[]).push(m); });
+  let html = '';
+  Object.keys(byClass).sort().forEach(function(cls) {
+    const rows = byClass[cls];
+    html += '<div class="pssms-card mb-2"><div class="pssms-card-header d-flex justify-content-between align-items-center"><span class="fw-bold small">ห้อง ' + _tcEsc(cls) + '</span><span class="badge bg-secondary">' + rows.length + ' คน</span></div><table class="pssms-table table mb-0"><thead><tr><th style="width:40px" class="text-center">ที่</th><th style="width:110px">รหัส</th><th>ชื่อ-สกุล</th><th style="width:110px" class="text-muted small">ลงทะเบียน</th></tr></thead><tbody>';
+    rows.forEach(function(m, i) { html += '<tr><td class="text-center text-muted">'+(i+1)+'</td><td class="font-monospace small">'+_tcEsc(m.studentId)+'</td><td>'+_tcEsc(m.studentName)+'</td><td class="text-muted small">'+(m.registeredAt?m.registeredAt.split(' ')[0]:'-')+'</td></tr>'; });
+    html += '</tbody></table></div>';
+  });
+  body.innerHTML = html;
+}
+
+function _tcLoadAttSummary(cb) {
+  if (_tcAttSummary) { cb(_tcAttSummary); return; }
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  if (!user || !_tcCurrentClub) return;
+  google.script.run
+    .withSuccessHandler(function(res) { _tcAttSummary = res; cb(res); })
+    .withFailureHandler(function() { _tcAttSummary = { sessions:[], members:[] }; cb(_tcAttSummary); })
+    .getClubAttendanceSummary(user.id, _tcCurrentClub.clubId, user.currentTerm, user.currentYear, user.role);
+}
+
+function tcShowAttendanceForDate(date) {
+  if (!date) return;
+  const attBody = document.getElementById('tcAttBody'); if (!attBody) return;
+  attBody.innerHTML = _skelCards(3, 40);
+  _tcLoadAttSummary(function(summary) {
+    if (summary.error) { attBody.innerHTML = '<div class="text-danger text-center py-3">❌ ' + summary.error + '</div>'; return; }
+    const sessions = summary.sessions || [];
+    const sc = document.getElementById('tcAttSessionCount');
+    if (sc) sc.textContent = sessions.length ? sessions.length + ' คาบที่เช็คแล้วในเทอมนี้' : 'ยังไม่มีประวัติการเช็คชื่อ';
+    if (!sessions.includes(date)) {
+      attBody.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-calendar-times fa-2x opacity-25 mb-2 d-block"></i>วันที่ ' + date + ' ยังไม่มีการเช็คชื่อ<br><small>กด "ไปที่เช็คชื่อ" เพื่อเช็คชื่อคาบชุมนุม</small></div>';
+      return;
+    }
+    const dayMembers = summary.members || [];
+    attBody.innerHTML = '<div class="alert alert-info small mb-3"><i class="fas fa-info-circle me-1"></i>วันที่ ' + date + ' มีการเช็คชื่อแล้ว (สถิติรายวันแบบละเอียดดูได้ที่หน้าเช็คชื่อ)</div><div class="row g-2 text-center"><div class="col-4"><div class="pssms-card p-3"><div class="fw-bold fs-4 text-primary">' + dayMembers.length + '</div><div class="small text-muted">สมาชิก</div></div></div><div class="col-4"><div class="pssms-card p-3"><div class="fw-bold fs-4 text-success">' + sessions.length + '</div><div class="small text-muted">คาบที่เช็คแล้ว</div></div></div><div class="col-4"><div class="pssms-card p-3"><div class="fw-bold fs-4 text-warning">' + sessions.filter(function(s){return s>=date.slice(0,7);}).length + '</div><div class="small text-muted">คาบเดือนนี้</div></div></div></div>';
+  });
+}
+
+function tcGoToAttendance() {
+  if (!_tcCurrentClub) return;
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  if (!user) return;
+  sessionStorage.setItem('pending_attendance_item', JSON.stringify({ subjectCode:'CLUB_'+_tcCurrentClub.clubId, subjectName:_tcCurrentClub.clubName, className:'', period:'', term:user.currentTerm, year:user.currentYear }));
+  loadPage('Page_Academic');
+}
+
+function _tcRenderStats() {
+  const statsBody = document.getElementById('tcStatsBody'); if (!statsBody) return;
+  statsBody.innerHTML = _skelCards(3, 40);
+  _tcLoadAttSummary(function(summary) {
+    if (summary.error) { statsBody.innerHTML = '<div class="text-danger text-center py-3">❌ ' + summary.error + '</div>'; return; }
+    const members = summary.members || [];
+    const totalSessions = (summary.sessions||[]).length;
+    if (!totalSessions) { statsBody.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-chart-bar fa-2x opacity-25 mb-2 d-block"></i>ยังไม่มีข้อมูลการเช็คชื่อ</div>'; return; }
+    const avgPct = members.length ? Math.round(members.reduce(function(s,m){return s+(m.pct||0);},0)/members.length) : 0;
+    let html = '<div class="row g-2 mb-3 text-center"><div class="col-4"><div class="pssms-card p-3"><div class="fw-bold fs-4 text-primary">'+totalSessions+'</div><div class="small text-muted">คาบที่เช็คแล้ว</div></div></div><div class="col-4"><div class="pssms-card p-3"><div class="fw-bold fs-4 text-success">'+avgPct+'%</div><div class="small text-muted">เฉลี่ยเข้าร่วม</div></div></div><div class="col-4"><div class="pssms-card p-3"><div class="fw-bold fs-4 text-danger">'+members.filter(function(m){return(m.pct||0)<80;}).length+'</div><div class="small text-muted">ต่ำกว่า 80%</div></div></div></div>';
+    const sorted = members.slice().sort(function(a,b){return(a.pct||0)-(b.pct||0);});
+    html += '<div class="pssms-card"><div class="pssms-card-header fw-bold small">สถิติรายคน</div><div class="p-2">';
+    sorted.forEach(function(m) {
+      const pct = m.pct !== null ? m.pct : 0;
+      const barColor = pct<60?'bg-danger':pct<80?'bg-warning':'bg-success';
+      const textColor = pct<60?'text-danger':pct<80?'text-warning':'text-success';
+      html += '<div class="d-flex align-items-center gap-2 mb-2"><div style="width:130px;font-size:12px;" class="text-truncate">'+_tcEsc(m.studentName)+'</div><div class="text-muted" style="width:55px;font-size:11px;">'+_tcEsc(m.className)+'</div><div class="flex-grow-1"><div class="progress" style="height:8px;"><div class="progress-bar '+barColor+'" style="width:'+pct+'%;"></div></div></div><div class="fw-bold '+textColor+'" style="width:40px;text-align:right;font-size:13px;">'+(m.pct!==null?pct+'%':'-')+'</div></div>';
+    });
+    html += '</div></div>';
+    statsBody.innerHTML = html;
+  });
+}
+
+function tcShowTab(tab, btn) {
+  ['tcTabMembers','tcTabAttendance','tcTabStats'].forEach(function(id) { var el=document.getElementById(id); if(el) el.classList.add('d-none'); });
+  document.querySelectorAll('#tcTabs .nav-link').forEach(function(b){b.classList.remove('active');});
+  var tabEl = document.getElementById('tcTab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+  if (tabEl) tabEl.classList.remove('d-none');
+  if (btn) btn.classList.add('active');
+  if (tab === 'attendance') {
+    const today = new Date();
+    const d = new Date(today.getTime() - today.getTimezoneOffset()*60000).toISOString().split('T')[0];
+    const el = document.getElementById('tcAttDate'); if (el && !el.value) el.value = d;
+    _tcLoadAttSummary(function(s) {
+      const sc = document.getElementById('tcAttSessionCount');
+      if (sc) sc.textContent = (s.sessions||[]).length ? s.sessions.length + ' คาบที่เช็คแล้วในเทอมนี้' : 'ยังไม่มีประวัติการเช็คชื่อ';
+    });
+  }
+  if (tab === 'stats') _tcRenderStats();
+}
+
+function tcPrintMembers() {
+  if (!_tcMembers.length) { showAlert('ไม่มีสมาชิกให้พิมพ์'); return; }
+  const user = JSON.parse(localStorage.getItem('pssms_user'));
+  const byClass = {};
+  _tcMembers.forEach(function(m){(byClass[m.className]=byClass[m.className]||[]).push(m);});
+  let body = '<h2 style="text-align:center;">รายชื่อสมาชิกชุมนุม</h2><h3 style="text-align:center;">'+_tcEsc(_tcCurrentClub.clubName)+'</h3><p style="text-align:center;">ภาคเรียนที่ '+user.currentTerm+' ปีการศึกษา '+user.currentYear+'</p><p style="text-align:center;">จำนวน '+_tcMembers.length+' คน</p>';
+  Object.keys(byClass).sort().forEach(function(cls) {
+    body += '<h4 style="margin-top:18px;border-bottom:2px solid #333;">ห้อง '+_tcEsc(cls)+' ('+byClass[cls].length+' คน)</h4><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:#eee;"><th style="border:1px solid #999;padding:6px;">ที่</th><th style="border:1px solid #999;padding:6px;">รหัสประจำตัว</th><th style="border:1px solid #999;padding:6px;">ชื่อ-สกุล</th><th style="border:1px solid #999;padding:6px;">ลายเซ็น</th></tr></thead><tbody>';
+    byClass[cls].forEach(function(m,i){ body += '<tr><td style="border:1px solid #999;padding:6px;text-align:center;">'+(i+1)+'</td><td style="border:1px solid #999;padding:6px;">'+_tcEsc(m.studentId)+'</td><td style="border:1px solid #999;padding:6px;">'+_tcEsc(m.studentName)+'</td><td style="border:1px solid #999;padding:6px;">&nbsp;</td></tr>'; });
+    body += '</tbody></table>';
+  });
+  const win = window.open('','_blank');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+_tcEsc(_tcCurrentClub.clubName)+'</title><style>body{font-family:"Sarabun","Kanit",sans-serif;padding:20px;}</style></head><body>'+body+'<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt></body></html>');
+  win.document.close();
+}
+
+function _tcEsc(s) {
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});
+}
+
+// ==========================================
+// Teacher Timetable Page (Page_Teacher_Timetable)
+// ==========================================
+
+let _ttAllRows = [], _ttMyRows = [], _ttTeachers = [];
+let _ttSelectedMy = null, _ttSelectedOther = null;
+
+const TT_DAYS = ['จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];
+const TT_TIMES = {1:'08.30',2:'09.20',3:'10.20',4:'11.10',5:'13.00',6:'13.50',7:'14.40',8:'15.30'};
+
+function initTeacherTimetable() {
+  if (!document.getElementById('teacherTimetablePage')) return;
+  const user = getSessionUser();
+  const termEl = document.getElementById('ttTerm');
+  const yearEl = document.getElementById('ttYear');
+  if (!termEl.value) termEl.value = user.currentTerm || '1';
+  if (!yearEl.value) yearEl.value = user.currentYear || '';
+  _ttSelectedMy = null; _ttSelectedOther = null;
+  document.getElementById('ttLoadingState').classList.remove('d-none');
+  document.getElementById('ttMainContent').classList.add('d-none');
+  google.script.run
+    .withSuccessHandler(teachers => {
+      _ttTeachers = teachers || [];
+      const sel = document.getElementById('ttOtherTeacher');
+      if (sel) {
+        const first = sel.options[0]; sel.innerHTML = ''; sel.appendChild(first);
+        _ttTeachers.forEach(t => {
+          if (String(t.id).trim() === String(user.id).trim()) return;
+          const o = document.createElement('option'); o.value = t.id; o.textContent = t.name; sel.appendChild(o);
+        });
+      }
+      google.script.run
+        .withSuccessHandler(rows => {
+          _ttAllRows = rows || [];
+          _ttMyRows = _ttAllRows.filter(r => String(r.data[5]).trim() === String(user.id).trim());
+          document.getElementById('ttLoadingState').classList.add('d-none');
+          document.getElementById('ttMainContent').classList.remove('d-none');
+          const badge = document.getElementById('ttPeriodBadge');
+          if (badge) badge.textContent = _ttMyRows.length;
+          const sub = document.getElementById('ttSubtitle');
+          if (sub) sub.textContent = 'เทอม ' + termEl.value + '/' + yearEl.value + ' — ' + _ttMyRows.length + ' คาบ/สัปดาห์';
+          ttRenderGrid();
+          ttRenderMySlots();
+          _ttRenderConflictSummary();
+        })
+        .withFailureHandler(err => { document.getElementById('ttLoadingState').innerHTML = '<i class="fas fa-exclamation-triangle text-danger me-2"></i>' + err.message; })
+        .getFilteredTimetables('', termEl.value, yearEl.value);
+    })
+    .withFailureHandler(() => { document.getElementById('ttLoadingState').innerHTML = '<i class="fas fa-exclamation-triangle text-danger me-2"></i>โหลดไม่สำเร็จ'; })
+    .getTeachersForTimetable();
+}
+
+function ttRenderGrid() {
+  const tbody = document.getElementById('ttGridBody');
+  if (!tbody) return;
+  const user = getSessionUser();
+  const myMap = {};
+  _ttMyRows.forEach(r => { const k = String(r.data[6]).trim()+'|'+String(r.data[7]).trim(); if(!myMap[k])myMap[k]=[]; myMap[k].push(r); });
+  let html = '';
+  TT_DAYS.forEach(day => {
+    html += '<tr>';
+    html += `<td class="fw-bold" style="background:var(--p-subtle);white-space:nowrap;font-size:.8rem;">${day}</td>`;
+    for (let p = 1; p <= 8; p++) {
+      if (p === 5) {
+        html += '<td style="background:var(--p-subtle);color:var(--p-text-muted);font-size:.7rem;vertical-align:middle;">พัก</td>';
+      }
+      const entries = myMap[day+'|'+p] || [];
+      if (!entries.length) { html += '<td style="color:var(--p-border-strong);">—</td>'; continue; }
+      html += '<td style="vertical-align:top;padding:4px;">';
+      entries.forEach(r => {
+        const c = _ttConflict(user.id, day, p, [r.rowIndex], String(r.data[2]).trim(), String(r.data[3]).trim(), String(r.data[0]).trim());
+        const hasErr = c.errors.length > 0, hasWarn = c.classWarnings.length > 0;
+        const border = hasErr ? '#dc3545' : hasWarn ? '#f59e0b' : 'var(--p-border)';
+        const bg = hasErr ? '#fef2f2' : hasWarn ? '#fffbeb' : 'var(--p-accent-soft)';
+        const badge = hasErr
+          ? `<span class="badge bg-danger ms-1" style="font-size:.58rem;" title="${_ttEsc(c.errors[0])}"><i class="fas fa-exclamation"></i></span>`
+          : hasWarn ? `<span class="badge bg-warning text-dark ms-1" style="font-size:.58rem;" title="${_ttEsc(c.classWarnings[0])}"><i class="fas fa-exclamation-triangle"></i></span>` : '';
+        html += `<div style="border:1.5px solid ${border};border-radius:7px;padding:4px 6px;background:${bg};cursor:pointer;margin-bottom:3px;" onclick="ttOpenEditModal(${r.rowIndex})">`;
+        html += `<div class="fw-bold" style="color:var(--p-accent);font-size:.79rem;line-height:1.2;">${_ttEsc(r.data[1])}${badge}</div>`;
+        html += `<div class="text-muted" style="font-size:.69rem;">${_ttEsc(r.data[2])}/${_ttEsc(r.data[3])}</div>`;
+        if (r.data[4]) html += `<div class="text-muted" style="font-size:.67rem;"><i class="fas fa-map-marker-alt me-1"></i>${_ttEsc(r.data[4])}</div>`;
+        html += '</div>';
+      });
+      html += '</td>';
+    }
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function _ttRenderConflictSummary() {
+  const el = document.getElementById('ttConflictSummary');
+  if (!el) return;
+  const user = getSessionUser();
+  let errs = 0, warns = 0;
+  _ttMyRows.forEach(r => {
+    const c = _ttConflict(user.id, String(r.data[6]).trim(), parseInt(r.data[7]), [r.rowIndex], String(r.data[2]).trim(), String(r.data[3]).trim(), String(r.data[0]).trim());
+    errs += c.errors.length; warns += c.classWarnings.length;
+  });
+  el.innerHTML = errs > 0
+    ? `<span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>พบ ${errs} ข้อขัดแย้ง</span>`
+    : warns > 0 ? `<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>${warns} คำเตือน</span>`
+    : `<span class="badge bg-success"><i class="fas fa-check me-1"></i>ไม่พบข้อขัดแย้ง</span>`;
+}
+
+function ttOpenEditModal(rowIdx) {
+  const row = _ttAllRows.find(r => r.rowIndex === rowIdx);
+  if (!row) return;
+  document.getElementById('ttEditRowIdx').value = rowIdx;
+  document.getElementById('ttEditOrigData').value = JSON.stringify(row.data);
+  document.getElementById('ttEditSubjectName').value = row.data[1];
+  document.getElementById('ttEditLevel').value = row.data[2];
+  document.getElementById('ttEditRoom').value = row.data[3];
+  document.getElementById('ttEditLocation').value = row.data[4] || '';
+  document.getElementById('ttEditDay').value = String(row.data[6]).trim();
+  document.getElementById('ttEditPeriod').value = String(row.data[7]).trim();
+  document.getElementById('ttEditConflictMsg').classList.add('d-none');
+  document.getElementById('ttEditSaveBtn').disabled = false;
+  ttCheckEditConflict();
+  new bootstrap.Modal(document.getElementById('ttEditModal')).show();
+}
+
+function ttCheckEditConflict() {
+  const rowIdx = parseInt(document.getElementById('ttEditRowIdx').value);
+  if (!rowIdx) return;
+  const user = getSessionUser();
+  const day = document.getElementById('ttEditDay').value;
+  const period = parseInt(document.getElementById('ttEditPeriod').value);
+  const level = document.getElementById('ttEditLevel').value.trim();
+  const room = document.getElementById('ttEditRoom').value.trim();
+  const origData = JSON.parse(document.getElementById('ttEditOrigData').value || '[]');
+  const c = _ttConflict(user.id, day, period, [rowIdx], level, room, String(origData[0]||'').trim());
+  const msgEl = document.getElementById('ttEditConflictMsg');
+  const saveBtn = document.getElementById('ttEditSaveBtn');
+  if (c.errors.length > 0) {
+    msgEl.style.cssText = 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;';
+    msgEl.innerHTML = '<i class="fas fa-times-circle me-1"></i>' + _ttEsc(c.errors[0]);
+    msgEl.classList.remove('d-none'); saveBtn.disabled = true;
+  } else if (c.classWarnings.length > 0) {
+    msgEl.style.cssText = 'background:#fffbeb;color:#92400e;border:1px solid #fde68a;';
+    msgEl.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>' + _ttEsc(c.classWarnings[0]);
+    msgEl.classList.remove('d-none'); saveBtn.disabled = false;
+  } else { msgEl.classList.add('d-none'); saveBtn.disabled = false; }
+}
+
+function ttSaveEdit() {
+  const rowIdx = parseInt(document.getElementById('ttEditRowIdx').value);
+  const orig = JSON.parse(document.getElementById('ttEditOrigData').value || '[]');
+  if (!orig.length) return;
+  const user = getSessionUser();
+  const day = document.getElementById('ttEditDay').value;
+  const period = parseInt(document.getElementById('ttEditPeriod').value);
+  const level = document.getElementById('ttEditLevel').value.trim();
+  const room = document.getElementById('ttEditRoom').value.trim();
+  const c = _ttConflict(user.id, day, period, [rowIdx], level, room, String(orig[0]||'').trim());
+  if (c.errors.length > 0) { showAlert('❌ ' + c.errors[0]); return; }
+  const _doSaveEdit = () => {
+    const newData = [orig[0], document.getElementById('ttEditSubjectName').value.trim(), level, room, document.getElementById('ttEditLocation').value.trim(), orig[5], day, period, orig[8], orig[9]];
+    const btn = document.getElementById('ttEditSaveBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>บันทึก...';
+    showLoader(true);
+    google.script.run
+      .withSuccessHandler(res => {
+        showLoader(false); btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>บันทึก';
+        showAlert(res.message, res.status === 'success' ? 'success' : 'danger');
+        if (res.status === 'success') { bootstrap.Modal.getInstance(document.getElementById('ttEditModal')).hide(); initTeacherTimetable(); }
+      })
+      .withFailureHandler(err => { showLoader(false); btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>บันทึก'; showAlert('❌ ' + err.message); })
+      .teacherUpdateTimetableRow(user.id, rowIdx, newData);
+  };
+  if (c.classWarnings.length > 0) {
+    Swal.fire({ title: '⚠️ คำเตือน', text: c.classWarnings[0], icon: 'warning', showCancelButton: true, confirmButtonText: 'บันทึกต่อ', cancelButtonText: 'ยกเลิก' }).then(r => { if (r.isConfirmed) _doSaveEdit(); });
+    return;
+  }
+  _doSaveEdit();
+}
+
+function ttTabSwitch(tab, btn) {
+  document.getElementById('ttTabGrid').classList.toggle('d-none', tab !== 'grid');
+  document.getElementById('ttTabSwap').classList.toggle('d-none', tab !== 'swap');
+  document.querySelectorAll('#ttNavTabs .nav-link').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function ttRenderMySlots() {
+  const el = document.getElementById('ttMySlotsList');
+  if (!el) return;
+  const user = getSessionUser();
+  if (!_ttMyRows.length) { el.innerHTML = '<div class="text-muted small text-center py-3">ไม่มีตารางสอนในเทอมนี้</div>'; return; }
+  const sorted = [..._ttMyRows].sort((a,b) => { const d = TT_DAYS.indexOf(String(a.data[6]).trim()) - TT_DAYS.indexOf(String(b.data[6]).trim()); return d || Number(a.data[7]) - Number(b.data[7]); });
+  el.innerHTML = sorted.map(r => {
+    const c = _ttConflict(user.id, String(r.data[6]).trim(), parseInt(r.data[7]), [r.rowIndex], String(r.data[2]).trim(), String(r.data[3]).trim(), String(r.data[0]).trim());
+    const sel = _ttSelectedMy && _ttSelectedMy.rowIndex === r.rowIndex;
+    return `<div class="pssms-card p-2 mb-2" style="cursor:pointer;border:2px solid ${sel?'var(--p-accent)':c.errors.length?'#dc3545':'var(--p-border)'};background:${sel?'var(--p-accent-soft)':''};transition:all .15s;" onclick="ttSelectMySlot(${r.rowIndex})">
+      <div class="d-flex justify-content-between"><div><span class="badge bg-secondary me-1">วัน${_ttEsc(r.data[6])}</span><span class="badge" style="background:var(--p-accent);">คาบ ${r.data[7]}</span></div><small class="text-muted">${_ttEsc(r.data[2])}/${_ttEsc(r.data[3])}</small></div>
+      <div class="fw-bold mt-1" style="font-size:.85rem;">${_ttEsc(r.data[1])}</div>
+      ${c.errors.length?`<div class="text-danger mt-1" style="font-size:.72rem;"><i class="fas fa-exclamation-circle me-1"></i>${_ttEsc(c.errors[0])}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function _ttRenderOtherSlotCards() {
+  const otherId = document.getElementById('ttOtherTeacher').value;
+  const el = document.getElementById('ttOtherSlotsList');
+  if (!el) return;
+  if (!otherId) { el.innerHTML = '<div class="text-muted small text-center py-3">เลือกครูเพื่อดูตาราง</div>'; return; }
+  const rows = _ttAllRows.filter(r => String(r.data[5]).trim() === otherId);
+  if (!rows.length) { el.innerHTML = `<div class="text-muted small text-center py-3">ครู ${_ttEsc(_ttGetTeacherName(otherId))} ไม่มีตารางในเทอมนี้</div>`; return; }
+  const sorted = [...rows].sort((a,b) => { const d = TT_DAYS.indexOf(String(a.data[6]).trim()) - TT_DAYS.indexOf(String(b.data[6]).trim()); return d || Number(a.data[7]) - Number(b.data[7]); });
+  el.innerHTML = sorted.map(r => {
+    const sel = _ttSelectedOther && _ttSelectedOther.rowIndex === r.rowIndex;
+    return `<div class="pssms-card p-2 mb-2" style="cursor:pointer;border:${sel?'2px solid #198754':'2px solid var(--p-border)'};background:${sel?'#f0fdf4':''};transition:all .15s;" onclick="ttSelectOtherSlot(${r.rowIndex})">
+      <div class="d-flex justify-content-between"><div><span class="badge bg-secondary me-1">วัน${_ttEsc(r.data[6])}</span><span class="badge bg-success">คาบ ${r.data[7]}</span></div><small class="text-muted">${_ttEsc(r.data[2])}/${_ttEsc(r.data[3])}</small></div>
+      <div class="fw-bold mt-1" style="font-size:.85rem;">${_ttEsc(r.data[1])}</div>
+    </div>`;
+  }).join('');
+}
+
+function ttLoadOtherTeacherSlots() {
+  _ttSelectedOther = null;
+  document.getElementById('ttSwapPreview').classList.add('d-none');
+  _ttRenderOtherSlotCards();
+}
+
+function ttSelectMySlot(rowIdx) {
+  _ttSelectedMy = _ttAllRows.find(r => r.rowIndex === rowIdx) || null;
+  ttRenderMySlots(); _ttUpdateSwapPreview();
+}
+
+function ttSelectOtherSlot(rowIdx) {
+  _ttSelectedOther = _ttAllRows.find(r => r.rowIndex === rowIdx) || null;
+  _ttRenderOtherSlotCards(); _ttUpdateSwapPreview();
+}
+
+function _ttUpdateSwapPreview() {
+  const preview = document.getElementById('ttSwapPreview');
+  if (!preview || !_ttSelectedMy || !_ttSelectedOther) { if(preview) preview.classList.add('d-none'); return; }
+  preview.classList.remove('d-none');
+  const myName = _ttGetTeacherName(String(_ttSelectedMy.data[5]).trim());
+  const otherName = _ttGetTeacherName(String(_ttSelectedOther.data[5]).trim());
+  document.getElementById('ttPreviewMy').innerHTML = `<strong>${_ttEsc(myName)}</strong> — ${_ttEsc(_ttSelectedMy.data[1])}<br>วัน${_ttEsc(_ttSelectedMy.data[6])} คาบ ${_ttSelectedMy.data[7]} (${_ttEsc(_ttSelectedMy.data[2])}/${_ttEsc(_ttSelectedMy.data[3])})`;
+  document.getElementById('ttPreviewOther').innerHTML = `<strong>${_ttEsc(otherName)}</strong> — ${_ttEsc(_ttSelectedOther.data[1])}<br>วัน${_ttEsc(_ttSelectedOther.data[6])} คาบ ${_ttSelectedOther.data[7]} (${_ttEsc(_ttSelectedOther.data[2])}/${_ttEsc(_ttSelectedOther.data[3])})`;
+  const c = _ttSwapConflicts(_ttSelectedMy, _ttSelectedOther);
+  const msgEl = document.getElementById('ttSwapConflictMsg');
+  const btn = document.getElementById('ttSwapConfirmBtn');
+  if (c.errors.length > 0) {
+    msgEl.style.cssText = 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;';
+    msgEl.innerHTML = '<i class="fas fa-times-circle me-1"></i>' + _ttEsc(c.errors[0]);
+    msgEl.classList.remove('d-none'); btn.disabled = true;
+  } else if (c.warnings.length > 0) {
+    msgEl.style.cssText = 'background:#fffbeb;color:#92400e;border:1px solid #fde68a;';
+    msgEl.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>' + _ttEsc(c.warnings[0]);
+    msgEl.classList.remove('d-none'); btn.disabled = false;
+  } else { msgEl.classList.add('d-none'); btn.disabled = false; }
+}
+
+function ttConfirmSwap() {
+  if (!_ttSelectedMy || !_ttSelectedOther) { showAlert('กรุณาเลือกคาบทั้งสองฝั่ง'); return; }
+  const c = _ttSwapConflicts(_ttSelectedMy, _ttSelectedOther);
+  if (c.errors.length > 0) { showAlert('❌ ' + c.errors[0]); return; }
+  const otherName = _ttGetTeacherName(String(_ttSelectedOther.data[5]).trim());
+  const _doSwap = () => {
+    showLoader(true);
+    google.script.run
+      .withSuccessHandler(res => {
+        showLoader(false);
+        showAlert(res.message, res.status === 'success' ? 'success' : 'danger');
+        if (res.status === 'success') { _ttSelectedMy = null; _ttSelectedOther = null; initTeacherTimetable(); }
+      })
+      .withFailureHandler(err => { showLoader(false); showAlert('❌ ' + err.message); })
+      .swapTimetableTeacher(_ttSelectedMy.rowIndex, _ttSelectedOther.rowIndex);
+  };
+  const swapHtml = `ฉัน: <b>${_ttSelectedMy.data[1]}</b> วัน${_ttSelectedMy.data[6]} คาบ ${_ttSelectedMy.data[7]}<br>${otherName}: <b>${_ttSelectedOther.data[1]}</b> วัน${_ttSelectedOther.data[6]} คาบ ${_ttSelectedOther.data[7]}`;
+  Swal.fire({
+    title: c.warnings.length ? '⚠️ ' + c.warnings[0] : 'ยืนยันแลกตารางสอน?',
+    html: swapHtml, icon: c.warnings.length ? 'warning' : 'question',
+    showCancelButton: true, confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก'
+  }).then(r => { if (r.isConfirmed) _doSwap(); });
+}
+
+const _TT_SHARED_KEYWORDS = ['แนะแนว','วิถีพุทธ','ผู้บำเพ็ญ','ลูกเสือ','เนตรนารี','กิจกรรมพัฒนา','ยุวกาชาด','ชุมนุม'];
+const _TT_SHARED_CODE_PREFIXES = ['CLUB_','ลส','นน'];
+function _ttIsSharedActivity(subjectName, subjectCode) {
+  const s = String(subjectName || '');
+  const c = String(subjectCode || '');
+  if (_TT_SHARED_CODE_PREFIXES.some(p => c.startsWith(p))) return true;
+  return _TT_SHARED_KEYWORDS.some(k => s.includes(k));
+}
+
+function _ttConflict(forTeacherId, day, period, excludeRows, level, room, subjectCode) {
+  const errors = [], classWarnings = [];
+  const dayStr = String(day).trim(), pStr = String(period);
+  const tid = String(forTeacherId).trim();
+  excludeRows = excludeRows || [];
+  // ถ้าคาบที่กำลังเช็กเองเป็น shared activity ข้ามการตรวจทั้งหมด
+  if (_ttIsSharedActivity('', subjectCode)) return { errors, classWarnings };
+  _ttAllRows.forEach(r => {
+    if (excludeRows.indexOf(r.rowIndex) >= 0) return;
+    if (String(r.data[6]).trim() !== dayStr || String(r.data[7]).trim() !== pStr) return;
+    if (_ttIsSharedActivity(r.data[1], r.data[0])) return;
+    const rTid = String(r.data[5]).trim();
+    if (rTid === tid) errors.push(`คุณมีคาบ "${r.data[1]}" (${r.data[2]}/${r.data[3]}) วัน${dayStr} คาบ ${period} อยู่แล้ว`);
+    if (level && room && String(r.data[2]).trim() === level && String(r.data[3]).trim() === room && rTid !== tid)
+      classWarnings.push(`ห้อง ${level}/${room} มีครู ${_ttEsc(_ttGetTeacherName(rTid))} สอนอยู่แล้ว วัน${dayStr} คาบ ${period}`);
+  });
+  return { errors, classWarnings };
+}
+
+function _ttSwapConflicts(mySlot, otherSlot) {
+  const user = getSessionUser();
+  const excl = [mySlot.rowIndex, otherSlot.rowIndex];
+  const myId = String(user.id).trim(), otherId = String(otherSlot.data[5]).trim();
+  const c1 = _ttConflict(myId, String(otherSlot.data[6]).trim(), parseInt(otherSlot.data[7]), excl, String(otherSlot.data[2]).trim(), String(otherSlot.data[3]).trim(), String(otherSlot.data[0]).trim());
+  const c2 = _ttConflict(otherId, String(mySlot.data[6]).trim(), parseInt(mySlot.data[7]), excl, String(mySlot.data[2]).trim(), String(mySlot.data[3]).trim(), String(mySlot.data[0]).trim());
+  return { errors: [...c1.errors, ...c2.errors], warnings: [...c1.classWarnings, ...c2.classWarnings] };
+}
+
+function _ttGetTeacherName(id) {
+  const t = _ttTeachers.find(t => String(t.id).trim() === String(id).trim());
+  return t ? t.name : id;
+}
+
+function _ttEsc(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+</script>

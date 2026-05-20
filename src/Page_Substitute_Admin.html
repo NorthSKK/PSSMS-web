@@ -1,0 +1,161 @@
+<div class="container-fluid pssms-page pssms-dept-personnel">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-user-friends me-2" style="color:var(--p-accent);"></i>จัดตารางสอนแทน</h4>
+      <p class="pssms-subtitle">จัดครูสอนแทนสำหรับครูที่ลา/ไปราชการ</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-soft btn-sm" onclick="openManualCreateModal()">
+        <i class="fas fa-plus me-1"></i>เพิ่มเอง (ครูลานอกระบบ)
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav pssms-tabs mb-3 gap-2">
+    <li class="nav-item">
+      <button class="nav-link active fw-medium px-3" id="subTabPending" onclick="subAdminShowTab('รอจัด')">
+        <i class="fas fa-clock me-1"></i>รอจัด
+        <span class="badge bg-danger ms-1" id="subPendingCount" style="display:none;"></span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-medium px-3" id="subTabDone" onclick="subAdminShowTab('จัดแล้ว')">
+        <i class="fas fa-check me-1"></i>จัดแล้ว
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-medium px-3" id="subTabCancelled" onclick="subAdminShowTab('ยกเลิก')">
+        <i class="fas fa-ban me-1"></i>ยกเลิก
+      </button>
+    </li>
+  </ul>
+
+  <!-- Filter -->
+  <div class="row g-2 align-items-end mb-3">
+    <div class="col-md-3 col-6">
+      <label class="form-label small text-muted mb-1">จากวันที่</label>
+      <input type="date" class="form-control form-control-sm" id="subFilterFrom" onchange="subUpdateFilterDayLabel()">
+      <div class="small text-muted mt-1" id="subFilterFromDay" style="font-size:.75rem;"></div>
+    </div>
+    <div class="col-md-3 col-6">
+      <label class="form-label small text-muted mb-1">ถึงวันที่</label>
+      <input type="date" class="form-control form-control-sm" id="subFilterTo" onchange="subUpdateFilterDayLabel()">
+      <div class="small text-muted mt-1" id="subFilterToDay" style="font-size:.75rem;"></div>
+    </div>
+    <div class="col-md-3 col-12">
+      <button class="btn btn-accent btn-sm w-100" onclick="subAdminReload()">
+        <i class="fas fa-search me-1"></i>ค้นหา
+      </button>
+    </div>
+    <div class="col-md-3 col-12 d-flex gap-1 flex-wrap">
+      <button class="btn btn-sm btn-soft flex-fill" onclick="subFilterPreset('thisWeek')">สัปดาห์นี้</button>
+      <button class="btn btn-sm btn-soft flex-fill" onclick="subFilterPreset('nextWeek')">สัปดาห์หน้า</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="pssms-card">
+    <div class="table-responsive">
+      <table class="pssms-table w-100">
+        <thead>
+          <tr>
+            <th>วันที่</th>
+            <th class="text-center">คาบ</th>
+            <th>วิชา</th>
+            <th class="text-center">ห้อง</th>
+            <th>ครูเดิม</th>
+            <th>ครูสอนแทน</th>
+            <th class="text-center">สถานะ</th>
+            <th class="text-center">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody id="subAdminTableBody">
+          <tr><td colspan="8" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Assign substitute -->
+<div class="modal fade pssms-modal" id="subAssignModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-user-check me-2"></i>จัดครูสอนแทน</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="subAssignDetail" class="mb-3 p-3 rounded-2" style="background:var(--p-subtle);font-size:.9rem;"></div>
+        <div class="mb-2">
+          <input type="text" class="form-control form-control-sm" id="subTeacherSearch"
+                 placeholder="ค้นหาครู (ชื่อ/ฝ่าย)..." oninput="renderSubTeacherList()">
+        </div>
+        <div id="subTeacherList" style="max-height:340px;overflow-y:auto;">
+          <div class="pssms-skel mb-2" style="height:44px;border-radius:8px;"></div>
+          <div class="pssms-skel mb-2" style="height:44px;border-radius:8px;"></div>
+          <div class="pssms-skel" style="height:44px;border-radius:8px;"></div>
+        </div>
+        <div class="mb-3 mt-3">
+          <label class="form-label small fw-medium text-muted">หมายเหตุ (ถ้ามี)</label>
+          <textarea class="form-control" id="subAssignNote" rows="2" placeholder="เหตุผลเพิ่มเติม..."></textarea>
+        </div>
+        <input type="hidden" id="subAssignId">
+        <input type="hidden" id="subSelectedTeacherId">
+        <input type="hidden" id="subSelectedTeacherName">
+      </div>
+      <div class="modal-footer gap-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-sm btn-accent" onclick="confirmAssignSubstitute()">
+          <i class="fas fa-check me-1"></i>ยืนยัน
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Manual create -->
+<div class="modal fade pssms-modal" id="subManualModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-plus me-2"></i>เพิ่มคาบสอนแทนเอง</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">ครูที่ไม่อยู่</label>
+          <select class="form-select form-select-sm" id="subManualTeacher">
+            <option value="">-- เลือกครู --</option>
+          </select>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันที่เริ่ม</label>
+            <input type="date" class="form-control form-control-sm" id="subManualStart" onchange="subUpdateManualDayLabel()">
+            <div class="small text-muted mt-1" id="subManualStartDay" style="font-size:.75rem;"></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันที่สิ้นสุด</label>
+            <input type="date" class="form-control form-control-sm" id="subManualEnd" onchange="subUpdateManualDayLabel()">
+            <div class="small text-muted mt-1" id="subManualEndDay" style="font-size:.75rem;"></div>
+          </div>
+        </div>
+        <div class="d-flex gap-1 mb-3 flex-wrap">
+          <button type="button" class="btn btn-sm btn-soft" onclick="subManualPreset('today')">วันนี้</button>
+          <button type="button" class="btn btn-sm btn-soft" onclick="subManualPreset('thisWeek')">สัปดาห์นี้</button>
+          <button type="button" class="btn btn-sm btn-soft" onclick="subManualPreset('nextWeek')">สัปดาห์หน้า</button>
+        </div>
+        <div id="subManualStatus" class="d-none small p-2 rounded-2"></div>
+      </div>
+      <div class="modal-footer gap-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-sm btn-accent" onclick="submitManualCreate()">
+          <i class="fas fa-magic me-1"></i>สร้าง
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+ 

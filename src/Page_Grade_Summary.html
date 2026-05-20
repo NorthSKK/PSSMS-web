@@ -1,0 +1,87 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header d-print-none">
+    <div>
+      <h4><i class="fas fa-award me-2" style="color: var(--p-accent);"></i>สรุปผลการเรียน (ปพ.5)</h4>
+      <p class="pssms-subtitle">คำนวณเกรดอัตโนมัติ + ประเมินคุณลักษณะ 3 ด้าน</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="window.print()">
+        <i class="fas fa-print me-1"></i>พิมพ์หน้าสรุป (PDF)
+      </button>
+      <button class="btn btn-accent btn-sm" id="btnSaveGrades" onclick="saveAllGrades()" disabled>
+        <i class="fas fa-save me-1"></i>บันทึกและปิดเล่ม
+      </button>
+    </div>
+  </div>
+
+  <div class="pssms-card mb-3 d-print-none">
+    <label class="form-label small fw-medium text-muted">เลือกรายวิชา</label>
+    <select id="gradeClassSelect" class="form-select" onchange="loadGradeSummary()">
+      <option value="">⏳ กำลังโหลดวิชา...</option>
+    </select>
+  </div>
+
+  <div class="pssms-card p-0 d-none" id="gradeSummaryCard">
+    <div class="p-3 text-center print-header" style="border-bottom: 1px solid var(--p-border);">
+      <h5 class="mb-1 fw-bold" style="color: var(--p-text);">แบบสรุปผลการประเมินผลการเรียน (ปพ.5)</h5>
+      <h6 class="mb-0 text-muted" id="gradeSubjectTitle">วิชา... ห้อง...</h6>
+    </div>
+
+    <div class="table-responsive">
+      <table class="pssms-table mb-0 text-center" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th rowspan="2" style="width: 50px;">เลขที่</th>
+            <th rowspan="2" class="text-start" style="min-width: 180px;">ชื่อ-สกุล</th>
+            <th rowspan="2" style="width: 80px;">คะแนนรวม<br>(100)</th>
+            <th rowspan="2" style="width: 80px;">ระดับผล<br>การเรียน</th>
+            <th colspan="3">การประเมิน 3 ด้าน (0-3)</th>
+          </tr>
+          <tr>
+            <th style="width: 100px;">การอ่านฯ</th>
+            <th style="width: 100px;">คุณลักษณะฯ</th>
+            <th style="width: 100px;">สมรรถนะฯ</th>
+          </tr>
+        </thead>
+        <tbody id="gradeTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="p-4 d-none d-print-block mt-4">
+      <div class="row text-center mt-5">
+        <div class="col-6">
+          <p class="mb-5">ลงชื่อ.........................................................ครูผู้สอน</p>
+          <p>(.........................................................)</p>
+        </div>
+        <div class="col-6">
+          <p class="mb-5">ลงชื่อ.........................................................หัวหน้าฝ่ายวิชาการ</p>
+          <p>(.........................................................)</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .qual-select {
+    width: 100%;
+    text-align: center;
+    border: 1px solid var(--p-border);
+    border-radius: var(--p-radius-sm);
+    padding: 2px;
+    font-weight: 600;
+  }
+  .qual-select:focus { border-color: var(--p-accent); outline: none; }
+
+  /* Print */
+  @media print {
+    body * { visibility: hidden; }
+    #gradeSummaryCard, #gradeSummaryCard * { visibility: visible; }
+    #gradeSummaryCard { position: absolute; left: 0; top: 0; width: 100%; border: none !important; }
+    .d-print-none { display: none !important; }
+    .d-print-block { display: block !important; }
+    .pssms-table { border: 1px solid #000 !important; }
+    .pssms-table th, .pssms-table td { border: 1px solid #000 !important; }
+    select { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent; }
+  }
+</style>

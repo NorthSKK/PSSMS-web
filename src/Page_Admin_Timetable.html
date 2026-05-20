@@ -1,0 +1,329 @@
+<div class="container-fluid pssms-page pssms-dept-academic" id="ttOverviewPage">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-calendar-alt me-2" style="color:var(--p-accent);"></i>จัดการตารางสอน</h4>
+      <p class="pssms-subtitle" id="ttoSubtitle">กำลังโหลด...</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="initAdminTimetable()"><i class="fas fa-sync me-1"></i>รีเฟรช</button>
+      <label class="btn btn-accent btn-sm mb-0">
+        <i class="fas fa-file-csv me-1"></i>นำเข้า CSV
+        <input type="file" accept=".csv" class="d-none" onchange="handleTimetableUpload(this)">
+      </label>
+    </div>
+  </div>
+
+  <!-- Shared term/year filter -->
+  <div class="pssms-card mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-3">
+        <label class="form-label small fw-medium text-muted">ภาคเรียน</label>
+        <select class="form-select form-select-sm" id="ttoTerm" onchange="initAdminTimetable()">
+          <option value="1">ภาคเรียนที่ 1</option>
+          <option value="2">ภาคเรียนที่ 2</option>
+        </select>
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small fw-medium text-muted">ปีการศึกษา</label>
+        <input type="number" class="form-control form-control-sm" id="ttoYear" onchange="initAdminTimetable()">
+      </div>
+      <div class="col-auto ms-auto" id="ttoLoadingBadge" style="display:none;">
+        <span class="badge bg-secondary"><div class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></div>กำลังโหลด</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 Tabs -->
+  <ul class="nav pssms-tabs mb-3 gap-2">
+    <li class="nav-item">
+      <button class="nav-link active fw-medium px-3" id="ttoTabOverviewBtn" onclick="ttoSwitchTab('overview',this)">
+        <i class="fas fa-th me-1"></i>ตารางรวมทุกครู
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-medium px-3" id="ttoTabManageBtn" onclick="ttoSwitchTab('manage',this)">
+        <i class="fas fa-edit me-1"></i>จัดการรายบุคคล
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-medium px-3" id="ttoTabSwapBtn" onclick="ttoSwitchTab('swap',this)">
+        <i class="fas fa-exchange-alt me-1"></i>แลกตารางสอน
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-medium px-3" id="ttoTabDupBtn" onclick="ttoSwitchTab('dup',this)">
+        <i class="fas fa-copy me-1"></i>ตรวจสอบซ้ำ
+        <span class="badge bg-danger ms-1 d-none" id="ttoDupBadge">0</span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-medium px-3" id="ttoTabHomeroomBtn" onclick="ttoSwitchTab('homeroom',this)">
+        <i class="fas fa-home me-1"></i>ครูที่ปรึกษา
+      </button>
+    </li>
+  </ul>
+
+  <!-- Tab: ตารางรวมทุกครู -->
+  <div id="ttoTabOverview">
+    <div class="pssms-card mb-3">
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label small fw-medium text-muted">กรองครู</label>
+          <select class="form-select form-select-sm" id="ttoFilterTeacher" onchange="ttoRenderGrid()">
+            <option value="">ครูทั้งหมด</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div id="ttoGridWrap">
+      <div class="p-3">
+        <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+        <div class="pssms-skel mb-2" style="height:48px;border-radius:8px;"></div>
+        <div class="pssms-skel" style="height:48px;border-radius:8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: จัดการรายบุคคล -->
+  <div id="ttoTabManage" class="d-none">
+    <div class="pssms-card mb-3">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small fw-medium text-muted">ครูผู้สอน</label>
+          <select id="viewTeacherID" class="form-select form-select-sm" onchange="viewTimetable()">
+            <option value="">-- เลือกครู --</option>
+          </select>
+        </div>
+        <div class="col-md-3 text-center" style="border-left:1px solid var(--p-border);border-right:1px solid var(--p-border);">
+          <label class="small fw-medium d-block text-muted mb-1" style="font-size:.72rem;text-transform:uppercase;">จำนวนคาบสอน</label>
+          <h4 id="totalPeriodsBadge" class="mb-0 fw-bold" style="color:var(--p-accent);">0 <span class="fs-6 text-muted fw-normal">คาบ/สัปดาห์</span></h4>
+        </div>
+        <div class="col-md-5 d-flex justify-content-end">
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-soft btn-sm active" id="btnListView" onclick="switchTimetableView('list')"><i class="fas fa-list me-1"></i>รายการ</button>
+            <button type="button" class="btn btn-soft btn-sm" id="btnGridView" onclick="switchTimetableView('grid')"><i class="fas fa-th me-1"></i>ตาราง</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ttoConflictSummary" class="d-none"></div>
+
+    <div id="sectionGridView" class="d-none">
+      <div class="pssms-card p-0">
+        <div class="table-responsive">
+          <table class="pssms-table mb-0 text-center" style="min-width:1000px;">
+            <thead>
+              <tr>
+                <th style="width:90px;">วัน / เวลา</th>
+                <th>คาบ 1<br><span class="pssms-chip mt-1">08.30-09.20</span></th>
+                <th>คาบ 2<br><span class="pssms-chip mt-1">09.20-10.10</span></th>
+                <th style="width:55px;background:#fefce8;">พัก<br><span class="small">10 น.</span></th>
+                <th>คาบ 3<br><span class="pssms-chip mt-1">10.20-11.10</span></th>
+                <th>คาบ 4<br><span class="pssms-chip mt-1">11.10-12.00</span></th>
+                <th style="width:65px;background:#fefce8;">พัก<br><span class="small">กลางวัน</span></th>
+                <th>คาบ 5<br><span class="pssms-chip mt-1">13.00-13.50</span></th>
+                <th>คาบ 6<br><span class="pssms-chip mt-1">13.50-14.40</span></th>
+                <th>คาบ 7<br><span class="pssms-chip mt-1">14.40-15.30</span></th>
+                <th>คาบ 8<br><span class="pssms-chip mt-1">15.30-16.00</span></th>
+              </tr>
+            </thead>
+            <tbody id="timetableGridBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="sectionListView" class="pssms-card p-0">
+      <div class="table-responsive">
+        <table class="pssms-table mb-0 text-nowrap">
+          <thead>
+            <tr>
+              <th class="ps-4">วัน</th>
+              <th class="text-center">คาบที่</th>
+              <th>รหัสวิชา</th>
+              <th>ชื่อวิชา</th>
+              <th>ระดับชั้น</th>
+              <th>ห้อง</th>
+              <th>สถานที่</th>
+              <th class="text-end pe-4">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="timetableDisplayBody">
+            <tr><td colspan="8" class="text-center p-5 text-muted">กรุณาเลือกครูผู้สอนเพื่อดูตาราง</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: แลกตารางสอน -->
+  <div id="ttoTabSwap" class="d-none">
+    <div id="ttoSwapPreview" class="d-none mb-3">
+      <div class="pssms-card p-3" style="border:2px solid var(--p-accent);">
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+          <div>
+            <div class="small fw-bold text-muted mb-2"><i class="fas fa-exchange-alt me-1"></i>ตัวอย่างการแลก</div>
+            <div class="d-flex align-items-start gap-3 flex-wrap">
+              <div class="small" id="ttoPreviewA" style="color:var(--p-accent);"></div>
+              <i class="fas fa-arrows-alt-h text-muted mt-1"></i>
+              <div class="small" id="ttoPreviewB" style="color:#198754;"></div>
+            </div>
+          </div>
+          <button class="btn btn-accent btn-sm flex-shrink-0" onclick="ttoConfirmSwap()">
+            <i class="fas fa-check me-1"></i>ยืนยันแลกตาราง
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="pssms-card h-100">
+          <div class="pssms-card-header" style="color:var(--p-accent);"><i class="fas fa-user me-2"></i>ครู A</div>
+          <div class="p-3">
+            <select class="form-select form-select-sm mb-3" id="ttoSwapTeacherA" onchange="ttoLoadSwapSlots('A')">
+              <option value="">-- เลือกครู --</option>
+            </select>
+            <div id="ttoSlotsA" class="d-flex flex-column gap-2">
+              <div class="text-muted small text-center py-3">เลือกครูเพื่อดูตาราง</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="pssms-card h-100">
+          <div class="pssms-card-header" style="color:#198754;"><i class="fas fa-user me-2"></i>ครู B</div>
+          <div class="p-3">
+            <select class="form-select form-select-sm mb-3" id="ttoSwapTeacherB" onchange="ttoLoadSwapSlots('B')">
+              <option value="">-- เลือกครู --</option>
+            </select>
+            <div id="ttoSlotsB" class="d-flex flex-column gap-2">
+              <div class="text-muted small text-center py-3">เลือกครูเพื่อดูตาราง</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: ตรวจสอบซ้ำ -->
+  <div id="ttoTabDup" class="d-none">
+    <div class="pssms-card mb-3">
+      <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+        <div class="text-muted small">ตรวจหาแถวที่มี SubjectCode + TeacherID + วัน + คาบ + ระดับ + ห้อง เหมือนกันทุกอย่าง (เกิดจาก import ซ้ำ)</div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-soft btn-sm" onclick="ttoCheckDuplicates()"><i class="fas fa-search me-1"></i>ตรวจสอบ</button>
+          <button class="btn btn-danger btn-sm d-none" id="ttoBtnRemoveDup" onclick="ttoRemoveDuplicates()"><i class="fas fa-trash me-1"></i>ลบแถวซ้ำทั้งหมด</button>
+        </div>
+      </div>
+    </div>
+    <div id="ttoDupResult">
+      <div class="text-center text-muted p-5"><i class="fas fa-search fa-2x mb-3 d-block"></i>กด "ตรวจสอบ" เพื่อค้นหาแถวซ้ำ</div>
+    </div>
+  </div>
+
+  <!-- Tab: ครูที่ปรึกษา -->
+  <div id="ttoTabHomeroom" class="d-none">
+    <div class="pssms-card mb-3">
+      <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+        <div class="text-muted small">กำหนดครูที่ปรึกษาประจำห้องเรียน — ระบบสร้าง โฮมรูม / แนะแนว (จ.คาบ7) / วิถีพุทธ (ศ.คาบ7) อัตโนมัติ</div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-soft btn-sm" onclick="ttoAddHomeroomRow()">
+            <i class="fas fa-plus me-1"></i>เพิ่มห้อง
+          </button>
+          <button class="btn btn-accent btn-sm" id="ttoSaveAllHomeroomBtn" onclick="ttoSaveAllHomeroom()">
+            <i class="fas fa-save me-1"></i>บันทึกทั้งหมด
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="pssms-card p-0">
+      <div class="table-responsive">
+        <table class="pssms-table mb-0" style="font-size:.85rem;">
+          <thead>
+            <tr>
+              <th style="width:100px;">ระดับชั้น</th>
+              <th style="width:70px;">ห้อง</th>
+              <th>ครูที่ปรึกษา 1 / 2</th>
+              <th style="width:140px;">สถานที่แนะแนว<br><span class="fw-normal text-muted" style="font-size:.75rem;">จ.คาบ7</span></th>
+              <th style="width:140px;">สถานที่วิถีพุทธ<br><span class="fw-normal text-muted" style="font-size:.75rem;">ศ.คาบ7</span></th>
+              <th style="width:44px;"></th>
+            </tr>
+          </thead>
+          <tbody id="ttoHomeroomBody">
+            <tr><td colspan="6" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal (Admin — full fields incl. SubjectCode + TeacherID) -->
+<div class="modal fade pssms-modal" id="editTimetableModal" data-bs-backdrop="static" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-edit me-2" style="color:var(--p-accent);"></i>จัดการคาบเรียน</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <input type="hidden" id="editRowIndex">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label small fw-medium text-muted">รหัสวิชา</label>
+            <input type="text" id="editSubjectCode" class="form-control fw-semibold">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small fw-medium text-muted">ชื่อวิชา</label>
+            <input type="text" id="editSubjectName" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-medium text-muted">ระดับชั้น</label>
+            <input type="text" id="editLevel" class="form-control" placeholder="เช่น ม.1">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-medium text-muted">ห้อง</label>
+            <input type="text" id="editRoom" class="form-control" placeholder="เช่น 1">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-medium text-muted">สถานที่</label>
+            <input type="text" id="editLocation" class="form-control" placeholder="เช่น 114">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันสอน</label>
+            <select id="editDay" class="form-select">
+              <option value="จันทร์">จันทร์</option>
+              <option value="อังคาร">อังคาร</option>
+              <option value="พุธ">พุธ</option>
+              <option value="พฤหัสบดี">พฤหัสบดี</option>
+              <option value="ศุกร์">ศุกร์</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">คาบที่</label>
+            <select id="editPeriod" class="form-select">
+              <option value="1">1</option><option value="2">2</option>
+              <option value="3">3</option><option value="4">4</option>
+              <option value="5">5</option><option value="6">6</option>
+              <option value="7">7</option><option value="8">8</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer d-flex justify-content-between">
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="confirmDeleteTimetable()">
+          <i class="fas fa-trash-alt me-1"></i>ลบคาบนี้
+        </button>
+        <div>
+          <button type="button" class="btn btn-soft btn-sm me-2" data-bs-dismiss="modal">ยกเลิก</button>
+          <button type="button" id="btnSaveTimetable" class="btn btn-accent btn-sm" onclick="saveTimetableEdit()">
+            <i class="fas fa-save me-1"></i>บันทึก
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

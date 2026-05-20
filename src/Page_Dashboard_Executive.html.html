@@ -1,0 +1,80 @@
+<div class="container-fluid pssms-page" id="execDashPage">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="fw-bold mb-1"><i class="fas fa-chart-line me-2 text-primary"></i>แดชบอร์ดผู้บริหาร</h4>
+      <p class="text-muted small mb-0" id="execDeptLabel">กำลังโหลด...</p>
+    </div>
+    <button class="btn btn-outline-secondary btn-sm" onclick="initExecDashboard()">
+      <i class="fas fa-sync me-1"></i>รีเฟรช
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div id="execLoading" class="p-3">
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3"><div class="pssms-skel" style="height:80px;border-radius:12px;"></div></div>
+      <div class="col-6 col-md-3"><div class="pssms-skel" style="height:80px;border-radius:12px;"></div></div>
+      <div class="col-6 col-md-3"><div class="pssms-skel" style="height:80px;border-radius:12px;"></div></div>
+      <div class="col-6 col-md-3"><div class="pssms-skel" style="height:80px;border-radius:12px;"></div></div>
+    </div>
+    <div class="pssms-skel mb-2" style="height:120px;border-radius:12px;"></div>
+    <div class="pssms-skel" style="height:120px;border-radius:12px;"></div>
+  </div>
+
+  <!-- Content -->
+  <div id="execContent" class="d-none">
+
+    <!-- KPI Strip -->
+    <div class="row g-3 mb-4" id="execKPIRow">
+      <div class="col-6 col-md-3">
+        <div class="pssms-card p-3 text-center h-100">
+          <div class="fw-bold" style="font-size:2rem;color:var(--p-accent);" id="kpiStudents">-</div>
+          <div class="text-muted small">นักเรียนทั้งหมด</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="pssms-card p-3 text-center h-100">
+          <div class="fw-bold" style="font-size:2rem;color:#198754;" id="kpiTeachers">-</div>
+          <div class="text-muted small">ครู/บุคลากร</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="pssms-card p-3 text-center h-100">
+          <div class="fw-bold" style="font-size:2rem;" id="kpiAttPct">-</div>
+          <div class="text-muted small">เข้าเรียนวันนี้</div>
+          <div class="small text-muted" id="kpiAttDetail"></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="pssms-card p-3 text-center h-100">
+          <div class="fw-bold" style="font-size:2rem;" id="kpiBudgetPct">-</div>
+          <div class="text-muted small">งบประมาณที่ใช้ไป</div>
+          <div class="progress mt-1" style="height:4px;"><div class="progress-bar" id="kpiBudgetBar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div id="execAlerts" class="mb-4"></div>
+
+    <!-- Main sections — layout depends on dept -->
+    <div class="row g-3" id="execSections">
+    </div>
+
+    <!-- Calendar Strip -->
+    <div class="pssms-card mt-4 mb-2" id="execCalendarCard">
+      <div class="pssms-card-header d-flex justify-content-between align-items-center">
+        <span class="fw-bold small"><i class="fas fa-calendar-alt me-2" style="color:var(--p-accent)"></i>กิจกรรม 14 วันข้างหน้า</span>
+      </div>
+      <div id="execCalendarBody" class="p-3">
+        <div class="pssms-skel mb-2" style="height:40px;border-radius:8px;"></div>
+        <div class="pssms-skel mb-2" style="height:40px;border-radius:8px;"></div>
+        <div class="pssms-skel" style="height:40px;border-radius:8px;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+

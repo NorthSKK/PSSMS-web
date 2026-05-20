@@ -1,0 +1,1183 @@
+<script>
+// ==========================================
+// 📚 ระบบงานสารบรรณ (ขอเลข & อัปโหลดไฟล์) สำหรับ PSSMS
+// ==========================================
+
+let allSarabunData = []; // เก็บข้อมูลสารบรรณทั้งหมดไว้ในหน่วยความจำ
+
+// 🌟 1. ฟังก์ชันตั้งค่าเริ่มต้นเมื่อเปิดหน้าฝ่ายทั่วไป
+window.initSarabunPage = function() {
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+    
+    // เซ็ตวันที่ให้ฟิลด์ต่างๆ อัตโนมัติ
+    if (document.getElementById('docTargetDate')) document.getElementById('docTargetDate').value = dateStr;
+    if (document.getElementById('docActionDate')) document.getElementById('docActionDate').value = dateStr;
+    if (document.getElementById('refDocDate')) document.getElementById('refDocDate').value = dateStr;
+    
+    // ตั้งค่าเวลา
+    const timeStr = today.toTimeString().substring(0, 5);
+    if (document.getElementById('docTime')) document.getElementById('docTime').value = timeStr;
+
+    // ประยุกต์ใช้ Flatpickr (ถ้ามี)
+    if(typeof applyThaiDatePickers === 'function') applyThaiDatePickers();
+
+    // ดึงข้อมูลประวัติ
+    loadSarabunHistory();
+};
+
+// 🌟 2. ฟังก์ชันซ่อน/โชว์ ฟิลด์ตามประเภทเอกสาร
+// 🌟 2. ฟังก์ชันซ่อน/โชว์ ฟิลด์ตามประเภทเอกสาร
+window.toggleSarabunFields = function() {
+    const docType = document.getElementById('docType').value;
+    
+    const divSubject = document.getElementById('divSubject');
+    const divAmount = document.getElementById('divAmount');
+    const divReference = document.getElementById('divReference');
+    const divFromTo = document.getElementById('divFromTo');
+    const divDates = document.getElementById('divDates');
+    const divAssignee = document.getElementById('divAssignee');
+    const btnRequestNumber = document.getElementById('btnRequestNumber');
+    
+    // ปิดทั้งหมดก่อน
+    divSubject.style.display = 'none';
+    divAmount.style.display = 'none';
+    divReference.style.display = 'none';
+    divFromTo.style.display = 'none';
+    divDates.style.display = 'none';
+    divAssignee.style.display = 'none';
+    btnRequestNumber.style.display = 'none';
+
+    // เซ็ตข้อความและสีปุ่ม
+    const btnText = document.getElementById('btnRequestText');
+    const btnIcon = document.getElementById('btnRequestIcon');
+    
+    // 🌟 เพิ่มเงื่อนไขสำหรับ "บันทึกข้อความ"
+    if (docType === "บันทึกข้อความ") {
+        document.getElementById('lblSubject').innerHTML = 'เรื่อง <span class="text-danger">*</span>';
+        document.getElementById('lblTargetDate').innerHTML = 'ลงวันที่ <span class="text-danger">*</span>';
+        
+        divSubject.style.display = 'block';
+        divFromTo.style.display = 'flex';
+        document.getElementById('divDocFrom').style.display = 'block';
+        document.getElementById('divDocTo').style.display = 'block';
+        document.getElementById('docTo').required = true;
+        
+        divDates.style.display = 'flex';
+        document.getElementById('divTargetDate').style.display = 'block';
+        document.getElementById('divDocTime').style.display = 'none';
+        
+        // แอบเติมค่าเริ่มต้นให้ถ้ายังว่างอยู่
+        if(document.getElementById('docTo').value === '') {
+            document.getElementById('docTo').value = "ผู้อำนวยการโรงเรียนภูพระบาทวิทยา";
+        }
+
+        btnRequestNumber.style.display = 'block';
+        btnRequestNumber.className = "btn w-100 rounded-pill fw-bold py-2 shadow-sm text-white";
+        btnRequestNumber.style.backgroundColor = "#6f42c1"; // สีม่วงของฝ่ายทั่วไป
+        btnText.innerText = "ขอเลขบันทึกข้อความ";
+        btnIcon.className = "fas fa-file-alt me-2";
+    }
+    else if (docType === "ทะเบียนคำสั่ง") {
+        divSubject.style.display = 'block';
+        divDates.style.display = 'flex';
+        document.getElementById('divDocTime').style.display = 'none';
+        btnRequestNumber.style.display = 'block';
+        btnRequestNumber.className = "btn btn-primary w-100 rounded-pill fw-bold py-2 shadow-sm";
+        btnRequestNumber.style.backgroundColor = ""; // เคลียร์สีที่ถูกบังคับ
+        btnText.innerText = "ขอเลขคำสั่ง";
+        btnIcon.className = "fas fa-file-signature me-2";
+    } 
+    else if (docType === "ทะเบียนหนังสือรับ" || docType === "ทะเบียนหนังสือส่ง") {
+        divSubject.style.display = 'block';
+        divReference.style.display = 'flex';
+        divFromTo.style.display = 'flex';
+        divDates.style.display = 'flex';
+        document.getElementById('divDocTime').style.display = 'block';
+        divAssignee.style.display = 'block';
+        btnRequestNumber.style.display = 'block';
+        btnRequestNumber.style.backgroundColor = "";
+        
+        if(docType === "ทะเบียนหนังสือรับ") {
+            document.getElementById('lblDocFromReq').innerText = "*";
+            document.getElementById('lblDocFromReq').className = "text-danger";
+            btnRequestNumber.className = "btn btn-success w-100 rounded-pill fw-bold py-2 shadow-sm";
+            btnText.innerText = "รับหนังสือ / ขอเลขรับ";
+            btnIcon.className = "fas fa-inbox me-2";
+        } else {
+            document.getElementById('lblDocFromReq').innerText = "(ไม่บังคับ)";
+            document.getElementById('lblDocFromReq').className = "text-secondary fw-normal";
+            btnRequestNumber.className = "btn btn-warning text-dark w-100 rounded-pill fw-bold py-2 shadow-sm";
+            btnText.innerText = "ส่งหนังสือ / ขอเลขส่ง";
+            btnIcon.className = "fas fa-paper-plane me-2";
+        }
+    }
+    else if (docType === "ทะเบียนเกียรติบัตร") {
+        divSubject.style.display = 'block';
+        divAmount.style.display = 'block';
+        divDates.style.display = 'flex';
+        document.getElementById('divDocTime').style.display = 'none';
+        btnRequestNumber.style.display = 'block';
+        btnRequestNumber.style.backgroundColor = "";
+        btnRequestNumber.className = "btn btn-info text-dark w-100 rounded-pill fw-bold py-2 shadow-sm";
+        btnText.innerText = "ขอเลขเกียรติบัตร (รันเลขชุด)";
+        btnIcon.className = "fas fa-certificate me-2";
+    }
+};
+
+// 🌟 3. ฟังก์ชันส่งคำขอเลข
+window.requestNewDocNumber = function() {
+    const docType = document.getElementById('docType').value;
+    const user = getSessionUser();
+    
+    if (!docType) {
+        if(typeof showToast === 'function') showToast('กรุณาเลือกประเภทเอกสาร', 'warning');
+        return;
+    }
+
+    const payload = {
+        docType: docType,
+        subject: document.getElementById('docSubject').value.trim() || "-",
+        amount: parseInt(document.getElementById('docAmount').value) || 1,
+        docRefNo: document.getElementById('docRefNo').value.trim() || "-",
+        refDocDate: document.getElementById('refDocDate').value || "-",
+        docFrom: document.getElementById('docFrom').value.trim() || "-",
+        docTo: document.getElementById('docTo').value.trim() || "-",
+        targetDate: document.getElementById('docTargetDate').value || "-",
+        docTime: document.getElementById('docTime').value || "-",
+        actionDate: document.getElementById('docActionDate').value || "-",
+        assignee: document.getElementById('docAssignee').value.trim() || "-",
+        requester: user ? user.name : "Unknown"
+    };
+
+    const btn = document.getElementById('btnRequestNumber');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังรันเลข...';
+    btn.disabled = true;
+
+    safeRun().withSuccessHandler(function(res) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        
+        if (res.status === 'success') {
+            if(typeof showToast === 'function') showToast(res.message, 'success');
+            
+            // ล้างฟอร์ม
+            document.getElementById('sarabunForm').reset();
+            document.getElementById('docType').value = docType; // คงประเภทเดิมไว้
+            initSarabunPage(); // ดึงวันที่กลับมา
+            loadSarabunHistory(); 
+            
+            // แจ้งเตือนเลขที่ได้แบบอลังการ
+            Swal.fire({
+                title: '🎉 ดำเนินการสำเร็จ!',
+                html: `เลข ${docType} ของคุณคือ<br><b class="fs-1 mt-3 mb-2 d-block text-primary" style="letter-spacing: 2px;">${res.docNumber}</b>`,
+                icon: 'success',
+                confirmButtonText: 'ตกลง',
+                confirmButtonColor: '#0d6efd'
+            });
+        } else {
+            if(typeof showToast === 'function') showToast(res.message, 'error');
+            else showAlert(res.message);
+        }
+    }).requestSarabunNumber(payload);
+};
+
+// 🌟 4. ฟังก์ชันโหลดและแสดงประวัติ
+window.loadSarabunHistory = function() {
+    const tbody = document.getElementById('sarabunTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = _skelTbody(4);
+    
+    const user = getSessionUser();
+    const userName = user ? user.name : "";
+    const role = user ? user.role : "";
+
+    safeRun().withSuccessHandler(function(data) {
+        allSarabunData = data || []; // เก็บไว้ใช้ตอนค้นหา
+        renderSarabunTable(allSarabunData);
+    }).getSarabunHistory(userName, role);
+};
+
+// 🌟 5. ฟังก์ชันวาดตาราง (ใช้ร่วมกับตอนค้นหา)
+window.renderSarabunTable = function(dataList) {
+    const tbody = document.getElementById('sarabunTableBody');
+    if (!tbody) return;
+
+    const isAdmin = (function(){ var u = getSessionUser(); return u && String(u.role).toUpperCase() === 'ADMIN'; })();
+
+    let html = '';
+    if (!dataList || dataList.length === 0) {
+        html = '<tr><td colspan="4" class="text-center py-5 text-muted"><i class="fas fa-folder-open fa-3x mb-3 opacity-25 d-block"></i>ไม่พบข้อมูลในระบบ</td></tr>';
+    } else {
+        dataList.forEach(row => {
+            let badgeClass = "bg-primary text-white";
+            if (row.docType === 'บันทึกข้อความ' || row.docType.includes('บันทึก')) badgeClass = "bg-secondary text-white";
+            else if (row.docType.includes('ส่ง')) badgeClass = "bg-warning text-dark";
+            else if (row.docType.includes('รับ')) badgeClass = "bg-success text-white";
+            else if (row.docType.includes('เกียรติบัตร')) badgeClass = "bg-info text-dark";
+
+            let dateStr = _thaiDate(row.targetDate);
+
+            const btnStyle = 'style="width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;"';
+            let fileHtml = '<div class="d-flex gap-1 justify-content-center">';
+            if (row.fileUrl && row.fileUrl !== "") {
+                fileHtml += `<a href="${row.fileUrl}" target="_blank" class="btn btn-sm btn-success rounded-circle" title="ดูไฟล์" ${btnStyle}><i class="fas fa-search" style="font-size:.75rem;"></i></a>`;
+            } else {
+                fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" title="แนบไฟล์" ${btnStyle} onclick="document.getElementById('uploadTargetId').value='${row.id}'; document.getElementById('uploadTargetDocNum').value='${row.docNumber}'; document.getElementById('sarabunFileInput').click();"><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
+            }
+            if (isAdmin) {
+                fileHtml += `<button class="btn btn-sm btn-outline-primary rounded-circle" title="แก้ไข" ${btnStyle} onclick="editSarabunRecord(${row.id})"><i class="fas fa-pen" style="font-size:.75rem;"></i></button>`;
+                fileHtml += `<button class="btn btn-sm btn-outline-danger rounded-circle" title="ลบ" ${btnStyle} onclick="confirmDeleteSarabun(${row.id},'${_escH(row.docNumber)}')"><i class="fas fa-trash" style="font-size:.75rem;"></i></button>`;
+            }
+            fileHtml += '</div>';
+
+            let actionInfo = `<div class="small text-muted"><i class="far fa-user me-1"></i>ผู้ขอ: <span class="fw-bold">${row.requester || '-'}</span></div>`;
+            if (row.docType.includes('รับ') || row.docType.includes('ส่ง')) {
+                actionInfo += `<div class="small text-muted mt-1"><i class="fas fa-exchange-alt me-1"></i>จาก: ${row.docFrom || '-'} <br><i class="fas fa-arrow-right me-1 ms-2"></i>ถึง: ${row.docTo || '-'}</div>`;
+            }
+
+            html += `
+            <tr>
+                <td class="ps-4">
+                    <div class="fw-bold fs-5 text-dark">${row.docNumber}</div>
+                    <span class="badge ${badgeClass} shadow-sm mt-1">${row.docType}</span>
+                </td>
+                <td>
+                    <div class="fw-bold text-dark text-wrap" style="max-width: 300px;">${row.subject}</div>
+                    <div class="small text-muted mt-1"><i class="far fa-calendar-alt me-1"></i>ลงวันที่: <span class="fw-bold text-primary">${dateStr}</span></div>
+                </td>
+                <td>${actionInfo}</td>
+                <td class="text-center pe-4">${fileHtml}</td>
+            </tr>`;
+        });
+    }
+    tbody.innerHTML = html;
+};
+
+window.editSarabunRecord = function(id) {
+    const row = allSarabunData.find(r => String(r.id) === String(id));
+    if (!row) return;
+    document.getElementById('editSarabunId').value = row.id;
+    document.getElementById('editSarabunDocType').value = row.docType;
+    document.getElementById('editSarabunDocNumber').value = row.docNumber;
+    document.getElementById('editSarabunSubject').value = row.subject;
+    document.getElementById('editSarabunRequester').value = row.requester || '';
+    document.getElementById('editSarabunTargetDate').value = row.targetDate || '';
+    var statusSel = document.getElementById('editSarabunStatus');
+    var statusVal = row.status || 'รอดำเนินการ';
+    if (!Array.from(statusSel.options).some(function(o){ return o.value === statusVal; })) {
+        var opt = document.createElement('option');
+        opt.value = statusVal; opt.text = statusVal;
+        statusSel.appendChild(opt);
+    }
+    statusSel.value = statusVal;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditSarabun')).show();
+};
+
+window.submitEditSarabun = function() {
+    const id = document.getElementById('editSarabunId').value;
+    const data = {
+        id: id,
+        docType:    document.getElementById('editSarabunDocType').value,
+        docNumber:  document.getElementById('editSarabunDocNumber').value.trim(),
+        subject:    document.getElementById('editSarabunSubject').value.trim(),
+        requester:  document.getElementById('editSarabunRequester').value.trim(),
+        targetDate: document.getElementById('editSarabunTargetDate').value,
+        status:     document.getElementById('editSarabunStatus').value,
+        year:       (allSarabunData.find(r => String(r.id) === String(id)) || {}).year || '',
+    };
+    if (!data.docNumber || !data.subject) return showToast('กรุณากรอกเลขที่เอกสารและเรื่อง', 'warning');
+    safeRun().withSuccessHandler(function(res) {
+        if (res && res.status === 'success') {
+            bootstrap.Modal.getInstance(document.getElementById('modalEditSarabun')).hide();
+            showToast('แก้ไขเอกสารสำเร็จ', 'success');
+            loadSarabunHistory();
+        } else {
+            showToast('เกิดข้อผิดพลาด', 'error');
+        }
+    }).saveSarabun(data);
+};
+
+window.confirmDeleteSarabun = function(id, docNumber) {
+    Swal.fire({
+        title: 'ลบเอกสาร?',
+        html: `เลขที่ <b>${docNumber}</b><br><span class="text-danger small">ไม่สามารถกู้คืนได้</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonText: 'ลบ',
+    }).then(result => {
+        if (!result.isConfirmed) return;
+        safeRun().withSuccessHandler(function(res) {
+            if (res && res.status === 'success') {
+                showToast('ลบเอกสารสำเร็จ', 'success');
+                loadSarabunHistory();
+            } else {
+                showToast('เกิดข้อผิดพลาด', 'error');
+            }
+        }).deleteSarabun(id);
+    });
+};
+
+// 🌟 6. ฟังก์ชันค้นหาและกรองข้อมูล (debounced 180ms — Phase 7)
+function _filterSarabunDataImpl() {
+    const searchText = document.getElementById('searchSarabunText').value.toLowerCase();
+    const filterType = document.getElementById('filterSarabunType').value;
+    const startDate = document.getElementById('searchStartDate').value;
+    const endDate = document.getElementById('searchEndDate').value;
+
+    const filtered = allSarabunData.filter(row => {
+        const matchText = row.docNumber.toLowerCase().includes(searchText) ||
+                          row.subject.toLowerCase().includes(searchText) ||
+                          (row.docFrom && row.docFrom.toLowerCase().includes(searchText)) ||
+                          (row.docTo && row.docTo.toLowerCase().includes(searchText)) ||
+                          (row.requester && row.requester.toLowerCase().includes(searchText));
+
+        const matchType = (filterType === 'ALL') || (row.docType === filterType);
+
+        let matchDate = true;
+        if (startDate && endDate) {
+            matchDate = (row.targetDate >= startDate && row.targetDate <= endDate);
+        } else if (startDate) {
+            matchDate = (row.targetDate >= startDate);
+        } else if (endDate) {
+            matchDate = (row.targetDate <= endDate);
+        }
+
+        return matchText && matchType && matchDate;
+    });
+
+    renderSarabunTable(filtered);
+}
+window.filterSarabunData = (typeof debounce === 'function') ? debounce(_filterSarabunDataImpl, 180) : _filterSarabunDataImpl;
+
+// 🌟 7. ฟังก์ชันจัดการการอัปโหลดไฟล์ (ทำงานซ่อนหลังบ้าน)
+window.handleSarabunFileUpload = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) { 
+        if(typeof showToast === 'function') showToast('ขนาดไฟล์ใหญ่เกินไป (จำกัดไม่เกิน 5 MB)', 'error');
+        event.target.value = '';
+        return;
+    }
+
+    const id = document.getElementById('uploadTargetId').value;
+    const docNum = document.getElementById('uploadTargetDocNum').value;
+
+    Swal.fire({
+        title: 'กำลังอัปโหลดไฟล์...',
+        html: `เอกสารเลขที่: <b>${docNum}</b><br><small class="text-muted">${file.name}</small>`,
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64Data = e.target.result;
+        
+        safeRun().withSuccessHandler(function(res) {
+            if (res.status === 'success') {
+                Swal.fire('สำเร็จ!', 'แนบไฟล์เอกสารเรียบร้อยแล้ว', 'success');
+                loadSarabunHistory(); 
+            } else {
+                Swal.fire('เกิดข้อผิดพลาด', res.message, 'error');
+            }
+            document.getElementById('sarabunFileInput').value = '';
+        }).uploadSarabunFile(id, base64Data, file.name, docNum);
+    };
+    reader.readAsDataURL(file);
+};
+
+// ============================================================
+// LEAVE REQUEST PAGE (Page_Leave_Request)
+// ============================================================
+var _leaveStats = [];
+
+function initLeaveRequestPage() {
+  var user = getSessionUser();
+  if (!user) return;
+  var year = user.currentYear || String(new Date().getFullYear() + 543);
+  var badge = document.getElementById('leaveYearBadge');
+  if (badge) badge.textContent = 'ปี ' + year;
+  // Set default start date = today
+  var today = new Date();
+  var todayStr = today.toISOString().split('T')[0];
+  var startEl = document.getElementById('leaveStart');
+  var endEl   = document.getElementById('leaveEnd');
+  if (startEl && !startEl.value) startEl.value = todayStr;
+  if (endEl   && !endEl.value)   endEl.value   = todayStr;
+
+  // SWR: load stats + history
+  var cachedStats = _dashCacheGet('leave_stats_' + user.id + '_' + year);
+  var cachedHistory = _dashCacheGet('leave_mine_' + user.id + '_' + year);
+  if (cachedStats)   { _leaveStats = cachedStats; _renderLeaveStats(cachedStats); }
+  if (cachedHistory) _renderLeaveHistory(cachedHistory);
+
+  google.script.run
+    .withSuccessHandler(function(bundle) {
+      if (!document.getElementById('leaveStatsStrip')) return;
+      if (bundle.stats) { _leaveStats = bundle.stats; _dashCacheSet('leave_stats_' + user.id + '_' + year, bundle.stats); _renderLeaveStats(bundle.stats); }
+      if (bundle.history) { _dashCacheSet('leave_mine_' + user.id + '_' + year, bundle.history); _renderLeaveHistory(bundle.history); }
+    })
+    .withFailureHandler(function() {})
+    .getLeaveRequestBundle(user.id, year);
+}
+
+function _renderLeaveStats(stats) {
+  var el = document.getElementById('leaveStatsStrip');
+  if (!el) return;
+  var html = '<div class="row g-2">';
+  stats.forEach(function(s) {
+    if (s.limit >= 9999) return;
+    var pct = Math.min(100, Math.round(s.used / s.limit * 100));
+    var col = pct >= 90 ? '#dc3545' : pct >= 70 ? '#f59e0b' : 'var(--p-accent)';
+    html += '<div class="col-6 col-md-4 col-lg-2">' +
+      '<div class="pssms-card p-2 text-center">' +
+      '<div class="small text-muted mb-1" style="font-size:.7rem;">' + s.type + '</div>' +
+      '<div class="fw-bold" style="color:' + col + ';font-size:1.1rem;">' + s.used + '<span class="text-muted fw-normal" style="font-size:.75rem;">/' + s.limit + '</span></div>' +
+      '<div style="height:4px;background:var(--p-subtle);border-radius:2px;margin-top:4px;">' +
+        '<div style="height:4px;width:' + pct + '%;background:' + col + ';border-radius:2px;transition:width .5s;"></div>' +
+      '</div></div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+var _leaveAllHistory = [];
+
+function _renderLeaveHistory(records) {
+  _leaveAllHistory = records || [];
+  // update pending badge
+  var pendingCount = _leaveAllHistory.filter(function(r){ return r.status === 'รอพิจารณา'; }).length;
+  var pc = document.getElementById('leaveCountPending');
+  if (pc) { pc.textContent = pendingCount; pc.style.display = pendingCount ? '' : 'none'; }
+  leaveHistoryFilter('all');
+}
+
+function leaveHistoryFilter(status) {
+  // update tab styles
+  var tabs = { all:'leaveTabAll', 'รอพิจารณา':'leaveTabPending', 'อนุมัติ':'leaveTabApproved', 'ปฏิเสธ':'leaveTabRejected' };
+  Object.keys(tabs).forEach(function(k) {
+    var btn = document.getElementById(tabs[k]);
+    if (!btn) return;
+    if (k === status) {
+      btn.className = 'btn btn-sm btn-accent';
+      btn.style.background = ''; btn.style.color = '';
+    } else {
+      btn.className = 'btn btn-sm';
+      btn.style.background = 'var(--p-subtle)'; btn.style.color = 'var(--p-text)';
+    }
+  });
+
+  var records = status === 'all' ? _leaveAllHistory : _leaveAllHistory.filter(function(r){ return r.status === status; });
+  var el = document.getElementById('leaveHistoryContainer');
+  if (!el) return;
+  if (!records.length) {
+    el.innerHTML = '<div class="text-muted small text-center py-3">' +
+      (status === 'all' ? 'ยังไม่มีประวัติการลาในปีนี้' : 'ไม่มีรายการ' + (status === 'all' ? '' : status)) + '</div>';
+    return;
+  }
+  var html = '<div class="table-responsive"><table class="pssms-table w-100"><thead><tr>' +
+    '<th>ประเภท</th><th>วันที่ลา</th><th class="text-center">วัน</th><th class="text-center">สถานะ</th><th>หมายเหตุ</th>' +
+    '</tr></thead><tbody>';
+  records.forEach(function(r) {
+    var badge = r.status === 'อนุมัติ'
+      ? '<span class="badge" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;">✅ อนุมัติ</span>'
+      : r.status === 'ปฏิเสธ'
+      ? '<span class="badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;">❌ ปฏิเสธ</span>'
+      : '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);">⏳ รอพิจารณา</span>';
+    html += '<tr><td>' + _escH(r.type) + '</td>' +
+      '<td class="small">' + _thaiDate(r.startDate) + (r.startDate !== r.endDate ? ' – ' + _thaiDate(r.endDate) : '') + '</td>' +
+      '<td class="text-center">' + r.days + '</td>' +
+      '<td class="text-center">' + badge + '</td>' +
+      '<td class="small text-muted">' + _escH(r.adminComment || '—') + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function leaveUpdateDaysPreview() {
+  var s = document.getElementById('leaveStart').value;
+  var e = document.getElementById('leaveEnd').value;
+  var prev = document.getElementById('leaveDaysPreview');
+  if (!s || !e || !prev) return;
+  var days = Math.max(1, Math.round((new Date(e) - new Date(s)) / 86400000) + 1);
+  if (days < 1) { prev.classList.add('d-none'); return; }
+  prev.classList.remove('d-none');
+
+  // check remaining
+  var type = (document.getElementById('leaveType') || {}).value;
+  var warn = '';
+  if (type && _leaveStats.length) {
+    var stat = _leaveStats.find(function(x){ return x.type === type; });
+    if (stat && stat.limit < 9999) {
+      var remaining = stat.limit - stat.used;
+      if (days > remaining) warn = ' <span class="text-danger" style="font-size:.8rem;">(เกินที่เหลือ ' + remaining + ' วัน)</span>';
+    }
+  }
+  prev.innerHTML = 'จำนวน <strong>' + days + '</strong> วัน' + warn;
+}
+
+function submitLeave() {
+  var user = getSessionUser();
+  if (!user) return;
+  var type   = document.getElementById('leaveType').value;
+  var start  = document.getElementById('leaveStart').value;
+  var end    = document.getElementById('leaveEnd').value;
+  var reason = document.getElementById('leaveReason').value.trim();
+  var statusEl = document.getElementById('leaveFormStatus');
+
+  if (!type)   { _leaveStatus('กรุณาเลือกประเภทการลา', 'warning'); return; }
+  if (!start)  { _leaveStatus('กรุณาระบุวันที่เริ่มลา', 'warning'); return; }
+  if (!end)    { _leaveStatus('กรุณาระบุวันที่สิ้นสุด', 'warning'); return; }
+  if (!reason) { _leaveStatus('กรุณาระบุเหตุผลการลา', 'warning'); return; }
+  if (end < start) { _leaveStatus('วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม', 'danger'); return; }
+
+  var days = Math.max(1, Math.round((new Date(end) - new Date(start)) / 86400000) + 1);
+  // Optimistic: show success + reset form + update local history immediately
+  _leaveStatus('✅ ส่งคำร้องสำเร็จ (' + days + ' วัน) รอผู้บริหารพิจารณา', 'success');
+  document.getElementById('leaveType').value = '';
+  document.getElementById('leaveReason').value = '';
+  var optimisticRow = {
+    id: 'pending-' + Date.now(), type: type, startDate: start, endDate: end,
+    days: days, status: 'รอพิจารณา', adminComment: '', reason: reason
+  };
+  _leaveAllHistory = [optimisticRow].concat(_leaveAllHistory || []);
+  // bump local stats
+  if (_leaveStats && _leaveStats.length) {
+    _leaveStats.forEach(function(s){ if (s.type === type) s.used = (s.used || 0) + days; });
+    _renderLeaveStats(_leaveStats);
+  }
+  _renderLeaveHistory(_leaveAllHistory);
+
+  var data = {
+    teacherId: user.id, staffName: user.name,
+    type: type, startDate: start, endDate: end,
+    reason: reason, year: user.currentYear || ''
+  };
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.status === 'success') {
+        // Silent revalidate: update cache + history with real id
+        var year = user.currentYear || '';
+        localStorage.removeItem('pssms_dash_leave_stats_' + user.id + '_' + year);
+        localStorage.removeItem('pssms_dash_leave_mine_' + user.id + '_' + year);
+        google.script.run
+          .withSuccessHandler(function(bundle) {
+            if (!document.getElementById('leaveStatsStrip')) return;
+            if (bundle.stats)   { _leaveStats = bundle.stats; _dashCacheSet('leave_stats_' + user.id + '_' + year, bundle.stats); _renderLeaveStats(bundle.stats); }
+            if (bundle.history) { _dashCacheSet('leave_mine_' + user.id + '_' + year, bundle.history); _renderLeaveHistory(bundle.history); }
+          })
+          .getLeaveRequestBundle(user.id, year);
+      } else {
+        _leaveStatus('❌ ' + (res.message || 'เกิดข้อผิดพลาด'), 'danger');
+        // rollback: remove optimistic row
+        _leaveAllHistory = (_leaveAllHistory || []).filter(function(r){ return r.id !== optimisticRow.id; });
+        _renderLeaveHistory(_leaveAllHistory);
+        if (_leaveStats && _leaveStats.length) {
+          _leaveStats.forEach(function(s){ if (s.type === type) s.used = Math.max(0, (s.used || 0) - days); });
+          _renderLeaveStats(_leaveStats);
+        }
+      }
+    })
+    .withFailureHandler(function(err) {
+      _leaveStatus('❌ ' + (err.message||''), 'danger');
+      _leaveAllHistory = (_leaveAllHistory || []).filter(function(r){ return r.id !== optimisticRow.id; });
+      _renderLeaveHistory(_leaveAllHistory);
+    })
+    .submitLeaveRequest(data);
+}
+
+function _leaveStatus(msg, type) {
+  var el = document.getElementById('leaveFormStatus');
+  if (!el) return;
+  var styles = { success:'background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;',
+    danger:'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;',
+    warning:'background:#fffbeb;color:#92400e;border:1px solid #fde68a;',
+    info:'background:var(--p-accent-soft);color:var(--p-accent);' };
+  el.className = 'mb-2 small p-2 rounded-2';
+  el.style.cssText = styles[type] || styles.info;
+  el.innerHTML = msg;
+  el.classList.remove('d-none');
+}
+
+function _escH(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function _thaiDate(iso) {
+  if (!iso) return '';
+  var months = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
+                'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var parts = String(iso).slice(0,10).split('-');
+  if (parts.length < 3) return iso;
+  return '<span style="white-space:nowrap">' + parseInt(parts[2]) + ' ' + (months[parseInt(parts[1])] || '') + ' ' + (parseInt(parts[0]) + 543) + '</span>';
+}
+
+// ============================================================
+// LEAVE ADMIN PAGE (Page_Leave_Admin)
+// ============================================================
+var _leaveAdminTab = 'pending';
+var _leaveAdminCurrentRows = [];
+
+function initLeaveAdminPage() {
+  var user = getSessionUser();
+  if (!user) return;
+  var year = user.currentYear || String(new Date().getFullYear() + 543);
+  var yearEl = document.getElementById('leaveFilterYear');
+  if (yearEl) yearEl.value = year;
+  leaveAdminShowTab('pending');
+}
+
+function leaveAdminShowTab(tab) {
+  _leaveAdminTab = tab;
+  var tabPending = document.getElementById('tabPending');
+  var tabAll     = document.getElementById('tabAll');
+  var filters    = document.getElementById('leaveAllFilters');
+  if (tab === 'pending') {
+    if (tabPending) { tabPending.className = 'nav-link active fw-medium px-3'; tabPending.style.cssText = ''; }
+    if (tabAll)     { tabAll.className = 'nav-link fw-medium px-3'; tabAll.style.cssText = ''; }
+    if (filters)    filters.classList.add('d-none');
+    leaveAdminLoadPending();
+  } else {
+    if (tabPending) { tabPending.className = 'nav-link fw-medium px-3'; tabPending.style.cssText = ''; }
+    if (tabAll)     { tabAll.className = 'nav-link active fw-medium px-3'; tabAll.style.cssText = ''; }
+    if (filters)    filters.classList.remove('d-none');
+    leaveAdminLoadAll();
+  }
+}
+
+function leaveAdminLoadPending() {
+  var tbody = document.getElementById('leaveAdminTableBody');
+  if (!tbody) return;
+  var cached = _dashCacheGet('leave_pending_admin');
+  if (cached) { _renderLeaveAdminTable(cached, true); }
+  else { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">' + _skelRows(4,['20%','15%','20%','8%','17%','10%','10%']) + '</td></tr>'; }
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!document.getElementById('leaveAdminTableBody')) return;
+      _dashCacheSet('leave_pending_admin', rows);
+      _renderLeaveAdminTable(rows, true);
+      var cnt = document.getElementById('pendingCount');
+      if (cnt) { cnt.textContent = rows.length; cnt.style.display = rows.length ? '' : 'none'; }
+    })
+    .withFailureHandler(function(){})
+    .getPendingLeaves();
+}
+
+function leaveAdminLoadAll() {
+  var tbody = document.getElementById('leaveAdminTableBody');
+  if (!tbody) return;
+  var user = getSessionUser();
+  var year   = (document.getElementById('leaveFilterYear')  || {}).value || (user ? user.currentYear : '');
+  var status = (document.getElementById('leaveFilterStatus')|| {}).value || 'all';
+  var type   = (document.getElementById('leaveFilterType')  || {}).value || '';
+
+  var cacheKey = 'leave_all_' + year + '_' + status;
+  var cached = _dashCacheGet(cacheKey);
+  if (cached) {
+    var filtered = type ? cached.filter(function(r){ return r.type === type; }) : cached;
+    _renderLeaveAdminTable(filtered, false);
+  } else {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">' + _skelRows(5,['20%','15%','20%','8%','17%','10%','10%']) + '</td></tr>';
+  }
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!document.getElementById('leaveAdminTableBody')) return;
+      _dashCacheSet(cacheKey, rows);
+      var filtered = type ? rows.filter(function(r){ return r.type === type; }) : rows;
+      _renderLeaveAdminTable(filtered, false);
+    })
+    .withFailureHandler(function(){})
+    .getAllLeaves(year, status);
+}
+
+function _renderLeaveAdminTable(rows, showAction) {
+  _leaveAdminCurrentRows = rows || [];
+  var tbody = document.getElementById('leaveAdminTableBody');
+  if (!tbody) return;
+  if (!rows || !rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">ไม่พบรายการ</td></tr>';
+    return;
+  }
+  var btnStyle = 'width:28px;height:28px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;';
+  var html = '';
+  rows.forEach(function(r) {
+    var badge = r.status === 'อนุมัติ'
+      ? '<span class="badge" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-size:.72rem;">✅ อนุมัติ</span>'
+      : r.status === 'ปฏิเสธ'
+      ? '<span class="badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:.72rem;">❌ ปฏิเสธ</span>'
+      : '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);font-size:.72rem;">⏳ รอ</span>';
+    var rid  = r.leaveId || r.id || '';
+    var rname = _escH(r.teacherName || r.staffName || '');
+    var reviewBtn = (showAction && r.status === 'รอพิจารณา')
+      ? '<button class="btn btn-outline-primary shadow-none" style="' + btnStyle + '" title="พิจารณา" onclick="openLeaveReview(\'' + _escH(rid) + '\')"><i class="fas fa-gavel"></i></button> '
+      : '';
+    var safeName = (r.teacherName || r.staffName || '').replace(/'/g, '&#39;');
+    var actionBtns = reviewBtn +
+      '<button class="btn btn-outline-secondary shadow-none" style="' + btnStyle + '" title="แก้ไข" onclick="openLeaveEdit(\'' + _escH(rid) + '\')"><i class="fas fa-edit"></i></button> ' +
+      '<button class="btn btn-outline-danger shadow-none" style="' + btnStyle + '" title="ลบ" onclick="confirmDeleteLeave(\'' + _escH(rid) + '\',\'' + safeName + '\')"><i class="fas fa-trash"></i></button>';
+    html += '<tr>' +
+      '<td class="small fw-medium">' + _escH(r.teacherName || r.staffName) + '</td>' +
+      '<td class="small">' + _escH(r.type) + '</td>' +
+      '<td class="small">' + _escH(r.startDate) + (r.startDate !== r.endDate ? '<br><span class="text-muted">ถึง ' + _escH(r.endDate) + '</span>' : '') + '</td>' +
+      '<td class="text-center small fw-bold">' + r.days + '</td>' +
+      '<td class="small text-muted" style="max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + _escH(r.reason) + '">' + _escH(r.reason) + '</td>' +
+      '<td class="text-center">' + badge + '</td>' +
+      '<td class="text-center" style="white-space:nowrap;">' + actionBtns + '</td></tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function openLeaveReview(leaveId) {
+  var tbody = document.getElementById('leaveAdminTableBody');
+  if (!tbody) return;
+  // Find row data from rendered table (use pendingLeaves cache)
+  var cached = _dashCacheGet('leave_pending_admin') || [];
+  var rec = cached.find(function(r){ return String(r.leaveId || r.id) === String(leaveId); });
+  var detail = document.getElementById('leaveReviewDetail');
+  if (detail && rec) {
+    detail.innerHTML =
+      '<div class="fw-bold mb-1">' + _escH(rec.teacherName || rec.staffName) + '</div>' +
+      '<div class="small text-muted">' + _escH(rec.type) + ' · ' + _escH(rec.startDate) + (rec.startDate !== rec.endDate ? ' – ' + _escH(rec.endDate) : '') + ' · <strong>' + rec.days + ' วัน</strong></div>' +
+      '<div class="small mt-1"><span class="text-muted">เหตุผล:</span> ' + _escH(rec.reason) + '</div>';
+  }
+  document.getElementById('leaveReviewId').value = leaveId;
+  document.getElementById('leaveReviewComment').value = '';
+  new bootstrap.Modal(document.getElementById('leaveReviewModal')).show();
+}
+
+function submitLeaveReview(status) {
+  var user = getSessionUser();
+  if (!user) return;
+  var id      = document.getElementById('leaveReviewId').value;
+  var comment = document.getElementById('leaveReviewComment').value.trim();
+  showLoader(true);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      showLoader(false);
+      bootstrap.Modal.getInstance(document.getElementById('leaveReviewModal')).hide();
+      if (res.status === 'success') {
+        showToast((status === 'อนุมัติ' ? '✅ อนุมัติ' : '❌ ปฏิเสธ') + 'คำร้องแล้ว', status === 'อนุมัติ' ? 'success' : 'danger');
+        _leaveAdminInvalidateCache();
+        if (status === 'อนุมัติ') {
+          sessionStorage.removeItem('pssms_pg_Page_Substitute_Admin');
+          setTimeout(function() { loadPage('Page_Substitute_Admin'); }, 400);
+        } else {
+          leaveAdminLoadPending();
+        }
+      } else {
+        showToast('เกิดข้อผิดพลาด: ' + (res.message||''), 'danger', 5000);
+      }
+    })
+    .withFailureHandler(function(err) { showLoader(false); showToast('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger', 5000); })
+    .reviewLeave(id, status, comment, user.name);
+}
+
+function openLeaveEdit(leaveId) {
+  var rec = _leaveAdminCurrentRows.find(function(r){ return String(r.leaveId || r.id) === String(leaveId); });
+  if (!rec) return;
+  document.getElementById('editLeaveId').value = leaveId;
+  document.getElementById('editLeaveType').value = rec.type || 'ลาป่วย';
+  document.getElementById('editLeaveStartDate').value = rec.startDate || '';
+  document.getElementById('editLeaveEndDate').value = rec.endDate || '';
+  document.getElementById('editLeaveDays').value = rec.days || 1;
+  document.getElementById('editLeaveReason').value = rec.reason || '';
+  new bootstrap.Modal(document.getElementById('leaveEditModal')).show();
+}
+
+function submitLeaveEdit() {
+  var user = getSessionUser();
+  if (!user) return;
+  var id = document.getElementById('editLeaveId').value;
+  var data = {
+    type:      document.getElementById('editLeaveType').value,
+    startDate: document.getElementById('editLeaveStartDate').value,
+    endDate:   document.getElementById('editLeaveEndDate').value,
+    days:      parseFloat(document.getElementById('editLeaveDays').value) || 1,
+    reason:    document.getElementById('editLeaveReason').value.trim(),
+  };
+  if (!data.startDate || !data.endDate) { showToast('กรุณาระบุวันที่', 'danger'); return; }
+  showLoader(true);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      showLoader(false);
+      bootstrap.Modal.getInstance(document.getElementById('leaveEditModal')).hide();
+      if (res && res.status === 'success') {
+        showToast('แก้ไขสำเร็จ', 'success');
+        _leaveAdminInvalidateCache();
+        if (_leaveAdminTab === 'pending') leaveAdminLoadPending(); else leaveAdminLoadAll();
+      } else {
+        showToast('เกิดข้อผิดพลาด: ' + ((res && res.message) || ''), 'danger', 5000);
+      }
+    })
+    .withFailureHandler(function(err){ showLoader(false); showToast('เกิดข้อผิดพลาด: ' + (err.message || ''), 'danger', 5000); })
+    .updateLeave(id, data);
+}
+
+function confirmDeleteLeave(leaveId, name) {
+  Swal.fire({
+    title: 'ลบรายการลา?',
+    html: 'ของ <strong>' + _escH(name) + '</strong><br><span class="text-muted small">ไม่สามารถกู้คืนได้</span>',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'ลบ',
+    cancelButtonText: 'ยกเลิก',
+  }).then(function(r) {
+    if (!r.isConfirmed) return;
+    showLoader(true);
+    google.script.run
+      .withSuccessHandler(function(res) {
+        showLoader(false);
+        if (res && res.status === 'success') {
+          showToast('ลบสำเร็จ', 'success');
+          _leaveAdminInvalidateCache();
+          if (_leaveAdminTab === 'pending') leaveAdminLoadPending(); else leaveAdminLoadAll();
+        } else {
+          showToast('เกิดข้อผิดพลาด: ' + ((res && res.message) || ''), 'danger', 5000);
+        }
+      })
+      .withFailureHandler(function(err){ showLoader(false); showToast('เกิดข้อผิดพลาด: ' + (err.message || ''), 'danger', 5000); })
+      .deleteLeave(leaveId);
+  });
+}
+
+function _leaveAdminInvalidateCache() {
+  localStorage.removeItem('pssms_dash_leave_pending_admin');
+  Object.keys(localStorage).forEach(function(k) {
+    if (k.indexOf('pssms_dash_leave_all_') === 0) localStorage.removeItem(k);
+  });
+}
+
+// ============================================================
+// SUBSTITUTE ADMIN PAGE
+// ============================================================
+var _subAdminTab = 'รอจัด';
+var _subAdminData = [];
+var _subAvailableTeachers = [];
+var _subAllUsersForManual = [];
+
+var _SUB_THAI_DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+function _subDayLabel(dateStr) {
+  if (!dateStr) return '';
+  var d = new Date(dateStr);
+  if (isNaN(d)) return '';
+  return 'วัน' + _SUB_THAI_DAYS[d.getDay()];
+}
+function _subFmtDate(d) {
+  var y = d.getFullYear(), m = ('0' + (d.getMonth()+1)).slice(-2), dd = ('0' + d.getDate()).slice(-2);
+  return y + '-' + m + '-' + dd;
+}
+function _subWeekRange(offsetWeeks) {
+  // Monday → Friday of given week offset (0 = this week)
+  var now = new Date();
+  var dow = now.getDay(); // 0=Sun
+  var diffToMon = (dow === 0 ? -6 : 1 - dow);
+  var mon = new Date(now); mon.setDate(now.getDate() + diffToMon + (offsetWeeks * 7));
+  var fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+  return { from: _subFmtDate(mon), to: _subFmtDate(fri) };
+}
+
+function initSubstituteAdminPage() {
+  if (!document.getElementById('subAdminTableBody')) return;
+  var wk = _subWeekRange(0);
+  document.getElementById('subFilterFrom').value = wk.from;
+  document.getElementById('subFilterTo').value = wk.to;
+  subUpdateFilterDayLabel();
+  subAdminReload();
+}
+
+function subUpdateFilterDayLabel() {
+  var f = document.getElementById('subFilterFrom').value;
+  var t = document.getElementById('subFilterTo').value;
+  var fl = document.getElementById('subFilterFromDay');
+  var tl = document.getElementById('subFilterToDay');
+  if (fl) fl.textContent = _subDayLabel(f);
+  if (tl) tl.textContent = _subDayLabel(t);
+}
+
+function subFilterPreset(preset) {
+  var wk = _subWeekRange(preset === 'nextWeek' ? 1 : 0);
+  document.getElementById('subFilterFrom').value = wk.from;
+  document.getElementById('subFilterTo').value = wk.to;
+  subUpdateFilterDayLabel();
+  subAdminReload();
+}
+
+function subUpdateManualDayLabel() {
+  var s = document.getElementById('subManualStart').value;
+  var e = document.getElementById('subManualEnd').value;
+  var sl = document.getElementById('subManualStartDay');
+  var el = document.getElementById('subManualEndDay');
+  if (sl) sl.textContent = _subDayLabel(s);
+  if (el) el.textContent = _subDayLabel(e);
+}
+
+function subManualPreset(preset) {
+  var s, e;
+  if (preset === 'today') {
+    s = e = _subFmtDate(new Date());
+  } else {
+    var wk = _subWeekRange(preset === 'nextWeek' ? 1 : 0);
+    s = wk.from; e = wk.to;
+  }
+  document.getElementById('subManualStart').value = s;
+  document.getElementById('subManualEnd').value = e;
+  subUpdateManualDayLabel();
+}
+
+function subAdminShowTab(tab) {
+  _subAdminTab = tab;
+  ['Pending','Done','Cancelled'].forEach(function(k){
+    var btn = document.getElementById('subTab' + k);
+    if (!btn) return;
+    btn.classList.remove('active');
+    btn.style.cssText = '';
+  });
+  var map = { 'รอจัด':'subTabPending', 'จัดแล้ว':'subTabDone', 'ยกเลิก':'subTabCancelled' };
+  var activeBtn = document.getElementById(map[tab]);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+    activeBtn.style.cssText = '';
+  }
+  _renderSubAdminTable();
+}
+
+function subAdminReload() {
+  var from = document.getElementById('subFilterFrom').value;
+  var to   = document.getElementById('subFilterTo').value;
+  var tbody = document.getElementById('subAdminTableBody');
+  if (tbody) tbody.innerHTML = _skelTbody(8);
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      _subAdminData = rows || [];
+      var pendingN = _subAdminData.filter(function(r){ return r.status === 'รอจัด'; }).length;
+      var pc = document.getElementById('subPendingCount');
+      if (pc) { pc.textContent = pendingN; pc.style.display = pendingN ? '' : 'none'; }
+      _renderSubAdminTable();
+    })
+    .withFailureHandler(function(err) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">โหลดข้อมูลล้มเหลว: ' + (err.message||'') + '</td></tr>';
+    })
+    .getPendingSubstitutes(from, to);
+}
+
+function _renderSubAdminTable() {
+  var tbody = document.getElementById('subAdminTableBody');
+  if (!tbody) return;
+  var rows = _subAdminData.filter(function(r){ return r.status === _subAdminTab; });
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">ไม่มีรายการในแท็บนี้</td></tr>';
+    return;
+  }
+  var html = '';
+  rows.forEach(function(r) {
+    var statusBadge = r.status === 'จัดแล้ว'
+      ? '<span class="badge" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;">✅ จัดแล้ว</span>'
+      : r.status === 'ยกเลิก'
+      ? '<span class="badge" style="background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;">⊘ ยกเลิก</span>'
+      : '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);">⏳ รอจัด</span>';
+    var action = '';
+    if (r.status === 'รอจัด') {
+      action = '<button class="btn btn-sm btn-accent" onclick="openAssignModal(\''+_escH(r.id)+'\')"><i class="fas fa-user-plus me-1"></i>จัด</button>';
+    } else if (r.status === 'จัดแล้ว') {
+      action = '<button class="btn btn-sm btn-outline-danger" onclick="doUnassignSubstitute(\''+_escH(r.id)+'\')"><i class="fas fa-undo me-1"></i>ยกเลิกการจัด</button>';
+    } else {
+      action = '<span class="text-muted small">—</span>';
+    }
+    html += '<tr>' +
+      '<td class="small">' + _escH(r.date) + ' <span class="text-muted">(' + _escH(r.dayOfWeek) + ')</span></td>' +
+      '<td class="text-center">' + _escH(r.period) + '</td>' +
+      '<td class="small"><div class="fw-medium">' + _escH(r.subjectName) + '</div><div class="text-muted" style="font-size:.75rem;">' + _escH(r.className) + '</div></td>' +
+      '<td class="text-center small">' + _escH(r.room) + '</td>' +
+      '<td class="small">' + _escH(r.originalTeacherName) + '</td>' +
+      '<td class="small">' + (r.substituteTeacherName ? '<span class="fw-medium">' + _escH(r.substituteTeacherName) + '</span>' : '<span class="text-muted">—</span>') + '</td>' +
+      '<td class="text-center">' + statusBadge + '</td>' +
+      '<td class="text-center">' + action + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function openAssignModal(assignmentId) {
+  var rec = _subAdminData.find(function(r){ return r.id === assignmentId; });
+  if (!rec) return;
+  document.getElementById('subAssignId').value = assignmentId;
+  document.getElementById('subSelectedTeacherId').value = '';
+  document.getElementById('subSelectedTeacherName').value = '';
+  document.getElementById('subAssignNote').value = '';
+  document.getElementById('subTeacherSearch').value = '';
+  document.getElementById('subAssignDetail').innerHTML =
+    '<div class="d-flex justify-content-between flex-wrap gap-2">' +
+    '<div><strong>วันที่:</strong> ' + _escH(rec.date) + ' (' + _escH(rec.dayOfWeek) + ') คาบ ' + _escH(rec.period) + '</div>' +
+    '<div><strong>ห้อง:</strong> ' + _escH(rec.className) + ' (' + _escH(rec.room) + ')</div>' +
+    '</div>' +
+    '<div class="mt-2"><strong>วิชา:</strong> ' + _escH(rec.subjectName) + ' <span class="text-muted">[' + _escH(rec.subjectCode) + ']</span></div>' +
+    '<div class="mt-1"><strong>ครูเดิม:</strong> ' + _escH(rec.originalTeacherName) + '</div>';
+
+  document.getElementById('subTeacherList').innerHTML = _skelCards(3, 40);
+  var user = getSessionUser() || {};
+  google.script.run
+    .withSuccessHandler(function(list) {
+      _subAvailableTeachers = list || [];
+      renderSubTeacherList();
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('subTeacherList').innerHTML = '<div class="text-danger small text-center py-3">โหลดล้มเหลว: ' + (err.message||'') + '</div>';
+    })
+    .getAvailableSubstitutes(rec.date, rec.period, rec.subjectCode, rec.originalTeacherId, user.currentTerm || '', user.currentYear || '');
+  new bootstrap.Modal(document.getElementById('subAssignModal')).show();
+}
+
+function renderSubTeacherList() {
+  var listEl = document.getElementById('subTeacherList');
+  if (!listEl) return;
+  var q = (document.getElementById('subTeacherSearch').value || '').toLowerCase();
+  var filtered = _subAvailableTeachers.filter(function(t) {
+    if (!q) return true;
+    return (t.name + ' ' + t.department).toLowerCase().indexOf(q) >= 0;
+  });
+  if (!filtered.length) {
+    listEl.innerHTML = '<div class="text-muted small text-center py-3">ไม่พบครู</div>';
+    return;
+  }
+  var selectedId = document.getElementById('subSelectedTeacherId').value;
+  var html = '';
+  filtered.forEach(function(t) {
+    var matchBadge = t.subjectMatch === 'exact'
+      ? '<span class="badge bg-success">ตรงวิชา</span>'
+      : t.subjectMatch === 'group'
+      ? '<span class="badge" style="background:#fef3c7;color:#92400e;">กลุ่มเดียวกัน</span>'
+      : '<span class="badge bg-light text-muted">อื่นๆ</span>';
+    var conflictBadge = t.hasConflict
+      ? '<span class="badge bg-danger ms-1">มีคาบชน</span>' : '';
+    var selectedCls = (selectedId === t.teacherId) ? 'border-accent' : '';
+    var bg = (selectedId === t.teacherId) ? 'background:var(--p-accent-soft);' : '';
+    var disabled = t.hasConflict ? ' opacity:.55;pointer-events:none;' : '';
+    html += '<div class="p-2 mb-1 rounded-2 ' + selectedCls + '" style="border:1px solid var(--p-border);cursor:pointer;' + bg + disabled + '" onclick="selectSubTeacher(\''+_escH(t.teacherId)+'\',\''+_escH(t.name)+'\')">' +
+      '<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">' +
+      '<div><strong>' + _escH(t.name) + '</strong> <span class="text-muted small">' + _escH(t.department || '-') + '</span></div>' +
+      '<div class="d-flex gap-1 align-items-center">' + matchBadge + conflictBadge +
+        ' <span class="badge" style="background:var(--p-subtle);color:var(--p-text);">สอนแทนแล้ว ' + (t.subCount||0) + ' ครั้ง</span>' +
+      '</div>' +
+      '</div></div>';
+  });
+  listEl.innerHTML = html;
+}
+
+function selectSubTeacher(tid, name) {
+  document.getElementById('subSelectedTeacherId').value = tid;
+  document.getElementById('subSelectedTeacherName').value = name;
+  renderSubTeacherList();
+}
+
+function confirmAssignSubstitute() {
+  var assignmentId = document.getElementById('subAssignId').value;
+  var tid = document.getElementById('subSelectedTeacherId').value;
+  var note = document.getElementById('subAssignNote').value.trim();
+  if (!tid) { showToast('กรุณาเลือกครูสอนแทน', 'warning'); return; }
+  var user = getSessionUser() || {};
+  showLoader(true);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      showLoader(false);
+      if (res.status === 'success') {
+        bootstrap.Modal.getInstance(document.getElementById('subAssignModal')).hide();
+        showToast('✅ จัดสอนแทนแล้ว', 'success');
+        subAdminReload();
+      } else {
+        showToast('เกิดข้อผิดพลาด: ' + (res.message||''), 'danger', 5000);
+      }
+    })
+    .withFailureHandler(function(err) { showLoader(false); showToast('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger', 5000); })
+    .assignSubstitute(assignmentId, tid, note, user.name || '');
+}
+
+function doUnassignSubstitute(assignmentId) {
+  Swal.fire({ title: 'ยกเลิกการจัดครูสอนแทนคาบนี้?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'ยกเลิก', cancelButtonText: 'ปิด' }).then(r => {
+    if (!r.isConfirmed) return;
+    showLoader(true);
+    google.script.run
+      .withSuccessHandler(function(res) {
+        showLoader(false);
+        if (res.status === 'success') {
+          showToast('ยกเลิกแล้ว', 'info');
+          subAdminReload();
+        } else {
+          showToast('เกิดข้อผิดพลาด: ' + (res.message||''), 'danger', 5000);
+        }
+      })
+      .withFailureHandler(function(err) { showLoader(false); showToast('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger', 5000); })
+      .unassignSubstitute(assignmentId);
+  });
+}
+
+function openManualCreateModal() {
+  var sel = document.getElementById('subManualTeacher');
+  var wk = _subWeekRange(0);
+  document.getElementById('subManualStart').value = wk.from;
+  document.getElementById('subManualEnd').value = wk.to;
+  subUpdateManualDayLabel();
+  document.getElementById('subManualStatus').classList.add('d-none');
+  if (sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">-- กำลังโหลด --</option>';
+    google.script.run
+      .withSuccessHandler(function(users) {
+        _subAllUsersForManual = users || [];
+        // getAllUsers returns raw row arrays: [0]Username [2]FullName [3]Role [4]Dept
+        var teachers = _subAllUsersForManual.filter(function(u){
+          if (Array.isArray(u)) return String(u[3] || '').toUpperCase() === 'TEACHER';
+          return String(u.role || '').toUpperCase() === 'TEACHER';
+        });
+        teachers.sort(function(a,b) {
+          var na = Array.isArray(a) ? String(a[2]||'') : String(a.name||a.fullName||'');
+          var nb = Array.isArray(b) ? String(b[2]||'') : String(b.name||b.fullName||'');
+          return na.localeCompare(nb, 'th');
+        });
+        var opts = '<option value="">-- เลือกครู --</option>';
+        teachers.forEach(function(u) {
+          var id   = Array.isArray(u) ? u[0] : (u.id || '');
+          var name = Array.isArray(u) ? u[2] : (u.name || u.fullName || '');
+          var dept = Array.isArray(u) ? u[4] : (u.dept || u.department || '');
+          opts += '<option value="' + _escH(id) + '">' + _escH(name) + ' (' + _escH(dept || '-') + ')</option>';
+        });
+        sel.innerHTML = opts;
+      })
+      .withFailureHandler(function(err) {
+        sel.innerHTML = '<option value="">โหลดล้มเหลว: ' + (err.message||'') + '</option>';
+      })
+      .getAllUsers();
+  }
+  new bootstrap.Modal(document.getElementById('subManualModal')).show();
+}
+
+function submitManualCreate() {
+  var tid   = document.getElementById('subManualTeacher').value;
+  var start = document.getElementById('subManualStart').value;
+  var end   = document.getElementById('subManualEnd').value;
+  var status = document.getElementById('subManualStatus');
+  var setMsg = function(msg, type) {
+    status.className = 'small p-2 rounded-2 mt-2 alert alert-' + type;
+    status.textContent = msg;
+    status.classList.remove('d-none');
+  };
+  if (!tid)   { setMsg('กรุณาเลือกครู', 'warning'); return; }
+  if (!start) { setMsg('กรุณาระบุวันเริ่ม', 'warning'); return; }
+  if (!end)   { setMsg('กรุณาระบุวันสิ้นสุด', 'warning'); return; }
+  if (end < start) { setMsg('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'danger'); return; }
+  setMsg('กำลังสร้าง...', 'info');
+  google.script.run
+    .withSuccessHandler(function(res) {
+      bootstrap.Modal.getInstance(document.getElementById('subManualModal')).hide();
+      showToast('✅ สร้าง ' + (res.created||0) + ' คาบ', 'success');
+      subAdminReload();
+    })
+    .withFailureHandler(function(err) { setMsg('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger'); })
+    .manualCreateAffected(tid, start, end);
+}
+</script>

@@ -1,0 +1,79 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-layer-group me-2" style="color: var(--p-accent);"></i>คลังตัวชี้วัด / ผลการเรียนรู้</h4>
+      <p class="pssms-subtitle">นำเข้าหลักสูตรจากส่วนกลาง เพื่อให้ครูดึงไปใช้ใน ปพ.5</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header"><span><i class="fas fa-file-import me-2" style="color: var(--p-text-muted);"></i>นำเข้าหลักสูตร (CSV)</span></div>
+
+        <div class="p-3 rounded-3 small mb-3" style="background: var(--p-subtle); border: 1px solid var(--p-border);">
+          <b style="color: var(--p-text);">รูปแบบคอลัมน์</b> (.csv UTF-8):<br>
+          A: รหัสวิชา (เช่น พ22103)<br>
+          B: ประเภท (พื้นฐาน / เพิ่มเติม)<br>
+          C: รหัสตัวชี้วัด (เช่น พ 4.1 ม.2/2)<br>
+          D: คำอธิบาย/จุดประสงค์<br>
+          E: ประเมิน (ระหว่างทาง / ปลายทาง)
+        </div>
+
+        <div class="mb-3">
+          <input type="file" id="csvCurriculumFile" class="form-control" accept=".csv">
+        </div>
+
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" id="clearOldCurriculum" checked>
+          <label class="form-check-label small fw-medium" for="clearOldCurriculum" style="color: var(--p-danger);">ล้างข้อมูลตัวชี้วัดเดิมก่อนนำเข้า</label>
+        </div>
+
+        <button class="btn btn-accent w-100 py-2 fw-medium mb-2" id="btnImportCurriculum" onclick="uploadCurriculumCSV()">
+          <i class="fas fa-cloud-upload-alt me-2"></i>อัปโหลดเข้าระบบ
+        </button>
+
+        <hr style="opacity: 0.1;">
+        <button class="btn btn-soft w-100 btn-sm" onclick="initCurriculumDB()">
+          <i class="fas fa-tools me-1"></i>สร้างฐานข้อมูลครั้งแรก (Setup DB)
+        </button>
+      </div>
+    </div>
+
+    <div class="col-md-8">
+      <div class="pssms-card h-100 p-0">
+        <div class="pssms-card-header mb-0">
+          <span><i class="fas fa-list me-2" style="color: var(--p-text-muted);"></i>คลังตัวชี้วัดในระบบ</span>
+          <span class="pssms-chip" id="curriculumCountBadge">0 รายการ</span>
+        </div>
+
+        <div class="p-3" style="border-bottom: 1px solid var(--p-border);">
+          <div class="input-group">
+            <span class="input-group-text border-0" style="background: transparent;"><i class="fas fa-search text-muted"></i></span>
+            <input type="text" id="searchCurriculum" class="form-control border-0" placeholder="ค้นหารหัสวิชา, ตัวชี้วัด..." onkeyup="filterCurriculumTable()" style="box-shadow: none;">
+          </div>
+        </div>
+
+        <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+          <table class="pssms-table mb-0" style="font-size: 0.85rem;">
+            <thead class="sticky-top" style="background: var(--p-subtle);">
+              <tr>
+                <th style="width: 100px;">รหัสวิชา</th>
+                <th style="width: 120px;">รหัสตัวชี้วัด</th>
+                <th>คำอธิบาย</th>
+                <th style="width: 100px;">การประเมิน</th>
+              </tr>
+            </thead>
+            <tbody id="curriculumTableBody">
+              <tr><td colspan="4" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  setTimeout(loadCurriculumData, 300);
+</script>

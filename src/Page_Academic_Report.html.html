@@ -1,0 +1,61 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-chart-pie me-2" style="color: var(--p-accent);"></i>รายงานสถิติเวลาเรียน</h4>
+      <p class="pssms-subtitle">ตรวจสิทธิ์สอบ — ปกติ ≥80% · มส. 60-79% · เรียนซ้ำ &lt;60%</p>
+    </div>
+  </div>
+
+  <div class="pssms-card mb-3">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-6">
+        <label class="form-label small fw-medium text-muted">รายวิชา</label>
+        <select id="reportClassSelect" class="form-select" onchange="generateReport()">
+          <option value="">-- กำลังโหลดรายวิชา... --</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-medium text-muted">ภาคเรียน / ปี</label>
+        <div class="input-group">
+          <select id="reportTerm" class="form-select text-center fw-medium" onchange="reloadReportSubjects()">
+            <option value="1">เทอม 1</option>
+            <option value="2" selected>เทอม 2</option>
+          </select>
+          <input type="number" id="reportYear" class="form-control text-center fw-medium" value="2568" onchange="reloadReportSubjects()">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-accent w-100" onclick="generateReport()">
+          <i class="fas fa-sync-alt me-1"></i>ประมวลผลรายงาน
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pssms-card p-0">
+    <div class="table-responsive">
+      <table class="pssms-table mb-0">
+        <thead>
+          <tr>
+            <th class="text-center" width="5%">#</th>
+            <th width="10%">รหัสนักเรียน</th>
+            <th width="20%">ชื่อ-นามสกุล</th>
+            <th class="text-center" width="15%">มา / สาย</th>
+            <th class="text-center" width="15%">ลา / ขาด</th>
+            <th width="20%">ความก้าวหน้า (%)</th>
+            <th class="text-center" width="15%">สิทธิ์สอบ</th>
+          </tr>
+        </thead>
+        <tbody id="reportTableBody">
+          <tr><td colspan="7" class="text-center p-5 text-muted">เลือกวิชาด้านบนเพื่อเริ่มดูรายงาน</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-end mt-3 gap-3 small text-muted">
+    <div class="d-flex align-items-center"><i class="fas fa-check-circle text-success me-1"></i>ปกติ (≥80%)</div>
+    <div class="d-flex align-items-center"><i class="fas fa-exclamation-triangle me-1" style="color: var(--p-warning);"></i>มส. รอซ่อม (60-79%)</div>
+    <div class="d-flex align-items-center"><i class="fas fa-times-circle text-danger me-1"></i>เรียนซ้ำ (&lt;60%)</div>
+  </div>
+</div>

@@ -1,0 +1,1853 @@
+<script>
+// ==========================================
+// 15. POR POR 5: SUBJECT CONFIG LOGIC (อัปเกรดระบบแม่แบบมาตรฐาน)
+// ==========================================
+function initSubjectConfigPage() {
+  const user = getSessionUser();
+  if(!user) return;
+  document.getElementById('configTerm').value = user.currentTerm;
+  document.getElementById('configYear').value = user.currentYear;
+  const select = document.getElementById('configClassSelect'); select.innerHTML = `<option value="">⏳ กำลังโหลดวิชา...</option>`;
+  const subjectCacheKey = `v2_subjects_${user.id}_${user.currentTerm}_${user.currentYear}`;
+  const cachedSubjects = sessionStorage.getItem(subjectCacheKey);
+
+  if (cachedSubjects && cachedSubjects !== "[]") { buildConfigSubjectDropdown(JSON.parse(cachedSubjects)); } 
+  else {
+     google.script.run.withFailureHandler(err => { select.innerHTML = `<option value="">❌ โหลดข้อมูลล้มเหลว</option>`; showAlert("Error: " + err.message); })
+       .withSuccessHandler(subjects => { sessionStorage.setItem(subjectCacheKey, JSON.stringify(subjects)); buildConfigSubjectDropdown(subjects); })
+       .getTeacherSubjects(user.id, user.role, user.currentTerm, user.currentYear);
+  }
+}
+
+function buildConfigSubjectDropdown(subjects) {
+  const select = document.getElementById('configClassSelect');
+  if(subjects.length === 0) { select.innerHTML = `<option value="">⚠️ ไม่พบวิชาในเทอมนี้</option>`; return; }
+
+  // 🧠 สมองกลจัดเรียง: เอาวิชาปกติไว้บน เอากิจกรรม(ก, I) ไว้ล่างสุด และเรียงตามรหัสวิชา -> ห้องเรียน
+  subjects.sort((a, b) => {
+      const codeA = String(a[0] || '').trim();
+      const codeB = String(b[0] || '').trim();
+      const isActA = codeA.startsWith('ก') || codeA.toLowerCase().startsWith('i');
+      const isActB = codeB.startsWith('ก') || codeB.toLowerCase().startsWith('i');
+
+      if (isActA !== isActB) return isActA ? 1 : -1; // แยกกิจกรรมไปไว้ข้างล่าง
+      if (codeA !== codeB) return codeA.localeCompare(codeB, 'th'); // เรียงตามรหัสวิชา
+      return String(a[2] || '').localeCompare(String(b[2] || ''), 'th'); // เรียงตามห้องเรียน
+  });
+
+  let html = '<option value="">-- เลือกรายวิชาที่ต้องการตั้งค่า --</option>';
+  subjects.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[0]} - ${sub[1]} (${sub[2]})</option>`; });
+  select.innerHTML = html;
+}
+
+window.currentCurriculumList = [];
+
+// 1. โหลดข้อมูล (เพิ่มการจัดเรียงและการเรียกใช้ระบบนับอัตโนมัติ)
+// ==========================================
+function loadSubjectConfig() {
+  const val = document.getElementById('configClassSelect').value;
+  const panel = document.getElementById('configPanel');
+  const info = document.getElementById('configSubjectInfo');
+  if(!val) { panel.style.pointerEvents = 'none'; panel.classList.add('opacity-50'); info.classList.add('d-none'); return; }
+
+  const item = JSON.parse(val); const user = getSessionUser();
+  document.getElementById('dispConfigSubject').innerText = `${item[0]} ${item[1]}`;
+  document.getElementById('dispConfigClass').innerText = `ห้อง ${item[2]}`;
+  info.classList.remove('d-none'); panel.style.pointerEvents = 'auto'; panel.classList.remove('opacity-50');
+  showLoader(true);
+  
+  google.script.run.withSuccessHandler(curriculumData => {
+      // 🌟 จัดเรียง: ดัน "ระหว่างทาง" ขึ้นก่อน "ปลายทาง" และเรียงตามรหัส
+      window.currentCurriculumList = (curriculumData || []).sort((a, b) => {
+          const tA = a.evalType || ''; const tB = b.evalType || '';
+          if (tA.includes('ระหว่าง') && !tB.includes('ระหว่าง')) return -1;
+          if (!tA.includes('ระหว่าง') && tB.includes('ระหว่าง')) return 1;
+          return (a.standardCode || '').localeCompare(b.standardCode || '');
+      });
+      
+      google.script.run.withSuccessHandler(config => {
+           showLoader(false); 
+           const tbody = document.getElementById('indicatorTableBody'); 
+           tbody.innerHTML = '';
+
+           document.getElementById('midtermCode').value = ''; document.getElementById('midtermDesc').value = '';
+           document.getElementById('finalCode').value = ''; document.getElementById('finalDesc').value = '';
+
+           if (config) {
+              const ratios = config.ratio.split(':');
+              document.getElementById('scoreFormative').value = ratios[0] || 0; 
+              document.getElementById('scoreMidterm').value = ratios[1] || 0; 
+              document.getElementById('scoreFinal').value = ratios[2] || 0;
+              
+              if (config.examIndicators) {
+                  if (config.examIndicators.midterm) {
+                      document.getElementById('midtermCode').value = config.examIndicators.midterm.code || '';
+                      document.getElementById('midtermDesc').value = config.examIndicators.midterm.description || '';
+                  }
+                  if (config.examIndicators.final) {
+                      document.getElementById('finalCode').value = config.examIndicators.final.code || '';
+                      document.getElementById('finalDesc').value = config.examIndicators.final.description || '';
+                  }
+              }
+
+              if(config.indicators && config.indicators.length > 0) { 
+                  config.indicators.forEach(ind => addIndicatorRow(ind.code || '', ind.name || '', ind.score, ind.description || '')); 
+              } else { addIndicatorRow(); }
+           } else { addIndicatorRow(); }
+           
+           calculateTotalConfigScore();
+           refreshAllIndicatorDropdowns(); // 🌟 อัปเดต Dropdown และนับจำนวนทันทีที่โหลดเสร็จ
+      }).getSubjectConfig(item[0], item[2], user.currentTerm, user.currentYear);
+  }).getCurriculumBySubject(item[0]);
+}
+
+// ==========================================
+// 🌟 2. ระบบนับจำนวนและอัปเดต Dropdown แบบ Real-time
+// ==========================================
+window.refreshAllIndicatorDropdowns = function() {
+    let counts = {};
+    document.querySelectorAll('.ind-code, #midtermCode, #finalCode').forEach(input => {
+        if(!input || !input.value) return;
+        let codes = input.value.split(',').map(c => c.trim()).filter(c => c);
+        codes.forEach(c => { counts[c] = (counts[c] || 0) + 1; });
+    });
+
+    const buildOptions = (defaultText) => {
+        let html = `<option value="">${defaultText}</option>`;
+        if (window.currentCurriculumList) {
+            window.currentCurriculumList.forEach(curr => {
+                let safeDesc = (curr.description || '').replace(/"/g, '&quot;');
+                let count = counts[curr.standardCode] || 0;
+                let countBadge = count > 0 ? ` 🟢 [ใช้ ${count} ครั้ง]` : ''; 
+                let evalBadge = curr.evalType ? ` [${curr.evalType}]` : '';
+                html += `<option value="${curr.standardCode}" data-desc="${safeDesc}">${curr.standardCode}${evalBadge}${countBadge}</option>`;
+            });
+        }
+        return html;
+    };
+
+    document.querySelectorAll('.ind-select-helper').forEach(sel => sel.innerHTML = buildOptions("+ เลือกตัวชี้วัดมาใส่ชิ้นงานนี้..."));
+    let midSel = document.getElementById('selectMidtermInd');
+    if(midSel) midSel.innerHTML = buildOptions("+ เลือกตัวชี้วัด กลางภาค...");
+    let finSel = document.getElementById('selectFinalInd');
+    if(finSel) finSel.innerHTML = buildOptions("+ เลือกตัวชี้วัด ปลายภาค...");
+    
+    document.querySelectorAll('.ind-code, #midtermCode, #finalCode').forEach(input => {
+        if(!input.hasAttribute('data-count-bound')) {
+            input.addEventListener('input', () => refreshAllIndicatorDropdowns());
+            input.setAttribute('data-count-bound', 'true');
+        }
+    });
+};
+
+// ==========================================
+// 3. ฟังก์ชันอื่นๆ
+// ==========================================
+window.populateExamDropdowns = function() { refreshAllIndicatorDropdowns(); };
+
+function addIndicatorRow(code = '', name = '', score = 0, description = '') {
+  const tbody = document.getElementById('indicatorTableBody');
+  const rowCount = tbody.rows.length + 1;
+  const tr = document.createElement('tr');
+  
+  let selectHtml = '';
+  if (window.currentCurriculumList && window.currentCurriculumList.length > 0) {
+      selectHtml = `<select class="form-select form-select-sm text-secondary mb-1 shadow-sm border-info ind-select-helper" onchange="appendIndicator(this)" style="cursor: pointer; font-size: 0.75rem;"></select>`;
+  }
+
+  tr.innerHTML = `
+    <td class="text-center fw-bold text-muted ind-no align-middle">${rowCount}</td>
+    <td>
+      <input type="text" class="form-control form-control-sm text-secondary fw-bold mb-1 ind-code" value="${code}" placeholder="รหัสตัวชี้วัด (จะแสดงบนหัวตาราง)">
+      ${selectHtml}
+      <input type="text" class="form-control form-control-sm border-primary ind-name fw-bold text-primary" value="${name}" placeholder="ชื่อชิ้นงาน (พิมพ์อิสระ)">
+    </td>
+    <td><textarea class="form-control form-control-sm ind-desc" rows="3" placeholder="ระบุรายละเอียดหรือจุดประสงค์...">${description}</textarea></td>
+    <td><input type="number" class="form-control form-control-sm text-center ind-score text-success fw-bold" value="${score}" onkeyup="calculateTotalConfigScore()"></td>
+    <td class="text-center align-middle"><button class="btn btn-sm btn-outline-danger border-0" onclick="this.closest('tr').remove(); calculateTotalConfigScore(); refreshAllIndicatorDropdowns();"><i class="fas fa-trash"></i></button></td>
+  `;
+  tbody.appendChild(tr);
+  refreshAllIndicatorDropdowns();
+}
+
+window.appendIndicator = function(selectEl) {
+    const selectedOption = selectEl.options[selectEl.selectedIndex];
+    if (!selectedOption || selectedOption.value === "") return;
+    
+    const codeToAdd = selectedOption.value; const descToAdd = selectedOption.getAttribute('data-desc');
+    const tr = selectEl.closest('tr');
+    const codeInput = tr.querySelector('.ind-code'); const descArea = tr.querySelector('.ind-desc');
+    
+    if (codeInput) {
+        if (codeInput.value.trim() === '') codeInput.value = codeToAdd;
+        else if (!codeInput.value.includes(codeToAdd)) codeInput.value += ', ' + codeToAdd;
+    }
+    if (descArea && descToAdd) {
+        if (descArea.value.trim() === '') descArea.value = descToAdd;
+        else if (!descArea.value.includes(descToAdd)) descArea.value += '\n\n' + descToAdd;
+        descArea.style.transition = 'background-color 0.4s ease'; descArea.style.backgroundColor = '#d1e7dd';
+        setTimeout(() => { descArea.style.backgroundColor = ''; }, 600);
+    }
+    selectEl.selectedIndex = 0;
+    refreshAllIndicatorDropdowns();
+};
+
+window.appendExamIndicator = function(selectEl, type) {
+    const selectedOption = selectEl.options[selectEl.selectedIndex];
+    if (!selectedOption || selectedOption.value === "") return;
+    
+    const codeToAdd = selectedOption.value; const descToAdd = selectedOption.getAttribute('data-desc');
+    const codeInput = document.getElementById(type + 'Code'); const descArea = document.getElementById(type + 'Desc');
+    
+    if (codeInput) {
+        if (codeInput.value.trim() === '') codeInput.value = codeToAdd;
+        else if (!codeInput.value.includes(codeToAdd)) codeInput.value += ', ' + codeToAdd;
+    }
+    if (descArea && descToAdd) {
+        if (descArea.value.trim() === '') descArea.value = descToAdd;
+        else if (!descArea.value.includes(descToAdd)) descArea.value += '\n\n' + descToAdd;
+        descArea.style.transition = 'background-color 0.4s ease'; descArea.style.backgroundColor = '#d1e7dd';
+        setTimeout(() => { descArea.style.backgroundColor = ''; }, 600);
+    }
+    selectEl.selectedIndex = 0;
+    refreshAllIndicatorDropdowns();
+};
+
+function saveSubjectConfigData() {
+  const val = document.getElementById('configClassSelect').value;
+  if(!val) { showAlert("กรุณาเลือกวิชา"); return; }
+  const total = parseInt(document.getElementById('totalScoreBadge').innerText);
+  const _doSaveConfig = () => {
+    const item = JSON.parse(val); const user = getSessionUser();
+    const indicators = [];
+    document.querySelectorAll('#indicatorTableBody tr').forEach((row, index) => {
+      const codeInput = row.querySelector('.ind-code');
+      const code = codeInput ? codeInput.value.trim() : '';
+      let name = row.querySelector('.ind-name').value.trim();
+      const score = parseInt(row.querySelector('.ind-score').value) || 0;
+      const description = row.querySelector('.ind-desc').value.trim();
+      if (name === '' && code !== '') name = code; else if (name === '' && code === '') name = 'ชิ้นงานที่ ' + (index + 1);
+      if(name && score > 0) indicators.push({ code: code, name: name, score: score, description: description });
+    });
+    const examIndicators = {
+        midterm: { code: document.getElementById('midtermCode').value.trim(), description: document.getElementById('midtermDesc').value.trim() },
+        final: { code: document.getElementById('finalCode').value.trim(), description: document.getElementById('finalDesc').value.trim() }
+    };
+    const configData = { subjectCode: item[0], className: item[2], term: user.currentTerm, year: user.currentYear, formative: parseInt(document.getElementById('scoreFormative').value) || 0, midterm: parseInt(document.getElementById('scoreMidterm').value) || 0, final: parseInt(document.getElementById('scoreFinal').value) || 0, indicators: indicators, examIndicators: examIndicators, teacherId: user.id };
+    const btn = document.getElementById('btnSaveConfig');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...'; btn.disabled = true;
+    safeRun(3).withFailureHandler(err => {
+         btn.innerHTML = '<i class="fas fa-save me-2"></i>บันทึกโครงสร้างวิชา'; btn.disabled = false; showAlert("❌ เกิดข้อผิดพลาด: " + err.message);
+    }).withSuccessHandler(res => {
+         btn.innerHTML = '<i class="fas fa-save me-2"></i>บันทึกโครงสร้างวิชา'; btn.disabled = false; showToast(res.message, 'success');
+    }).saveSubjectConfig(configData);
+  };
+  if (total !== 100) {
+    Swal.fire({ title: '⚠️ สัดส่วนคะแนนยังไม่ครบ 100', text: 'ต้องการบันทึกต่อไปหรือไม่?', icon: 'warning', showCancelButton: true, confirmButtonText: 'บันทึกต่อ', cancelButtonText: 'ยกเลิก' }).then(r => { if (r.isConfirmed) _doSaveConfig(); });
+  } else {
+    _doSaveConfig();
+  }
+}
+
+window.calculateTotalConfigScore = function() {
+  let indicatorSum = 0;
+  document.querySelectorAll('.ind-score').forEach(input => { indicatorSum += parseInt(input.value) || 0; });
+  const formativeInput = document.getElementById('scoreFormative');
+  if (formativeInput) {
+      formativeInput.value = indicatorSum;
+      formativeInput.setAttribute('readonly', true);
+      formativeInput.classList.add('bg-light');
+  }
+  const midScore = parseInt(document.getElementById('scoreMidterm').value) || 0;
+  const finalScore = parseInt(document.getElementById('scoreFinal').value) || 0;
+  const grandTotal = indicatorSum + midScore + finalScore;
+  const badge = document.getElementById('totalScoreBadge');
+  if (badge) {
+    badge.innerText = grandTotal;
+    if (grandTotal === 100) badge.className = 'text-success fs-5 fw-bold';
+    else badge.className = 'text-danger fs-5 fw-bold';
+  }
+};
+
+// ==========================================
+// 16. POR POR 5: ALL-IN-ONE (สุดยอดระบบจัดการคะแนน)
+// ==========================================
+
+let currentScoreConfig = null;
+let currentScoreStudents = [];
+let currentAttStats = {};
+let currentAttDetails = {};
+let currentAttSessions = [];
+let isHeaderEditMode = false;
+let isQualVisible = false;
+let isSavingScores = false;
+let sgsColumnStates = {};
+
+const normID = (id) => { let clean = String(id).replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, ''); return clean || '0'; };
+const normStr = (str) => String(str).replace(/\s+/g, '').toLowerCase();
+
+function initScoreEntryPage() {
+  const user = getSessionUser();
+  if(!user) return;
+  
+  if (user.role.toUpperCase() === 'ADMIN') {
+     const adminPanel = document.getElementById('adminPrintSettingsPanel');
+     if (adminPanel) {
+         adminPanel.classList.remove('d-none');
+         const collapseEl = document.getElementById('adminSettingsCollapse');
+         if (collapseEl) new bootstrap.Collapse(collapseEl, { toggle: false }).hide();
+         if (typeof initPrintSettings === 'function') initPrintSettings();
+     }
+  }
+
+  const select = document.getElementById('scoreClassSelect');
+  select.innerHTML = `<option value="">⏳ กำลังโหลดวิชา...</option>`;
+  
+  const subjectCacheKey = `v2_subjects_${user.id}_${user.currentTerm}_${user.currentYear}`;
+  const cachedSubjects = sessionStorage.getItem(subjectCacheKey);
+
+  if (cachedSubjects && cachedSubjects !== "[]") {
+     buildScoreSubjectDropdown(JSON.parse(cachedSubjects));
+  } else {
+     google.script.run.withSuccessHandler(subjects => {
+          sessionStorage.setItem(subjectCacheKey, JSON.stringify(subjects));
+          buildScoreSubjectDropdown(subjects);
+     }).getTeacherSubjects(user.id, user.role, user.currentTerm, user.currentYear);
+  }
+}
+
+function buildScoreSubjectDropdown(subjects) {
+  const select = document.getElementById('scoreClassSelect');
+  if(subjects.length === 0) { select.innerHTML = `<option value="">⚠️ ไม่พบวิชาในเทอมนี้</option>`; return; }
+
+  subjects.sort((a, b) => {
+      const codeA = String(a[0] || '').trim();
+      const codeB = String(b[0] || '').trim();
+      const isActA = codeA.startsWith('ก') || codeA.toLowerCase().startsWith('i');
+      const isActB = codeB.startsWith('ก') || codeB.toLowerCase().startsWith('i');
+
+      if (isActA !== isActB) return isActA ? 1 : -1; 
+      if (codeA !== codeB) return codeA.localeCompare(codeB, 'th'); 
+      return String(a[2] || '').localeCompare(String(b[2] || ''), 'th'); 
+  });
+
+  let html = '<option value="">-- เลือกรายวิชาที่ต้องการบันทึก --</option>';
+  subjects.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[0]} - ${sub[1]} (${sub[2]})</option>`; });
+  select.innerHTML = html;
+
+  let pendingSub = sessionStorage.getItem('pending_score_subject');
+  let pendingClass = sessionStorage.getItem('pending_score_class');
+  
+  if (pendingSub && pendingClass) {
+      let found = false;
+      for (let i = 0; i < select.options.length; i++) {
+          if (select.options[i].value) {
+              let valObj = JSON.parse(select.options[i].value);
+              if (valObj[0] === pendingSub && valObj[2] === pendingClass) {
+                  select.selectedIndex = i;
+                  found = true;
+                  break;
+              }
+          }
+      }
+      if (found) {
+          sessionStorage.removeItem('pending_score_subject');
+          sessionStorage.removeItem('pending_score_class');
+          setTimeout(loadScoreGrid, 300); 
+      }
+  }
+}
+
+function toggleHeaderEditMode() {
+  const btnEdit = document.getElementById('btnEditHeader');
+  if (!isHeaderEditMode) {
+    isHeaderEditMode = true;
+    btnEdit.className = "btn btn-sm btn-danger text-white rounded-pill px-3 fw-bold d-flex align-items-center shadow-sm";
+    btnEdit.innerHTML = '<i class="fas fa-check me-1"></i> <span class="d-none d-xl-inline">เสร็จสิ้น</span>';
+    refreshTableOnly();
+  } else {
+    Swal.fire({ title: 'บันทึกข้อมูลลงระบบ?', text: 'คุณอาจมีการปรับเปลี่ยนโครงสร้างหรือตัวชี้วัด', icon: 'question', showDenyButton: true, showCancelButton: false, confirmButtonText: 'บันทึก', denyButtonText: 'ไม่บันทึก' }).then(r => {
+      if (r.isConfirmed) {
+        saveAllInOneScores();
+      } else {
+        isHeaderEditMode = false;
+        btnEdit.className = "btn btn-sm btn-light rounded-pill px-3 text-secondary fw-bold d-flex align-items-center";
+        btnEdit.innerHTML = '<i class="fas fa-th me-1"></i> <span class="d-none d-xl-inline">หัวตาราง</span>';
+        refreshTableOnly();
+      }
+    });
+  }
+}
+
+function toggleQualColumns() {
+  isQualVisible = !isQualVisible;
+  const btn = document.getElementById('btnToggleQual');
+  if (isQualVisible) {
+    btn.className = "btn btn-sm btn-info text-white rounded-pill px-3 fw-bold d-flex align-items-center shadow-sm";
+    btn.innerHTML = '<i class="fas fa-eye-slash me-1"></i> <span class="d-none d-xl-inline">ซ่อน</span>';
+  } else {
+    btn.className = "btn btn-sm btn-light rounded-pill px-3 text-secondary fw-bold d-flex align-items-center";
+    btn.innerHTML = '<i class="fas fa-eye me-1"></i> <span class="d-none d-xl-inline">ประเมิน</span>';
+  }
+  syncHeaderState(); 
+  refreshTableOnly(); 
+}
+
+function loadScoreGrid() {
+  const val = document.getElementById('scoreClassSelect').value;
+  const gridCard = document.getElementById('scoreGridCard');
+  const btnSave = document.getElementById('btnSaveScores');
+  if(!val) { gridCard.classList.add('d-none'); btnSave.disabled = true; return; }
+
+  const item = JSON.parse(val);
+  const user = getSessionUser();
+  
+  gridCard.classList.remove('d-none');
+  btnSave.disabled = true; 
+  document.getElementById('scoreGridTitle').innerHTML = `<i class="fas fa-spinner fa-spin me-2 text-primary"></i>กำลังซิงค์ข้อมูล ปพ.5...`;
+  
+  renderSkeletonTable();
+
+  safeRun(3)
+    .withFailureHandler(err => {
+        document.getElementById('scoreTableBody').innerHTML = `<tr><td colspan="10" class="text-center text-danger p-5">โหลดข้อมูลไม่สำเร็จ: ${err.message}</td></tr>`;
+        document.getElementById('scoreGridTitle').innerHTML = `เกิดข้อผิดพลาดในการโหลด`;
+    })
+    .withSuccessHandler(res => {
+        btnSave.disabled = false;
+        currentScoreConfig = res.config;
+        currentScoreStudents = res.students;
+        currentAttStats = res.attStats || {}; 
+        currentAttDetails = res.attDetails || {}; 
+        currentAttSessions = res.attSessions || []; 
+
+        document.getElementById('scoreTabs').classList.remove('d-none');
+        renderAllInOneTable(res.students, res.config, res.existingScores, res.existingQuals);
+        renderEvalTable(res.students, res.existingQuals);
+    })
+    .getAllInOneScoreGridData(item[0], item[2], user.currentTerm, user.currentYear);
+}
+
+function renderSkeletonTable() {
+  const thead = document.getElementById('scoreTableHeader');
+  const tbody = document.getElementById('scoreTableBody');
+  
+  thead.innerHTML = `<tr>
+    <th class="p-3" style="width:40px;"><div class="skeleton-box" style="width:20px; height:20px;"></div></th>
+    <th class="p-3" style="min-width: 170px;"><div class="skeleton-box" style="width:120px; height:20px;"></div></th>
+    <th class="p-3"><div class="skeleton-box mx-auto" style="width:60px; height:20px;"></div></th>
+    <th class="p-3"><div class="skeleton-box mx-auto" style="width:60px; height:20px;"></div></th>
+    <th class="p-3"><div class="skeleton-box mx-auto" style="width:60px; height:20px;"></div></th>
+    <th class="p-3"><div class="skeleton-box mx-auto" style="width:60px; height:20px;"></div></th>
+    <th class="p-3"><div class="skeleton-box mx-auto" style="width:60px; height:20px;"></div></th>
+  </tr>`;
+
+  let skeletonRows = '';
+  for(let i=0; i<5; i++) {
+    skeletonRows += `<tr>
+      <td class="text-center align-middle p-3"><div class="skeleton-box mx-auto" style="width:20px; height:20px;"></div></td>
+      <td class="align-middle p-3">
+        <div class="skeleton-box mb-2" style="width:140px; height:18px;"></div><br>
+        <div class="skeleton-box" style="width:80px; height:12px;"></div>
+      </td>
+      <td class="text-center align-middle p-3"><div class="skeleton-box mx-auto" style="width:50px; height:30px;"></div></td>
+      <td class="text-center align-middle p-3"><div class="skeleton-box mx-auto" style="width:50px; height:30px;"></div></td>
+      <td class="text-center align-middle p-3"><div class="skeleton-box mx-auto" style="width:50px; height:30px;"></div></td>
+      <td class="text-center align-middle p-3"><div class="skeleton-box mx-auto" style="width:50px; height:30px;"></div></td>
+      <td class="text-center align-middle p-3"><div class="skeleton-box mx-auto" style="width:50px; height:30px;"></div></td>
+    </tr>`;
+  }
+  tbody.innerHTML = skeletonRows;
+}
+
+function syncHeaderState() {
+  if(!document.querySelector('.ind-name-edit')) return; 
+  const newIndicators = [];
+  const names = document.querySelectorAll('.ind-name-edit');
+  const scores = document.querySelectorAll('.ind-score-edit');
+  names.forEach((el, i) => {
+        let oldCode = currentScoreConfig.indicators[i] && currentScoreConfig.indicators[i].code ? currentScoreConfig.indicators[i].code : '';
+        let oldDesc = currentScoreConfig.indicators[i] && currentScoreConfig.indicators[i].description ? currentScoreConfig.indicators[i].description : '';
+        newIndicators.push({ 
+           code: oldCode, 
+           name: el.textContent.trim() || oldCode || 'ชิ้นงาน/สอบ', 
+           score: parseFloat(scores[i].textContent) || 0, 
+           description: oldDesc 
+        });
+      });
+  currentScoreConfig.indicators = newIndicators;
+  const f = parseFloat(document.getElementById('edit-ratio-f').innerText) || 0;
+  const m = parseFloat(document.getElementById('edit-ratio-m').innerText) || 0;
+  const e = parseFloat(document.getElementById('edit-ratio-e').innerText) || 0;
+  currentScoreConfig.ratio = `${f}:${m}:${e}`;
+}
+
+function refreshTableOnly() {
+  const tempScores = {};
+  const tempQuals = {};
+  
+  if (currentScoreStudents && currentScoreStudents.length > 0) {
+      currentScoreStudents.forEach(std => {
+        const stdId = String(std[0]).trim();
+        const safeStdId = normID(stdId); 
+        
+        document.querySelectorAll(`.formative-std-${safeStdId}`).forEach((input, i) => {
+          if(input.value !== '') {
+             const safeIndName = `formative_${i}`; 
+             tempScores[`${safeStdId}_${safeIndName}`] = parseFloat(input.value);
+          }
+        });
+        
+        const m = document.querySelector(`.midterm-std-${safeStdId}`);
+        if(m && m.value !== '') tempScores[`${safeStdId}_midterm`] = parseFloat(m.value);
+        
+        const mr = document.querySelector(`.midterm-re-std-${safeStdId}`);
+        if(mr && mr.value !== '') tempScores[`${safeStdId}_midterm_re`] = parseFloat(mr.value);
+        
+        const f = document.querySelector(`.final-std-${safeStdId}`);
+        if(f && f.value !== '') tempScores[`${safeStdId}_final`] = parseFloat(f.value);
+
+        const rem = document.querySelector(`.remark-select[data-safeid="${safeStdId}"]`);
+        if(rem && rem.value !== '') tempScores[`${safeStdId}_remark`] = rem.value;
+
+        const qr = document.querySelector(`.qual-read[data-safeid="${safeStdId}"]`);
+        const qc = document.querySelector(`.qual-char[data-safeid="${safeStdId}"]`);
+        const qp = document.querySelector(`.qual-comp[data-safeid="${safeStdId}"]`);
+        if(qr && qc && qp) tempQuals[safeStdId] = { read: qr.value, char: qc.value, comp: qp.value };
+      });
+  }
+  renderAllInOneTable(currentScoreStudents, currentScoreConfig, tempScores, tempQuals); 
+}
+
+function renderAllInOneTable(students, config, existingScores, existingQuals) {
+  const thead = document.getElementById('scoreTableHeader');
+  const tbody = document.getElementById('scoreTableBody');
+  const val = document.getElementById('scoreClassSelect').value;
+  const item = JSON.parse(val);
+  
+  document.getElementById('scoreGridTitle').innerHTML = `ปพ.5: วิชา ${item[0]} ${item[1]} ห้อง ${item[2]}`;
+  document.getElementById('scoreRatioBadge').innerText = `สัดส่วนปัจจุบัน ${config.ratio}`;
+
+  let headHtml = `<tr>
+    <th rowspan="2" class="align-middle text-center sticky-head-1 text-secondary border-end py-2" style="width:45px; font-size: 0.85rem; background-color: #f1f3f5;">ที่</th>
+    <th rowspan="2" class="align-middle text-start sticky-head-2 text-secondary border-end px-3 py-2" style="min-width: 180px; font-size: 0.85rem; background-color: #f1f3f5;">รหัส / ชื่อ-สกุล</th>`;
+  
+  let subHeadHtml = `<tr>`;
+  
+  config.indicators.forEach((ind, idx) => {
+    let deleteBtn = isHeaderEditMode ? `<button class="btn btn-xs btn-outline-danger p-0 px-1 border-0 ms-1" onclick="removeIndicator(${idx})"><i class="fas fa-times"></i></button>` : '';
+    let iconColor = ind.description ? 'text-info' : 'text-secondary';
+    let infoBtn = `<i class="fas fa-info-circle ${iconColor}" style="cursor: pointer; font-size: 0.85rem;" onclick="showIndicatorEdit(${idx})" title="คลิกดู/แก้ไขรายละเอียด"></i>`;
+
+    let colKey = `formative-${idx}`;
+    let isChecked = sgsColumnStates[colKey] ? 'checked' : '';
+    let cbHtml = `<input type="checkbox" class="form-check-input border-secondary shadow-sm m-0 sgs-col-toggle" style="cursor: pointer; width: 1.1em; height: 1.1em;" onchange="toggleScoreColumn('${colKey}', this.checked)" ${isChecked} title="ติ๊กเปิดกรอกคะแนน">`;
+
+    let displayCode = ind.code ? ind.code : '-';
+    let displayName = ind.name ? ind.name : 'งาน/สอบ';
+
+    headHtml += `<th class="text-success border-bottom-0 align-middle py-2" style="font-size: 0.9rem; min-width: 100px;">
+                   <div class="d-flex flex-column justify-content-center align-items-center">
+                     <span class="text-muted" style="font-size: 0.65rem; line-height: 1;">${displayCode}</span>
+                     <div class="d-flex align-items-center mt-1">
+                       <span contenteditable="${isHeaderEditMode}" class="ind-name-edit fw-bold text-truncate" data-idx="${idx}">${displayName}</span>
+                       ${deleteBtn}
+                     </div>
+                   </div>
+                 </th>`;
+                 
+    subHeadHtml += `<th class="text-success small fw-normal align-middle border-bottom pb-2" style="background-color: #f8f9fa;">
+                      <div class="d-flex justify-content-center align-items-center gap-1">
+                        <span class="text-muted">(<span contenteditable="${isHeaderEditMode}" class="ind-score-edit fw-bold text-success" onblur="reCalcAllRows()">${ind.score}</span>)</span>
+                        ${infoBtn}
+                        <div class="ms-1 d-flex align-items-center">${cbHtml}</div>
+                      </div>
+                    </th>`;
+  });
+  
+  if(isHeaderEditMode) headHtml += `<th rowspan="2" class="align-middle bg-light"><button class="btn btn-sm btn-light text-primary border shadow-sm px-2 py-0" onclick="addIndicator()"><i class="fas fa-plus"></i></button></th>`;
+
+  const ratios = config.ratio.split(':');
+  
+  let mChecked = sgsColumnStates['midterm'] ? 'checked' : '';
+  let mrChecked = sgsColumnStates['midterm-re'] ? 'checked' : '';
+  let eChecked = sgsColumnStates['final'] ? 'checked' : '';
+
+  let cbM = `<input type="checkbox" class="form-check-input border-secondary shadow-sm m-0 sgs-col-toggle" style="cursor: pointer; width: 1.1em; height: 1.1em;" onchange="toggleScoreColumn('midterm', this.checked)" ${mChecked} title="เปิดกรอกกลางภาค">`;
+  let cbMR = `<input type="checkbox" class="form-check-input border-secondary shadow-sm m-0 sgs-col-toggle" style="cursor: pointer; width: 1.1em; height: 1.1em;" onchange="toggleScoreColumn('midterm-re', this.checked)" ${mrChecked} title="เปิดกรอกซ่อม">`;
+  let cbE = `<input type="checkbox" class="form-check-input border-secondary shadow-sm m-0 sgs-col-toggle" style="cursor: pointer; width: 1.1em; height: 1.1em;" onchange="toggleScoreColumn('final', this.checked)" ${eChecked} title="เปิดกรอกปลายภาค">`;
+
+  let midCode = (config.examIndicators && config.examIndicators.midterm && config.examIndicators.midterm.code) ? config.examIndicators.midterm.code : '-';
+  let finCode = (config.examIndicators && config.examIndicators.final && config.examIndicators.final.code) ? config.examIndicators.final.code : '-';
+
+  headHtml += `<th class="text-primary border-bottom-0 border-start col-highlight-f align-middle py-2" style="font-size: 0.9rem; min-width: 70px;">รวมเก็บ</th>
+    
+    <th class="text-warning text-dark border-bottom-0 col-highlight-m align-middle py-2" style="font-size: 0.9rem; min-width: 100px;">
+       <div class="d-flex flex-column justify-content-center align-items-center">
+         <span class="text-muted text-truncate" style="font-size: 0.65rem; line-height: 1; max-width: 90px;" title="${midCode}">${midCode}</span>
+         <div class="d-flex align-items-center mt-1"><span class="fw-bold">กลางภาค</span></div>
+       </div>
+    </th>
+    
+    <th class="text-danger border-bottom-0 border-start border-white col-highlight-mr align-middle py-2" style="opacity: 0.9; font-size: 0.9rem; min-width: 60px;">ซ่อม</th>
+    
+    <th class="text-danger border-bottom-0 border-start col-highlight-e align-middle py-2" style="font-size: 0.9rem; min-width: 100px;">
+       <div class="d-flex flex-column justify-content-center align-items-center">
+         <span class="text-muted text-truncate" style="font-size: 0.65rem; line-height: 1; max-width: 90px;" title="${finCode}">${finCode}</span>
+         <div class="d-flex align-items-center mt-1"><span class="fw-bold">ปลายภาค</span></div>
+       </div>
+    </th>
+    
+    <th class="text-dark border-bottom-0 border-start col-highlight-total align-middle py-2" style="font-size: 0.9rem; min-width: 60px;">รวม</th>
+    <th class="text-success border-bottom-0 border-start col-highlight-grade align-middle py-2" style="font-size: 0.9rem; min-width: 60px;">เกรด</th>
+    <th class="text-danger border-bottom-0 border-start col-highlight-mr align-middle py-2" style="font-size: 0.9rem; min-width: 80px;">หมายเหตุ</th>
+    <th colspan="3" class="text-info text-dark border-start ${isQualVisible ? '' : 'd-none'} align-middle py-2" style="font-size: 0.9rem; min-width: 150px;">ประเมิน (0-3)</th></tr>`;
+  
+  subHeadHtml += `<th class="text-primary small fw-normal border-start col-highlight-f align-middle border-bottom pb-2" style="background-color: #f8f9fa;">(<span id="edit-ratio-f" class="fw-bold">${ratios[0] || 0}</span>)</th>
+    <th class="text-warning text-dark small fw-normal col-highlight-m align-middle border-bottom pb-2" style="background-color: #f8f9fa;">
+      <div class="d-flex justify-content-center align-items-center gap-1">
+        <span class="text-muted">(<span id="edit-ratio-m" class="fw-bold text-warning text-dark" contenteditable="${isHeaderEditMode}" onblur="reCalcAllRows()">${ratios[1] || 0}</span>)</span>
+        <div class="ms-1 d-flex align-items-center">${cbM}</div>
+      </div>
+    </th>
+    <th class="text-danger small fw-normal border-start border-white col-highlight-mr align-middle border-bottom pb-2" style="opacity: 0.9; background-color: #f8f9fa;">
+      <div class="d-flex justify-content-center align-items-center gap-1">
+        <span class="text-muted">-</span>
+        <div class="ms-1 d-flex align-items-center">${cbMR}</div>
+      </div>
+    </th>
+    <th class="text-danger small fw-normal border-start col-highlight-e align-middle border-bottom pb-2" style="background-color: #f8f9fa;">
+      <div class="d-flex justify-content-center align-items-center gap-1">
+        <span class="text-muted">(<span id="edit-ratio-e" class="fw-bold text-danger" contenteditable="${isHeaderEditMode}" onblur="reCalcAllRows()">${ratios[2] || 0}</span>)</span>
+        <div class="ms-1 d-flex align-items-center">${cbE}</div>
+      </div>
+    </th>
+    <th class="text-dark small fw-normal border-start col-highlight-total align-middle border-bottom pb-2" style="background-color: #f8f9fa;">(<span id="edit-ratio-total" class="fw-bold">100</span>)</th>
+    <th class="text-success small fw-normal border-start col-highlight-grade align-middle border-bottom pb-2 fw-bold" style="background-color: #f8f9fa;">0-4</th>
+    <th class="text-danger small fw-normal border-start col-highlight-mr align-middle border-bottom pb-2" style="background-color: #f8f9fa;">(ร, มส)</th>
+    <th class="text-info small fw-normal border-start ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-2" style="background-color: #f8f9fa;">อ่าน</th>
+    <th class="text-info small fw-normal ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-2" style="background-color: #f8f9fa;">คุณฯ</th>
+    <th class="text-info small fw-normal ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-2" style="background-color: #f8f9fa;">สมรรถนะ</th></tr>`;
+  
+  thead.innerHTML = headHtml + subHeadHtml;
+
+  let bodyHtml = '';
+  students.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+
+  students.forEach((std, rowIndex) => {
+    const stdId = String(std[0]).trim();
+    const safeStdId = normID(stdId); 
+    let colIndex = 0; 
+    
+    let pct = currentAttStats[safeStdId];
+    let attText = '';
+    let autoMS = false;
+
+    let rawRemark = (existingScores[`${safeStdId}_remark`] !== undefined) ? existingScores[`${safeStdId}_remark`] : '';
+    let remarkVal = rawRemark;
+    
+    if (pct !== undefined) {
+        attText = `<span class="ms-2 fw-bold ${pct < 80 ? 'text-danger' : 'text-success'}" style="font-size: 0.72rem; letter-spacing:-0.3px;"><i class="fas fa-user-clock me-1"></i>${pct}%</span>`;
+        if (pct < 80 && rawRemark === '') { 
+            remarkVal = 'มส'; 
+            autoMS = true; 
+        }
+    }
+    
+    if (remarkVal === '-') remarkVal = '';
+    
+    bodyHtml += `<tr>
+      <td class="text-center text-muted fw-bold sticky-col-1 align-middle border-end" style="font-size:0.85rem; background-color: #fff;">${rowIndex + 1}</td>
+      <td class="text-start sticky-col-2 align-middle px-3 border-end" style="background-color: #fff;">
+         <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.9rem; line-height:1.2;">${std[2]}</div>
+         <div class="d-flex align-items-center mt-1">
+            <span class="text-muted font-monospace" style="font-size: 0.78rem;">${stdId}</span>
+            ${attText}
+         </div>
+      </td>`;
+    
+    config.indicators.forEach((ind, idx) => {
+      const indName = `formative_${idx}`; 
+      const scoreKey = `${safeStdId}_${indName}`; 
+      const val = (existingScores[scoreKey] !== undefined && existingScores[scoreKey] !== "") ? existingScores[scoreKey] : '';
+      
+      let colKey = `formative-${idx}`;
+      let lockState = sgsColumnStates[colKey] ? '' : 'readonly tabindex="-1"';
+      let bgStyle = sgsColumnStates[colKey] ? 'background:transparent;' : 'background:#e9ecef; opacity:0.6;';
+
+      bodyHtml += `<td class="p-0 align-middle text-center" title="คลิกขวาเพื่อดูประวัติ">
+                     <input type="number" class="score-cell-input nav-input formative-std-${safeStdId} sgs-col-${colKey}" style="${bgStyle}" value="${val}" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', '${indName}', '${ind.name}'); return false;" ${lockState}>
+                   </td>`;
+    });
+
+    if(isHeaderEditMode) bodyHtml += `<td class="bg-light"></td>`;
+
+    const midVal = (existingScores[`${safeStdId}_midterm`] !== undefined && existingScores[`${safeStdId}_midterm`] !== "") ? existingScores[`${safeStdId}_midterm`] : '';
+    const midReVal = (existingScores[`${safeStdId}_midterm_re`] !== undefined && existingScores[`${safeStdId}_midterm_re`] !== "") ? existingScores[`${safeStdId}_midterm_re`] : ''; 
+    const finVal = (existingScores[`${safeStdId}_final`] !== undefined && existingScores[`${safeStdId}_final`] !== "") ? existingScores[`${safeStdId}_final`] : '';
+    
+    let mLock = sgsColumnStates['midterm'] ? '' : 'readonly tabindex="-1"';
+    let mBg = sgsColumnStates['midterm'] ? 'background:transparent;' : 'background:#e9ecef; opacity:0.6;';
+    let mrLock = sgsColumnStates['midterm-re'] ? '' : 'readonly tabindex="-1"';
+    let mrBg = sgsColumnStates['midterm-re'] ? 'background:transparent;' : 'background:#e9ecef; opacity:0.6;';
+    let eLock = sgsColumnStates['final'] ? '' : 'readonly tabindex="-1"';
+    let eBg = sgsColumnStates['final'] ? 'background:transparent;' : 'background:#e9ecef; opacity:0.6;';
+
+    const q = existingQuals[safeStdId] || { read: "3", char: "3", comp: "3" };
+    const opt = `<option value="3">3</option><option value="2">2</option><option value="1">1</option><option value="0">0</option>`;
+
+    bodyHtml += `<td class="p-0 align-middle text-center border-start col-highlight-f"><input type="text" class="score-cell-input fw-bold text-primary" style="background:transparent;" id="sum_f_std_${safeStdId}" value="0" readonly tabindex="-1"></td>
+      
+      <td class="p-0 align-middle text-center col-highlight-m" title="คลิกขวาเพื่อดูประวัติ">
+        <input type="number" class="score-cell-input nav-input midterm-std-${safeStdId} sgs-col-midterm" style="${mBg}" value="${midVal}" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'midterm', 'กลางภาค'); return false;" ${mLock}>
+      </td>
+      
+      <td class="p-0 align-middle text-center border-start border-white col-highlight-mr" title="คลิกขวาเพื่อดูประวัติ">
+        <input type="number" class="score-cell-input nav-input midterm-re-std-${safeStdId} text-danger fw-bold sgs-col-midterm-re" style="${mrBg}" value="${midReVal}" placeholder="-" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'midterm_re', 'สอบซ่อม'); return false;" ${mrLock}>
+      </td>
+      
+      <td class="p-0 align-middle text-center border-start col-highlight-e" title="คลิกขวาเพื่อดูประวัติ">
+        <input type="number" class="score-cell-input nav-input final-std-${safeStdId} sgs-col-final" style="${eBg}" value="${finVal}" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'final', 'ปลายภาค'); return false;" ${eLock}>
+      </td>
+      
+      <td class="text-center align-middle text-dark fw-bold border-start col-highlight-total" id="sum_total_std_${safeStdId}" style="font-size: 0.95rem;">0</td>
+      <td class="text-center align-middle text-success fw-bold border-start col-highlight-grade" id="grade_std_${safeStdId}" style="font-size: 1rem;">0</td>
+      
+      <td class="p-0 align-middle text-center border-start col-highlight-mr position-relative">
+        <select class="qual-select remark-select nav-input" data-row="${rowIndex}" data-col="${colIndex++}" data-safeid="${safeStdId}" onchange="calcRow('${stdId}', '${safeStdId}'); updateRemarkInstant('${stdId}', this);" style="width: 100%; height:100%; background: transparent; padding:4px; font-size: 0.85rem; border:none; outline:none; text-align:center;">
+          <option value="" ${remarkVal === '' ? 'selected' : ''}>-</option>
+          <option value="ร" ${remarkVal === 'ร' ? 'selected' : ''}>ร</option>
+          <option value="มส" ${remarkVal === 'มส' ? 'selected' : ''}>มส</option>
+        </select>
+        ${autoMS ? '<div class="text-danger fw-bold position-absolute" style="font-size: 0.45rem; top: 1px; right: 2px; text-align: center;"><i class="fas fa-robot"></i></div>' : ''}
+      </td>
+      
+      <td class="p-0 align-middle text-center border-start ${isQualVisible ? '' : 'd-none'}"><select class="qual-select qual-read nav-input w-100 h-100 border-0 text-center" data-row="${rowIndex}" data-col="${colIndex++}" data-safeid="${safeStdId}">${opt.replace(`value="${q.read}"`, `value="${q.read}" selected`)}</select></td>
+      <td class="p-0 align-middle text-center ${isQualVisible ? '' : 'd-none'}"><select class="qual-select qual-char nav-input w-100 h-100 border-0 text-center" data-row="${rowIndex}" data-col="${colIndex++}" data-safeid="${safeStdId}">${opt.replace(`value="${q.char}"`, `value="${q.char}" selected`)}</select></td>
+      <td class="p-0 align-middle text-center ${isQualVisible ? '' : 'd-none'}"><select class="qual-select qual-comp nav-input w-100 h-100 border-0 text-center" data-row="${rowIndex}" data-col="${colIndex++}" data-safeid="${safeStdId}">${opt.replace(`value="${q.comp}"`, `value="${q.comp}" selected`)}</select></td>
+    </tr>`;
+  });
+  tbody.innerHTML = bodyHtml;
+  reCalcAllRows();
+}
+
+window.toggleScoreColumn = function(colKey, isChecked) {
+    sgsColumnStates[colKey] = isChecked; 
+    
+    const inputs = document.querySelectorAll(`.sgs-col-${colKey}`);
+    inputs.forEach(input => {
+        input.readOnly = !isChecked;
+        if (!isChecked) {
+            input.setAttribute('tabindex', '-1'); 
+            input.style.backgroundColor = '#e9ecef';
+            input.style.opacity = '0.6';
+        } else {
+            input.removeAttribute('tabindex');
+            input.style.backgroundColor = 'transparent';
+            input.style.opacity = '1';
+        }
+    });
+    
+    if (isChecked && inputs.length > 0) {
+        setTimeout(() => inputs[0].focus(), 50);
+    }
+}
+
+function calculateGrade(score) {
+  if (score >= 80) return "4";
+  if (score >= 75) return "3.5";
+  if (score >= 70) return "3";
+  if (score >= 65) return "2.5";
+  if (score >= 60) return "2";
+  if (score >= 55) return "1.5";
+  if (score >= 50) return "1";
+  return "0";
+}
+
+function reCalcAllRows() {
+  let sumFormativeMax = 0;
+  document.querySelectorAll('.ind-score-edit').forEach(el => { sumFormativeMax += parseFloat(el.innerText) || 0; });
+  const fEl = document.getElementById('edit-ratio-f');
+  if(fEl) fEl.innerText = sumFormativeMax;
+
+  const f = sumFormativeMax; 
+  const m = parseFloat(document.getElementById('edit-ratio-m').innerText) || 0;
+  const e = parseFloat(document.getElementById('edit-ratio-e').innerText) || 0;
+  const totalRatio = f + m + e;
+  
+  const totEl = document.getElementById('edit-ratio-total');
+  if(totEl) {
+     totEl.innerText = totalRatio;
+     totEl.style.color = (totalRatio !== 100) ? 'red' : ''; 
+  }
+
+  currentScoreStudents.forEach(std => {
+      calcRow(String(std[0]).trim(), normID(std[0]));
+  });
+}
+
+let autoSaveTimer = null; 
+let retrySaveTimer = null;
+
+function calcRow(stdId, safeStdId) {
+  if (!safeStdId) safeStdId = normID(stdId);
+
+  let sumFormative = 0;
+  const maxScores = Array.from(document.querySelectorAll('.ind-score-edit')).map(el => parseFloat(el.innerText) || 0);
+  const maxM = parseFloat(document.getElementById('edit-ratio-m').innerText) || 0;
+  const maxE = parseFloat(document.getElementById('edit-ratio-e').innerText) || 0;
+  
+  document.querySelectorAll(`.formative-std-${safeStdId}`).forEach((input, i) => {
+    const val = parseFloat(input.value) || 0;
+    input.style.color = val > (maxScores[i] || 0) ? 'red' : '';
+    sumFormative += val;
+  });
+  
+  const sumEl = document.getElementById(`sum_f_std_${safeStdId}`);
+  if(sumEl) sumEl.value = sumFormative;
+  
+  const midInput = document.querySelector(`.midterm-std-${safeStdId}`);
+  const midReInput = document.querySelector(`.midterm-re-std-${safeStdId}`);
+  const midVal = midInput && midInput.value !== '' ? parseFloat(midInput.value) : 0;
+  const midReVal = midReInput && midReInput.value !== '' ? parseFloat(midReInput.value) : NaN; 
+  
+  let effectiveMidterm = midVal; 
+  if (midInput && midReInput) {
+      if (!isNaN(midReVal)) {
+         effectiveMidterm = midReVal;
+         midInput.style.textDecoration = "line-through";
+         midInput.style.opacity = "0.4";
+      } else {
+         midInput.style.textDecoration = "none";
+         midInput.style.opacity = "1";
+      }
+      midInput.style.color = midVal > maxM ? 'red' : '';
+      midReInput.style.color = effectiveMidterm > maxM ? 'red' : '#dc3545';
+  }
+  
+  const finInput = document.querySelector(`.final-std-${safeStdId}`);
+  const finVal = finInput && finInput.value !== '' ? parseFloat(finInput.value) : 0;
+  if (finInput) finInput.style.color = finVal > maxE ? 'red' : '';
+
+  const total = sumFormative + effectiveMidterm + finVal;
+  const totalCell = document.getElementById(`sum_total_std_${safeStdId}`);
+  const gradeCell = document.getElementById(`grade_std_${safeStdId}`);
+  if(totalCell) totalCell.innerText = total;
+
+  const remarkSelect = document.querySelector(`.remark-select[data-safeid="${safeStdId}"]`);
+  const remark = remarkSelect ? remarkSelect.value.trim() : '';
+
+  if (remarkSelect) {
+      if(remark === 'ร' || remark === 'มส') remarkSelect.classList.add('text-danger', 'fw-bold');
+      else remarkSelect.classList.remove('text-danger', 'fw-bold');
+  }
+
+  if(gradeCell && totalCell) {
+      if (remark === 'ร' || remark === 'มส') {
+         gradeCell.innerText = remark;
+         totalCell.className = "text-center align-middle text-white fw-bold fs-6 border-start bg-danger";
+         gradeCell.className = "text-center align-middle text-white fw-bold fs-5 border-start bg-danger";
+      } else {
+         gradeCell.innerText = typeof calculateGrade === 'function' ? calculateGrade(total) : "0";
+         if(total < 50) { 
+           totalCell.className = "text-center align-middle text-white fw-bold fs-6 border-start bg-danger";
+           gradeCell.className = "text-center align-middle text-white fw-bold fs-5 border-start bg-danger"; 
+         } else { 
+           totalCell.className = "text-center align-middle text-dark fw-bold fs-6 border-start col-highlight-total";
+           gradeCell.className = "text-center align-middle text-success fw-bold fs-5 border-start col-highlight-grade";
+         }
+      }
+  }
+
+  const btn = document.getElementById('btnSaveScores');
+  if (typeof isHeaderEditMode !== 'undefined' && !isHeaderEditMode && btn) {
+      if (typeof autoSaveTimer !== 'undefined') clearTimeout(autoSaveTimer);
+      btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin me-2"></i>รอเซฟ (3 วิ)...';
+      btn.className = "btn btn-outline-warning text-dark shadow-sm px-4 fw-bold"; 
+      autoSaveTimer = setTimeout(() => { 
+          if (typeof saveAllInOneScores === 'function') saveAllInOneScores(true); 
+      }, 3000); 
+  }
+}
+
+function saveAllInOneScores(isSilent = false) {
+  if(isSavingScores) {
+      if(isSilent) {
+          clearTimeout(retrySaveTimer);
+          retrySaveTimer = setTimeout(() => saveAllInOneScores(true), 1500);
+      }
+      return; 
+  }
+  isSavingScores = true;
+
+  const val = document.getElementById('scoreClassSelect').value;
+  const btn = document.getElementById('btnSaveScores');
+  const originalBtnClass = "btn btn-primary rounded-pill shadow-sm px-4 fw-bold";
+  const originalText = '<i class="fas fa-save me-2"></i>บันทึกข้อมูลทั้งหมด';
+
+  if(!val) { isSavingScores = false; return; }
+  const item = JSON.parse(val);
+  const user = getSessionUser();
+  
+  const f = parseFloat(document.getElementById('edit-ratio-f').innerText) || 0;
+  const m = parseFloat(document.getElementById('edit-ratio-m').innerText) || 0;
+  const e = parseFloat(document.getElementById('edit-ratio-e').innerText) || 0;
+  
+  const _doSaveAllInOne = () => {
+  if (!isSilent && btn) {
+     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...';
+     btn.className = originalBtnClass;
+     btn.disabled = true;
+  } else if (btn) {
+     btn.innerHTML = '<i class="fas fa-sync fa-spin me-2"></i>กำลัง Auto-Save...';
+     btn.className = "btn btn-info text-white shadow-sm px-4 fw-bold";
+  }
+
+  try {
+      const newIndicators = [];
+      const names = document.querySelectorAll('.ind-name-edit');
+      const scores = document.querySelectorAll('.ind-score-edit');
+      names.forEach((el, i) => {
+        let oldCode = currentScoreConfig.indicators[i] && currentScoreConfig.indicators[i].code ? currentScoreConfig.indicators[i].code : '';
+        let oldDesc = currentScoreConfig.indicators[i] && currentScoreConfig.indicators[i].description ? currentScoreConfig.indicators[i].description : '';
+        newIndicators.push({ 
+           code: oldCode, 
+           name: el.textContent.trim() || oldCode || 'ชิ้นงาน/สอบ', 
+           score: parseFloat(scores[i].textContent) || 0, 
+           description: oldDesc 
+        });
+      });
+
+      currentScoreConfig.indicators = newIndicators;
+      currentScoreConfig.ratio = `${f}:${m}:${e}`;
+
+      const payload = {
+        subjectCode: item[0], className: item[2], term: user.currentTerm, year: user.currentYear, teacherId: user.id,
+        newConfig: { formative: f, midterm: m, final: e, indicators: newIndicators },
+        scoreRecords: [], qualRecords: [], gradeRecords: []
+      };
+
+      currentScoreStudents.forEach(std => {
+        const stdId = String(std[0]).trim();
+        const safeStdId = normID(stdId); 
+        
+        document.querySelectorAll(`.formative-std-${safeStdId}`).forEach((input, i) => {
+          const indName = `formative_${i}`; 
+          const val = input.value !== '' ? parseFloat(input.value) : ''; 
+          payload.scoreRecords.push({ studentId: stdId, subjectCode: item[0], term: user.currentTerm, year: user.currentYear, indicatorId: indName, score: val });
+        });
+
+        const midInput = document.querySelector(`.midterm-std-${safeStdId}`);
+        if (midInput) payload.scoreRecords.push({ studentId: stdId, subjectCode: item[0], term: user.currentTerm, year: user.currentYear, indicatorId: 'midterm', score: midInput.value !== '' ? parseFloat(midInput.value) : '' });
+
+        const midReInput = document.querySelector(`.midterm-re-std-${safeStdId}`);
+        if (midReInput) payload.scoreRecords.push({ studentId: stdId, subjectCode: item[0], term: user.currentTerm, year: user.currentYear, indicatorId: 'midterm_re', score: midReInput.value !== '' ? parseFloat(midReInput.value) : '' });
+
+        const finInput = document.querySelector(`.final-std-${safeStdId}`);
+        if (finInput) payload.scoreRecords.push({ studentId: stdId, subjectCode: item[0], term: user.currentTerm, year: user.currentYear, indicatorId: 'final', score: finInput.value !== '' ? parseFloat(finInput.value) : '' });
+
+        const remarkInput = document.querySelector(`.remark-select[data-safeid="${safeStdId}"]`);
+        const remarkVal = remarkInput ? remarkInput.value.trim() : '';
+        const finalRemark = remarkVal === '' ? '-' : remarkVal; 
+
+        payload.scoreRecords.push({ studentId: stdId, subjectCode: item[0], term: user.currentTerm, year: user.currentYear, indicatorId: 'remark', score: finalRemark });
+
+        const tCell = document.getElementById(`sum_total_std_${safeStdId}`);
+        const gCell = document.getElementById(`grade_std_${safeStdId}`);
+        payload.gradeRecords.push({ 
+            studentId: stdId, 
+            subjectCode: item[0], 
+            totalScore: tCell ? tCell.innerText : '0', 
+            grade: gCell ? gCell.innerText : '0',
+            remark: finalRemark
+        });
+        
+        const c1 = document.getElementById(`c1_${safeStdId}`) ? document.getElementById(`c1_${safeStdId}`).value : '';
+        const c2 = document.getElementById(`c2_${safeStdId}`) ? document.getElementById(`c2_${safeStdId}`).value : '';
+        const c3 = document.getElementById(`c3_${safeStdId}`) ? document.getElementById(`c3_${safeStdId}`).value : '';
+        const c4 = document.getElementById(`c4_${safeStdId}`) ? document.getElementById(`c4_${safeStdId}`).value : '';
+        const cTot = document.getElementById(`cTot_${safeStdId}`) ? document.getElementById(`cTot_${safeStdId}`).innerText : '0';
+        const cGrd = document.getElementById(`cGrd_${safeStdId}`) ? document.getElementById(`cGrd_${safeStdId}`).innerText : '0';
+
+        const r1 = document.getElementById(`r1_${safeStdId}`) ? document.getElementById(`r1_${safeStdId}`).value : '';
+        const r2 = document.getElementById(`r2_${safeStdId}`) ? document.getElementById(`r2_${safeStdId}`).value : '';
+        const r3 = document.getElementById(`r3_${safeStdId}`) ? document.getElementById(`r3_${safeStdId}`).value : '';
+        const r4 = document.getElementById(`r4_${safeStdId}`) ? document.getElementById(`r4_${safeStdId}`).value : '';
+        const rTot = document.getElementById(`rTot_${safeStdId}`) ? document.getElementById(`rTot_${safeStdId}`).innerText : '0';
+        const rGrd = document.getElementById(`rGrd_${safeStdId}`) ? document.getElementById(`rGrd_${safeStdId}`).innerText : '0';
+
+        payload.qualRecords.push({ 
+            studentId: stdId, subjectCode: item[0], term: user.currentTerm, year: user.currentYear, 
+            char1: c1, char2: c2, char3: c3, char4: c4, charTotal: cTot, char: cGrd, 
+            read1: r1, read2: r2, read3: r3, read4: r4, readTotal: rTot, read: rGrd  
+        });
+      });
+
+      safeRun(3)
+        .withFailureHandler(err => {
+          isSavingScores = false; 
+          if(btn) { btn.disabled = false; btn.innerHTML = originalText; btn.className = originalBtnClass; }
+          if(!isSilent) showAlert("❌ ขัดข้องที่ระบบเซิร์ฟเวอร์: " + err.message);
+        })
+        .withSuccessHandler(res => {
+          isSavingScores = false; 
+          if(btn) { btn.disabled = false; btn.innerHTML = originalText; btn.className = originalBtnClass; }
+          
+          if (res && res.status === 'error') {
+              showToast("❌ ขัดข้อง: " + res.message, "danger");
+              return;
+          }
+
+          document.getElementById('scoreRatioBadge').innerText = `สัดส่วนปัจจุบัน ${f}:${m}:${e}`;
+
+          if (!isSilent) {
+             let wasInEditMode = isHeaderEditMode;
+             isHeaderEditMode = false;
+             const btnEdit = document.getElementById('btnEditHeader');
+             if(btnEdit) {
+                btnEdit.className = "btn btn-outline-primary shadow-sm px-3 fw-bold me-2";
+                btnEdit.innerHTML = '<i class="fas fa-th me-2"></i>แก้ไขหัวตาราง';
+             }
+             showToast("บันทึกข้อมูลคะแนนเรียบร้อยแล้ว", "success");
+             if(wasInEditMode) refreshTableOnly(); 
+          } else {
+             showToast("ระบบบันทึกอัตโนมัติแล้ว (Auto-Saved)", "info");
+          }
+      }).saveAllInOneWithConfig(payload);
+
+  } catch(e) {
+      isSavingScores = false;
+      if(btn) { btn.disabled = false; btn.innerHTML = originalText; btn.className = originalBtnClass; }
+      if(!isSilent) showAlert("❌ UI Error: " + e.message);
+      console.error(e);
+  }
+  }; // end _doSaveAllInOne
+
+  if((f + m + e) !== 100) {
+     if(!isSilent) {
+        Swal.fire({ title: '⚠️ สัดส่วนคะแนนรวมไม่เท่ากับ 100', text: 'ต้องการบันทึกต่อหรือไม่?', icon: 'warning', showCancelButton: true, confirmButtonText: 'บันทึกต่อ', cancelButtonText: 'ยกเลิก' }).then(r => {
+          if (!r.isConfirmed) { isSavingScores = false; return; }
+          _doSaveAllInOne();
+        });
+        return;
+     } else {
+        if(btn) { btn.innerHTML = originalText; btn.className = originalBtnClass; }
+        isSavingScores = false; return;
+     }
+  }
+  _doSaveAllInOne();
+}
+
+function addIndicator() {
+  syncHeaderState();
+  currentScoreConfig.indicators.push({ name: "งานใหม่", score: 10, description: "" });
+  refreshTableOnly();
+}
+
+function removeIndicator(idx) {
+  Swal.fire({ title: 'ยืนยันลบคอลัมน์คะแนนนี้?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก' }).then(r => {
+    if (!r.isConfirmed) return;
+    syncHeaderState();
+    currentScoreConfig.indicators.splice(idx, 1);
+    refreshTableOnly();
+  });
+}
+
+function showIndicatorDetail(idx) {
+  if (!currentScoreConfig || !currentScoreConfig.indicators[idx]) return;
+  const ind = currentScoreConfig.indicators[idx];
+  
+  const desc = ind.description ? ind.description : 'ไม่ได้ระบุรายละเอียดหรือจุดประสงค์ไว้ครับ';
+  const scoreInfo = `<span class="badge bg-warning text-dark ms-2">คะแนนเต็ม ${ind.score}</span>`;
+  
+  document.getElementById('indicatorModalTitle').innerHTML = `<i class="fas fa-tag me-2"></i>${ind.name} ${scoreInfo}`;
+  document.getElementById('indicatorModalDesc').innerText = desc;
+  
+  const modal = new bootstrap.Modal(document.getElementById('indicatorDetailModal'));
+  modal.show();
+}
+
+window.showIndicatorEdit = function(idx) {
+  if (!currentScoreConfig || !currentScoreConfig.indicators[idx]) return;
+  const ind = currentScoreConfig.indicators[idx];
+
+  document.getElementById('editIndIdx').value = idx;
+  document.getElementById('editIndDesc').value = ind.description || '';
+
+  const scoreInfo = `<span class="badge bg-warning text-dark ms-2">คะแนนเต็ม ${ind.score}</span>`;
+  document.getElementById('indicatorEditModalTitle').innerHTML = `<i class="fas fa-edit me-2"></i>${ind.name} ${scoreInfo}`;
+
+  const modal = new bootstrap.Modal(document.getElementById('indicatorEditModal'));
+  modal.show();
+};
+
+window.saveIndicatorDetail = function() {
+  const idx = document.getElementById('editIndIdx').value;
+  const newDesc = document.getElementById('editIndDesc').value.trim();
+
+  if (idx === "") return;
+
+  currentScoreConfig.indicators[idx].description = newDesc;
+
+  const modalEl = document.getElementById('indicatorEditModal');
+  const modalObj = bootstrap.Modal.getInstance(modalEl);
+  if (modalObj) modalObj.hide();
+  
+  showToast('⏳ กำลังบันทึกเป็นฐานข้อมูล...', 'info');
+
+  const classData = JSON.parse(document.getElementById('scoreClassSelect').value);
+  const subjectCode = classData[0];
+  const className = classData[2];
+  const ratios = currentScoreConfig.ratio.split(':');
+  const user = getSessionUser();
+
+  const payload = {
+    subjectCode: subjectCode,
+    className: className,
+    term: user.currentTerm,
+    year: user.currentYear,
+    teacherId: user.id,
+    formative: parseInt(ratios[0]) || 70,
+    midterm: parseInt(ratios[1]) || 10,
+    final: parseInt(ratios[2]) || 20,
+    indicators: currentScoreConfig.indicators 
+  };
+
+  safeRun(3)
+    .withFailureHandler(function(err) {
+      showToast('❌ ผิดพลาด: ' + err.message, 'danger');
+    })
+    .withSuccessHandler(function(res) {
+    if(res.status === 'success') {
+      showToast('✅ อัปเดตรายละเอียดจุดประสงค์เรียบร้อยแล้ว!', 'success');
+      refreshTableOnly();
+    } else {
+      showToast('❌ ผิดพลาด: ' + res.message, 'danger');
+    }
+  }).saveSubjectConfig(payload);
+};
+
+// ==========================================
+// 🚀 SMART COPY-PASTE (ส่งออก SGS)
+// ==========================================
+
+if(!document.getElementById('sgsSelectionStyles')) {
+    const style = document.createElement('style');
+    style.id = 'sgsSelectionStyles';
+    style.innerHTML = `
+        .sgs-cell { cursor: crosshair; user-select: none; border: 1px solid #dee2e6; transition: background 0.1s; }
+        .sgs-selected { background-color: #0d6efd !important; color: white !important; font-weight: bold; outline: 2px solid #0a58ca; position: relative; z-index: 5; }
+    `;
+    document.head.appendChild(style);
+}
+
+let isDraggingSGS = false;
+let startSGS = { r: -1, c: -1 };
+let endSGS = { r: -1, c: -1 };
+window.sgsCurrentMode = 'normal'; 
+window.sgsScrollInterval = null; 
+window.sgsGlobalListenersAdded = false; 
+
+function openSGSExportModal() {
+  if (!currentScoreStudents || currentScoreStudents.length === 0) {
+     { showAlert("⚠️ ไม่พบข้อมูลนักเรียน กรุณาโหลดรายวิชาก่อนครับ"); return; }
+  }
+  renderSGSGrid('normal'); 
+  const modal = new bootstrap.Modal(document.getElementById('sgsExportModal'));
+  modal.show();
+}
+
+function renderSGSGrid(mode) {
+  window.sgsCurrentMode = mode;
+  const normID = (id) => { let clean = String(id).replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, ''); return clean || '0'; };
+
+  let sortedStudents = [...currentScoreStudents].sort((a, b) => {
+      let idA = parseInt(String(a[0]).replace(/[^0-9]/g, '')) || 0;
+      let idB = parseInt(String(b[0]).replace(/[^0-9]/g, '')) || 0;
+      return idA - idB;
+  });
+
+  let buttonsHtml = `
+     <div class="d-flex w-100 justify-content-between mb-3 align-items-center">
+         <div class="btn-group shadow-sm">
+             <button class="btn btn-sm ${mode === 'normal' ? 'btn-secondary' : 'btn-outline-secondary'} fw-bold px-3" onclick="renderSGSGrid('normal')"><i class="fas fa-table me-2"></i>ตาราง ปพ.5 เดิม</button>
+             <button class="btn btn-sm ${mode === 'magic' ? 'btn-success' : 'btn-outline-success'} fw-bold px-3" onclick="renderSGSGrid('magic')"><i class="fas fa-magic me-2"></i>แปลงเป็น SGS (แยก 7 ช่อง)</button>
+             <button class="btn btn-sm ${mode === 'qual' ? 'btn-info text-white' : 'btn-outline-info'} fw-bold px-3" onclick="renderSGSGrid('qual')"><i class="fas fa-star me-2"></i>คุณลักษณะฯ (แปลง 0-3)</button>
+         </div>
+         <button class="btn btn-primary fw-bold shadow-sm px-4 rounded-pill" onclick="copySGSSelected()"><i class="fas fa-copy me-2"></i>คัดลอกส่วนที่เลือก (Ctrl+C)</button>
+     </div>
+     <div class="alert alert-info border-0 shadow-sm small py-2 mb-3">
+       ${mode === 'qual' 
+         ? '<i class="fas fa-magic me-1"></i> <b>ระบบแปลงคะแนนอัจฉริยะ:</b> ดึงคะแนนดิบแต่ละช่วง (เต็ม 25) มาคำนวณตัดระดับ 0-3 ให้อัตโนมัติ (≥20=3, ≥17.5=2, ≥12.5=1, <12.5=0)' 
+         : '<i class="fas fa-mouse-pointer me-1"></i> <b>ทริค:</b> คลิกค้างแล้วลากคลุมช่องคะแนนที่ต้องการ (เหมือน Excel) จอจะเลื่อนอัตโนมัติ แล้วกด <b>Ctrl+C</b> เพื่อคัดลอก'}
+     </div>
+  `;
+  document.getElementById('sgsActionButtons').innerHTML = buttonsHtml;
+
+  let theadHtml = `<tr>
+    <th class="align-middle bg-light text-muted" style="width: 50px;">ที่</th>
+    <th class="align-middle text-primary bg-light" style="width: 100px;">รหัสนักเรียน</th>
+    <th class="align-middle text-start bg-light" style="min-width: 150px;">ชื่อ-สกุล</th>`;
+
+  if (mode === 'normal') {
+      currentScoreConfig.indicators.forEach((ind) => {
+         theadHtml += `<th class="bg-light">${ind.name}<br><small class="text-muted">(${ind.score})</small></th>`;
+      });
+      let maxMid = parseFloat(document.getElementById('edit-ratio-m')?.innerText) || 20;
+      let maxFin = parseFloat(document.getElementById('edit-ratio-e')?.innerText) || 30;
+      theadHtml += `<th class="table-warning">กลางภาค<br><small class="text-muted">(${maxMid})</small></th>`;
+      theadHtml += `<th class="table-danger">ปลายภาค<br><small class="text-muted">(${maxFin})</small></th>`;
+  } else if (mode === 'magic') {
+      let magicHeaders = ["ย่อย 1", "ย่อย 2", "ย่อย 3", "กลางภาค", "ย่อย 4", "ย่อย 5", "ปลายภาค"];
+      magicHeaders.forEach(h => {
+          if (h.includes("กลางภาค")) theadHtml += `<th class="table-warning">${h}</th>`;
+          else if (h.includes("ปลายภาค")) theadHtml += `<th class="table-danger">${h}</th>`;
+          else theadHtml += `<th class="bg-light">${h}</th>`;
+      });
+      theadHtml += `<th class="bg-secondary text-white border-start" style="width:60px;">รวม</th><th class="bg-success text-white" style="width:60px;">เกรด</th>`;
+  } else if (mode === 'qual') {
+      theadHtml += `
+        <th class="table-primary border-start">คุณฯ 1</th><th class="table-primary">คุณฯ 2</th><th class="table-primary">คุณฯ 3</th><th class="table-primary">คุณฯ 4</th>
+        <th class="table-success border-start">อ่านฯ 1</th><th class="table-success">อ่านฯ 2</th><th class="table-success">อ่านฯ 3</th><th class="table-success">อ่านฯ 4</th>
+      `;
+  }
+  theadHtml += `</tr>`;
+  document.getElementById('sgsPreviewHead').innerHTML = theadHtml;
+
+  let tbodyHtml = '';
+  sortedStudents.forEach((std, rIdx) => {
+      const safeStdId = normID(std[0]);
+      let rowHtml = `<tr>
+        <td class="text-muted text-center">${rIdx + 1}</td>
+        <td class="fw-bold text-primary font-monospace text-center">${std[0]}</td>
+        <td class="text-start text-truncate" style="max-width: 150px;">${std[2]}</td>`;
+
+      let cIdx = 0;
+      
+      if (mode === 'qual') {
+          const scale25To3 = (scoreStr) => {
+              if (scoreStr === '' || scoreStr === undefined || scoreStr === null) return '';
+              let s = parseFloat(scoreStr);
+              if (isNaN(s)) return '';
+              if (s >= 20) return 3;
+              if (s >= 17.5) return 2;
+              if (s >= 12.5) return 1;
+              return 0;
+          };
+
+          for(let i=1; i<=4; i++) {
+              let val = document.getElementById(`c${i}_${safeStdId}`)?.value;
+              let bg = val ? 'table-primary text-dark fw-bold' : '';
+              rowHtml += `<td class="sgs-cell align-middle fs-6 ${bg}" data-r="${rIdx}" data-c="${cIdx++}">${scale25To3(val)}</td>`;
+          }
+          for(let i=1; i<=4; i++) {
+              let val = document.getElementById(`r${i}_${safeStdId}`)?.value;
+              let bg = val ? 'table-success text-dark fw-bold' : '';
+              rowHtml += `<td class="sgs-cell align-middle fs-6 ${bg}" data-r="${rIdx}" data-c="${cIdx++}">${scale25To3(val)}</td>`;
+          }
+      } 
+      else {
+          let hasData = false;
+          let rawMidStr = document.querySelector(`.midterm-std-${safeStdId}`)?.value || '';
+          let rawMidReStr = document.querySelector(`.midterm-re-std-${safeStdId}`)?.value || '';
+          if (rawMidStr !== '' || rawMidReStr !== '') hasData = true;
+          let finalMid = (parseFloat(rawMidReStr) || 0) > 0 ? (parseFloat(rawMidReStr) || 0) : (parseFloat(rawMidStr) || 0);
+
+          let rawFinStr = document.querySelector(`.final-std-${safeStdId}`)?.value || '';
+          if (rawFinStr !== '') hasData = true;
+          let finalFin = parseFloat(rawFinStr) || 0;
+
+          let rawForms = [];
+          let rawFormSum = 0;
+          currentScoreConfig.indicators.forEach((ind, idx) => {
+              let formStr = document.querySelectorAll(`.formative-std-${safeStdId}`)[idx]?.value || '';
+              if (formStr !== '') hasData = true;
+              rawForms.push(formStr);
+              rawFormSum += parseFloat(formStr) || 0;
+          });
+
+          if (mode === 'normal') {
+              rawForms.forEach(val => { rowHtml += `<td class="sgs-cell align-middle fs-6" data-r="${rIdx}" data-c="${cIdx++}">${val}</td>`; });
+              rowHtml += `<td class="sgs-cell align-middle fs-6 table-warning fw-bold text-dark" data-r="${rIdx}" data-c="${cIdx++}">${hasData ? (rawMidReStr !== '' ? rawMidReStr : rawMidStr) : ''}</td>`;
+              rowHtml += `<td class="sgs-cell align-middle fs-6 table-danger fw-bold text-dark" data-r="${rIdx}" data-c="${cIdx++}">${hasData ? rawFinStr : ''}</td>`;
+          } else if (mode === 'magic') {
+              if (!hasData) {
+                  for(let i=0; i<7; i++) rowHtml += `<td class="sgs-cell align-middle" data-r="${rIdx}" data-c="${cIdx++}"></td>`;
+                  rowHtml += `<td class="align-middle fw-bold text-muted bg-light border-start">-</td><td class="align-middle fw-bold text-muted bg-light">-</td>`;
+              } else {
+                  let sgsMid = finalMid; 
+                  let sgsFin = finalFin;
+                  let sgsFormTotal = rawFormSum; 
+
+                  let forms = [0, 0, 0, 0, 0];
+                  let base = Math.floor(sgsFormTotal / 5);
+                  let rem = Math.round((sgsFormTotal - (base * 5)) * 100) / 100;
+
+                  for(let i=0; i<5; i++) forms[i] = base;
+                  
+                  let idx = 0;
+                  while (rem >= 1 && idx < 5) { forms[idx] += 1; rem -= 1; idx++; }
+                  if (rem > 0 && idx < 5) { forms[idx] += parseFloat(rem.toFixed(2)); }
+
+                  let sgsRow = [forms[0], forms[1], forms[2], sgsMid, forms[3], forms[4], sgsFin];
+
+                  sgsRow.forEach((val, index) => {
+                      let bgClass = '';
+                      if (index === 3) bgClass = 'table-warning fw-bold text-dark';
+                      else if (index === 6) bgClass = 'table-danger fw-bold text-dark';
+                      rowHtml += `<td class="sgs-cell align-middle fs-6 ${bgClass}" data-r="${rIdx}" data-c="${cIdx++}">${val}</td>`;
+                  });
+
+                  let totalSgs = Math.round((sgsFormTotal + sgsMid + sgsFin) * 100) / 100;
+                  let gradeSgs = typeof calculateGrade === 'function' ? calculateGrade(totalSgs) : '0';
+                  let gradeClass = totalSgs < 50 ? 'text-danger' : 'text-success';
+                  
+                  rowHtml += `<td class="align-middle fw-bold bg-light border-start text-dark">${totalSgs}</td>`;
+                  rowHtml += `<td class="align-middle fw-bold bg-light ${gradeClass} fs-5">${gradeSgs}</td>`;
+              }
+          }
+      }
+
+      rowHtml += `</tr>`;
+      tbodyHtml += rowHtml;
+  });
+
+  document.getElementById('sgsPreviewBody').innerHTML = tbodyHtml;
+  if (typeof initSGSDragSelection === 'function') initSGSDragSelection(); 
+}
+
+function initSGSDragSelection() {
+    const tbody = document.getElementById('sgsPreviewBody');
+    if(!tbody) return;
+
+    const newTbody = tbody.cloneNode(true);
+    tbody.parentNode.replaceChild(newTbody, tbody);
+
+    newTbody.addEventListener('mousedown', function(e) {
+        const td = e.target.closest('.sgs-cell');
+        if(!td) return;
+        isDraggingSGS = true;
+        startSGS = { r: parseInt(td.dataset.r), c: parseInt(td.dataset.c) };
+        endSGS = { r: parseInt(td.dataset.r), c: parseInt(td.dataset.c) };
+        drawSGSSelection(newTbody);
+        e.preventDefault(); 
+    });
+
+    newTbody.addEventListener('mouseover', function(e) {
+        if(!isDraggingSGS) return;
+        const td = e.target.closest('.sgs-cell');
+        if(!td) return;
+        endSGS = { r: parseInt(td.dataset.r), c: parseInt(td.dataset.c) };
+        drawSGSSelection(newTbody);
+    });
+
+    if (!window.sgsGlobalListenersAdded) {
+        window.sgsGlobalListenersAdded = true;
+        
+        document.addEventListener('mousemove', function(e) {
+            if(!isDraggingSGS) return;
+            const scrollContainer = document.getElementById('sgsPreviewTable')?.parentElement;
+            if(!scrollContainer) return;
+            
+            const rect = scrollContainer.getBoundingClientRect();
+            const threshold = 50; 
+            
+            clearInterval(window.sgsScrollInterval); 
+            
+            if (e.clientY >= rect.bottom - threshold && e.clientY <= rect.bottom + 50) {
+                window.sgsScrollInterval = setInterval(() => {
+                    scrollContainer.scrollTop += 20; 
+                    updateSGSSelectionFromPoint(e.clientX, Math.min(e.clientY, rect.bottom - 10)); 
+                }, 30);
+            } 
+            else if (e.clientY <= rect.top + threshold + 40 && e.clientY >= rect.top - 50) {
+                window.sgsScrollInterval = setInterval(() => {
+                    scrollContainer.scrollTop -= 20; 
+                    updateSGSSelectionFromPoint(e.clientX, Math.max(e.clientY, rect.top + 50));
+                }, 30);
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            isDraggingSGS = false;
+            clearInterval(window.sgsScrollInterval); 
+        });
+    }
+}
+
+function updateSGSSelectionFromPoint(x, y) {
+    const elements = document.elementsFromPoint(x, y);
+    if (!elements) return;
+    const td = elements.find(el => el.classList && el.classList.contains('sgs-cell'));
+    if (td) {
+        endSGS = { r: parseInt(td.dataset.r), c: parseInt(td.dataset.c) };
+        const currentTbody = document.getElementById('sgsPreviewBody');
+        if(currentTbody) drawSGSSelection(currentTbody);
+    }
+}
+
+function drawSGSSelection(tbody) {
+    const minR = Math.min(startSGS.r, endSGS.r);
+    const maxR = Math.max(startSGS.r, endSGS.r);
+    const minC = Math.min(startSGS.c, endSGS.c);
+    const maxC = Math.max(startSGS.c, endSGS.c);
+
+    tbody.querySelectorAll('.sgs-cell').forEach(td => {
+        const r = parseInt(td.dataset.r);
+        const c = parseInt(td.dataset.c);
+        if (r >= minR && r <= maxR && c >= minC && c <= maxC) {
+            td.classList.add('sgs-selected');
+        } else {
+            td.classList.remove('sgs-selected');
+        }
+    });
+}
+
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        const sgsModal = document.getElementById('sgsExportModal');
+        if (sgsModal && sgsModal.classList.contains('show')) {
+            const selectedCells = document.querySelectorAll('.sgs-selected');
+            if (selectedCells.length > 0) {
+                e.preventDefault();
+                copySGSSelected();
+            }
+        }
+    }
+});
+
+window.copySGSSelected = function() {
+    const tbody = document.getElementById('sgsPreviewBody');
+    if(!tbody) return;
+
+    const selectedCells = tbody.querySelectorAll('.sgs-selected');
+    if(selectedCells.length === 0) { showAlert('⚠️ กรุณาคลิกค้างแล้วลากคลุมช่องคะแนนที่ต้องการก่อนคัดลอกครับ'); return; }
+
+    const minR = Math.min(startSGS.r, endSGS.r);
+    const maxR = Math.max(startSGS.r, endSGS.r);
+    const minC = Math.min(startSGS.c, endSGS.c);
+    const maxC = Math.max(startSGS.c, endSGS.c);
+
+    let copyString = "";
+    for(let r = minR; r <= maxR; r++) {
+        let rowVals = [];
+        for(let c = minC; c <= maxC; c++) {
+            const td = tbody.querySelector(`.sgs-cell[data-r="${r}"][data-c="${c}"]`);
+            if (td && td.classList.contains('sgs-selected')) {
+                rowVals.push(td.innerText.trim());
+            } else {
+                rowVals.push(""); 
+            }
+        }
+        copyString += rowVals.join('\t') + '\n';
+    }
+
+    navigator.clipboard.writeText(copyString.trimEnd()).then(() => {
+        if (typeof showToast === 'function') showToast('✅ คัดลอกตารางลง Clipboard เรียบร้อย! (พร้อมวาง)', 'success');
+        else showAlert('คัดลอกสำเร็จ! นำไปคลิกขวาวางใน SGS ได้เลยครับ');
+    }).catch(err => showAlert('เบราว์เซอร์ไม่อนุญาตให้คัดลอก: ' + err));
+}
+
+function updateRemarkInstant(stdId, selectElement) {
+   const user = getSessionUser();
+   const val = document.getElementById('scoreClassSelect').value;
+   if(!val) return;
+   
+   const item = JSON.parse(val);
+   const subjectCode = item[0];
+   const remarkVal = selectElement.value;
+
+   selectElement.style.opacity = '0.5';
+
+   safeRun(3).withSuccessHandler(res => {
+      selectElement.style.opacity = '1';
+      if(res.success) {
+         let msg = res.val === '' ? 'ล้างค่าหมายเหตุสำเร็จ' : `บันทึก "${res.val}" สำเร็จ!`;
+         showToast(msg, "success"); 
+      } else {
+         showToast("❌ ขัดข้อง: " + res.error, "danger");
+      }
+   }).saveStudentRemarkDirectly(stdId, subjectCode, user.currentTerm, user.currentYear, remarkVal);
+}
+
+// ==========================================
+// 🖨️ ระบบพิมพ์ ปพ.5 (แยกเอกเทศ 100% ป้องกันหน้าหลักรีเฟรช)
+// ==========================================
+// ==========================================
+// 🖨️ ระบบพิมพ์ ปพ.5 (ระบบแผ่นใส Iframe Overlay ป้องกัน Mac/Safari แครช 100%)
+// ==========================================
+window.preparePrintPorPor5 = function(event) {
+    if (event) { event.preventDefault(); event.stopPropagation(); }
+
+    const select = document.getElementById('scoreClassSelect');
+    if(!select || !select.value) { showToast('⚠️ กรุณาเลือกวิชาที่ต้องการพิมพ์ก่อนครับ', 'warning'); return; }
+    
+    const btn = document.getElementById('btnPrintPP5');
+    if(btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังประมวลผล...';
+        btn.disabled = true;
+    }
+
+    const subjectObj = JSON.parse(select.value);
+    const subCode = subjectObj[0];
+    const subName = subjectObj[1];
+    const className = subjectObj[2];
+    const user = getSessionUser();
+    
+    let stats = { grade: {'4':0, '3.5':0, '3':0, '2.5':0, '2':0, '1.5':0, '1':0, '0':0, 'ร':0, 'มส':0}, read: {'3':0, '2':0, '1':0, '0':0}, char: {'3':0, '2':0, '1':0, '0':0}, total: 0 };
+    let studentsToPrint = []; 
+    
+    if (!currentScoreStudents || currentScoreStudents.length === 0) {
+        showToast('⚠️ ไม่พบข้อมูลนักเรียน', 'warning');
+        if(btn) { btn.innerHTML = '<i class="fas fa-print me-1"></i> <span class="d-none d-sm-inline">พิมพ์ ปพ.5</span>'; btn.disabled = false; }
+        return;
+    }
+
+    currentScoreStudents.forEach((std, rowIndex) => {
+        const stdId = String(std[0]).trim();
+        const safeStdId = normID(stdId); 
+        const name = std[2];
+        const no = rowIndex + 1;
+        stats.total++; 
+
+        let formativeScores = [];
+        document.querySelectorAll(`.formative-std-${safeStdId}`).forEach(inp => { formativeScores.push(inp.value !== '' ? parseFloat(inp.value) : ''); });
+
+        let mid = document.querySelector(`.midterm-std-${safeStdId}`)?.value || '';
+        let midRe = document.querySelector(`.midterm-re-std-${safeStdId}`)?.value || '';
+        let fin = document.querySelector(`.final-std-${safeStdId}`)?.value || '';
+        let total = document.getElementById(`sum_total_std_${safeStdId}`)?.innerText || '';
+        let grade = document.getElementById(`grade_std_${safeStdId}`)?.innerText || '';
+        let remark = document.querySelector(`.remark-select[data-safeid="${safeStdId}"]`)?.value || '';
+
+        let readGrd = document.querySelector(`.qual-read[data-safeid="${safeStdId}"]`)?.value || '';
+        let charGrd = document.querySelector(`.qual-char[data-safeid="${safeStdId}"]`)?.value || '';
+        let c1='', c2='', c3='', c4='', cTot='';
+        let r1='', r2='', r3='', r4='', rTot='';
+
+        if (document.getElementById(`rGrd_${safeStdId}`)) {
+            readGrd = document.getElementById(`rGrd_${safeStdId}`).innerText; charGrd = document.getElementById(`cGrd_${safeStdId}`).innerText;
+            c1 = document.getElementById(`c1_${safeStdId}`)?.value || ''; c2 = document.getElementById(`c2_${safeStdId}`)?.value || '';
+            c3 = document.getElementById(`c3_${safeStdId}`)?.value || ''; c4 = document.getElementById(`c4_${safeStdId}`)?.value || '';
+            cTot = document.getElementById(`cTot_${safeStdId}`)?.innerText || '';
+            r1 = document.getElementById(`r1_${safeStdId}`)?.value || ''; r2 = document.getElementById(`r2_${safeStdId}`)?.value || '';
+            r3 = document.getElementById(`r3_${safeStdId}`)?.value || ''; r4 = document.getElementById(`r4_${safeStdId}`)?.value || '';
+            rTot = document.getElementById(`rTot_${safeStdId}`)?.innerText || '';
+        }
+
+        let finalGradeForStat = (remark === 'ร' || remark === 'มส') ? remark : grade;
+        if(stats.grade[finalGradeForStat] !== undefined) stats.grade[finalGradeForStat]++;
+        if(readGrd !== "") stats.read[readGrd]++;
+        if(charGrd !== "") stats.char[charGrd]++;
+
+        let attPct = currentAttStats[safeStdId] || '-';
+        let attObj = currentAttDetails[safeStdId] || { present: '-', late: '-', leave: '-', absent: '-', records: {} };
+
+        studentsToPrint.push({ 
+            no: no, id: stdId, name: name, 
+            formativeScores: formativeScores, mid: mid, midRe: midRe, fin: fin, total: total, grade: finalGradeForStat, 
+            attPct: attPct, attPresent: attObj.present, attLate: attObj.late, attLeave: attObj.leave, attAbsent: attObj.absent,
+            attRecords: attObj.records || {}, 
+            readGrd: readGrd, charGrd: charGrd,
+            c1: c1, c2: c2, c3: c3, c4: c4, cTot: cTot,
+            r1: r1, r2: r2, r3: r3, r4: r4, rTot: rTot
+        });
+    });
+    
+    google.script.run.withSuccessHandler(res => {
+         const sys = res.sys || {};
+         const hrList = res.hr || [];
+         
+         let t1 = "..........................................................", t2 = "..........................................................";
+         const hrMatch = hrList.find(h => h.cls === className);
+         if(hrMatch) { t1 = hrMatch.t1 || t1; t2 = hrMatch.t2 || t2; }
+         
+         const c = subCode.charAt(0);
+         let deptName = ".......................................................";
+         let headName = sys.academic_head || "..........................................................";
+         if(c === 'ท') { deptName = 'ภาษาไทย'; headName = sys.head_thai; }
+         else if(c === 'ค') { deptName = 'คณิตศาสตร์'; headName = sys.head_math; }
+         else if(c === 'ว') { deptName = 'วิทยาศาสตร์และเทคโนโลยี'; headName = sys.head_sci; }
+         else if(c === 'ส') { deptName = 'สังคมศึกษา ศาสนา และวัฒนธรรม'; headName = sys.head_soc; }
+         else if(c === 'พ') { deptName = 'สุขศึกษาและพลศึกษา'; headName = sys.head_pe; }
+         else if(c === 'ศ') { deptName = 'ศิลปะ'; headName = sys.head_art; }
+         else if(c === 'ง') { deptName = 'การงานอาชีพ'; headName = sys.head_occ; }
+         else if(c === 'อ') { deptName = 'ภาษาต่างประเทศ'; headName = sys.head_eng; }
+         else if(c === 'ก' || c === 'I' || c === 'i') { deptName = 'กิจกรรมพัฒนาผู้เรียน'; headName = sys.head_act; }
+
+         const isJunior = className.includes('ม.1') || className.includes('ม.2') || className.includes('ม.3');
+
+         const payload = {
+             subCode: subCode, subName: subName, className: className, classNum: className.replace('ม.', ''),
+             user: user, sys: sys, stats: stats, students: studentsToPrint,
+             config: currentScoreConfig,
+             attSessions: currentAttSessions, 
+             t1: t1, t2: t2, deptName: deptName, headName: headName,
+             p_name: sys.principal_name || '..........................................................',
+             m_head: sys.measure_head || '..........................................................',
+             a_head: sys.academic_head || '..........................................................',
+             checkJunior: isJunior ? '<span style="font-size: 16pt;">☑</span>' : '<span style="font-size: 18pt;">☐</span>',
+             checkSenior: !isJunior ? '<span style="font-size: 16pt;">☑</span>' : '<span style="font-size: 18pt;">☐</span>'
+         };
+
+         google.script.run
+         .withSuccessHandler(html => {
+             if(btn) { btn.innerHTML = '<i class="fas fa-print me-1"></i> <span class="d-none d-sm-inline">พิมพ์ ปพ.5</span>'; btn.disabled = false; }
+             
+             // 🌟 สกิลแก้แครช: สร้าง Iframe แผ่นใสมากางทับเต็มจอ (ไม่เปิดหน้าใหม่แล้ว!)
+             let iframe = document.getElementById('pp5PrintIframe');
+             if (!iframe) {
+                 iframe = document.createElement('iframe');
+                 iframe.id = 'pp5PrintIframe';
+                 iframe.style.position = 'fixed';
+                 iframe.style.top = '0';
+                 iframe.style.left = '0';
+                 iframe.style.width = '100vw';
+                 iframe.style.height = '100vh';
+                 iframe.style.zIndex = '999999';
+                 iframe.style.border = 'none';
+                 iframe.style.backgroundColor = '#e8edf3'; // สีพื้นหลังสบายตา
+                 document.body.appendChild(iframe);
+             }
+             iframe.style.display = 'block';
+             
+             const doc = iframe.contentWindow.document;
+             doc.open();
+             doc.write(html);
+             doc.close();
+         })
+         .withFailureHandler(err => {
+             if(btn) { btn.innerHTML = '<i class="fas fa-print me-1"></i> <span class="d-none d-sm-inline">พิมพ์ ปพ.5</span>'; btn.disabled = false; }
+             showToast('❌ Error ระบบหลังบ้าน: ' + err.message, 'danger');
+         })
+         .generatePP5Template(payload);
+
+    }).getPrintConfigData(user.currentTerm, user.currentYear);
+};
+
+// 🌟 ฟังก์ชันสำหรับปิดแผ่นใสกลับไปหน้าจอหลัก
+window.closePrintOverlay = function() {
+    const iframe = document.getElementById('pp5PrintIframe');
+    if (iframe) {
+        iframe.style.display = 'none';
+        iframe.src = 'about:blank'; // เคลียร์เมมโมรี่ให้เบราว์เซอร์
+    }
+};
+
+function renderEvalTable(students, existingQuals) {
+  const tbody = document.getElementById('evalTableBody');
+  let bodyHtml = '';
+  
+  students.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+
+  students.forEach((std, rowIndex) => {
+    const stdId = String(std[0]).trim();
+    const safeStdId = normID(stdId);
+    
+    const q = existingQuals[safeStdId] || {};
+    const c1 = q.char1 || ''; const c2 = q.char2 || ''; const c3 = q.char3 || ''; const c4 = q.char4 || '';
+    const r1 = q.read1 || ''; const r2 = q.read2 || ''; const r3 = q.read3 || ''; const r4 = q.read4 || '';
+    const cTot = q.charTotal || 0; const cGrd = q.charGrade || 0;
+    const rTot = q.readTotal || 0; const rGrd = q.readGrade || 0;
+
+    let colIndex = 0; 
+    bodyHtml += `<tr>
+      <td class="text-center text-muted fw-bold">${rowIndex + 1}</td>
+      <td class="text-start">
+         <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.9rem;">${std[2]}</div>
+         <div class="text-muted font-monospace" style="font-size: 0.78rem;">${stdId}</div>
+      </td>
+      
+      <td class="p-0"><input type="number" id="c1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0"><input type="number" id="c2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0"><input type="number" id="c3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0"><input type="number" id="c4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="text-center align-middle fw-bold border-start bg-light text-primary" id="cTot_${safeStdId}">${cTot}</td>
+      <td class="text-center align-middle fw-bold fs-5 text-success" id="cGrd_${safeStdId}">${cGrd}</td>
+
+      <td class="p-0 border-start"><input type="number" id="r1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0"><input type="number" id="r2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0"><input type="number" id="r3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0"><input type="number" id="r4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="text-center align-middle fw-bold border-start bg-light text-success" id="rTot_${safeStdId}">${rTot}</td>
+      <td class="text-center align-middle fw-bold fs-5 text-success" id="rGrd_${safeStdId}">${rGrd}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = bodyHtml;
+  
+  students.forEach(std => {
+      calcEvalRow(normID(std[0]), 'c', true);
+      calcEvalRow(normID(std[0]), 'r', true);
+  });
+}
+
+function calcEvalRow(safeStdId, type, isInit = false) {
+    let total = 0;
+    for(let i=1; i<=4; i++) {
+        let input = document.getElementById(`${type}${i}_${safeStdId}`);
+        if(!input) continue;
+        let val = parseFloat(input.value) || 0;
+        
+        if (val > 25) { val = 25; input.value = 25; input.style.color = 'red'; } 
+        else { input.style.color = ''; }
+        
+        total += val;
+    }
+    
+    let totEl = document.getElementById(`${type}Tot_${safeStdId}`);
+    if(totEl) totEl.innerText = total;
+    
+    let grade = 0;
+    if(total >= 80) grade = 3;
+    else if(total >= 70) grade = 2;
+    else if(total >= 50) grade = 1;
+    else grade = 0;
+    
+    let grdEl = document.getElementById(`${type}Grd_${safeStdId}`);
+    if(grdEl) {
+        grdEl.innerText = grade;
+        if(grade === 0) grdEl.className = "text-center align-middle fw-bold fs-5 text-danger bg-danger bg-opacity-10";
+        else grdEl.className = "text-center align-middle fw-bold fs-5 text-success";
+    }
+
+    if (!isInit) {
+        const btn = document.getElementById('btnSaveScores');
+        if (typeof isHeaderEditMode !== 'undefined' && !isHeaderEditMode && btn) {
+            if (typeof autoSaveTimer !== 'undefined') clearTimeout(autoSaveTimer);
+            btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin me-2"></i>รอเซฟ (3 วิ)...';
+            btn.className = "btn btn-outline-warning text-dark shadow-sm px-4 fw-bold"; 
+            autoSaveTimer = setTimeout(() => { 
+                if (typeof saveAllInOneScores === 'function') saveAllInOneScores(true); 
+            }, 3000); 
+        }
+    }
+}
+
+function loadCurriculumToTable() {
+  const select = document.getElementById('configClassSelect');
+  if(!select || !select.value) return showToast('กรุณาเลือกวิชาที่สอนก่อนครับ', 'warning');
+
+  const subjectData = JSON.parse(select.value);
+  const subjectCode = subjectData[0]; 
+
+  const btn = document.getElementById('btnLoadCurriculum');
+  const oldText = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>ค้นหา...';
+  btn.disabled = true;
+
+  google.script.run
+    .withFailureHandler(err => {
+      btn.innerHTML = oldText; btn.disabled = false;
+      showToast('❌ Error: ' + err.message, 'danger');
+    })
+    .withSuccessHandler(data => {
+      btn.innerHTML = oldText; btn.disabled = false;
+      if(data.length === 0) return showToast(`⚠️ ไม่พบตัวชี้วัดของวิชา ${subjectCode} โปรดเพิ่มในเมนูแอดมินก่อน`, 'warning');
+
+      window.currentCurriculumList = data; 
+
+      const tbody = document.getElementById('indicatorTableBody');
+      const _doImportCurriculum = (shouldClear) => {
+        if (shouldClear) tbody.innerHTML = '';
+        data.forEach(item => { addIndicatorRow(item.standardCode, '', 10, item.description); });
+        document.querySelectorAll('.ind-no').forEach((td, idx) => td.innerText = idx + 1);
+        calculateTotalConfigScore();
+        showToast(`✅ นำเข้าสำเร็จ ${data.length} ข้อ! (โปรดพิมพ์ชื่อชิ้นงานให้ครบถ้วน)`, 'success');
+      };
+
+      if (tbody.children.length > 0 && tbody.innerText.trim() !== '') {
+          Swal.fire({
+            title: '⚠️ พบโครงสร้างคะแนนเดิมอยู่แล้ว!',
+            text: 'ต้องการล้างของเดิมทิ้งแล้วนำเข้าใหม่ หรือนำเข้าต่อท้ายข้อมูลเดิม?',
+            icon: 'warning', showDenyButton: true, showCancelButton: true,
+            confirmButtonText: 'ล้างแล้วนำเข้าใหม่',
+            denyButtonText: 'นำเข้าต่อท้าย',
+            cancelButtonText: 'ยกเลิก'
+          }).then(r => {
+            if (r.isDismissed) return;
+            _doImportCurriculum(r.isConfirmed);
+          });
+      } else { _doImportCurriculum(true); }
+
+    }).getCurriculumBySubject(subjectCode);
+}
+
+// ==========================================
+// 🚀 ระบบตารางอัจฉริยะ (เลื่อนด้วยลูกศร & วางข้อมูลจาก Excel)
+// ==========================================
+
+// 1. ระบบเลื่อนช่องด้วยลูกศร (Arrow Keys Navigation)
+document.addEventListener('keydown', function(e) {
+    if (!e.target.classList.contains('nav-input')) return;
+    
+    const key = e.key;
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
+    
+    const currentInput = e.target;
+    const row = parseInt(currentInput.dataset.row);
+    const col = parseInt(currentInput.dataset.col);
+    
+    let nextRow = row; let nextCol = col;
+    if (key === 'ArrowUp') nextRow--;
+    if (key === 'ArrowDown') nextRow++;
+    if (key === 'ArrowLeft') nextCol--;
+    if (key === 'ArrowRight') nextCol++;
+    
+    const nextInput = document.querySelector(`.nav-input[data-row="${nextRow}"][data-col="${nextCol}"]`);
+    
+    if (nextInput && !nextInput.disabled && !nextInput.readOnly) {
+        e.preventDefault(); 
+        nextInput.focus(); 
+        if(typeof nextInput.select === 'function') nextInput.select(); 
+    }
+});
+
+// 2. ระบบคัดลอก/วาง ข้อมูลจาก Excel (Excel Paste Support)
+document.addEventListener('paste', function(e) {
+    if (!e.target.classList.contains('score-cell-input') && !e.target.classList.contains('eval-input')) return;
+    
+    e.preventDefault(); 
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const pastedData = clipboardData.getData('Text');
+    if (!pastedData) return;
+    
+    const rows = pastedData.trim().split(/\r\n|\n|\r/);
+    const startInput = e.target;
+    const startRowIdx = parseInt(startInput.dataset.row);
+    const startColIdx = parseInt(startInput.dataset.col);
+    
+    const tbody = startInput.closest('tbody');
+    if (!tbody) return;
+
+    let isEvalTable = e.target.classList.contains('eval-input');
+    let shouldRecalc = false;
+
+    rows.forEach((rowStr, rIdx) => {
+        if(rowStr.trim() === '') return;
+        const cols = rowStr.split('\t');
+        
+        const currentRowIdx = startRowIdx + rIdx;
+        
+        cols.forEach((val, cIdx) => {
+            const currentColIdx = startColIdx + cIdx;
+            const input = tbody.querySelector(`input.nav-input[data-row="${currentRowIdx}"][data-col="${currentColIdx}"]`);
+            
+            if (input && !input.readOnly && !input.disabled) {
+                input.value = val.trim();
+                
+                // กระตุ้นให้คำนวณแต่ละแถว (ป้องกันบัคคำนวณรวบยอด)
+                if(isEvalTable) {
+                    const safeStdId = input.id.split('_')[1];
+                    const type = input.id.charAt(0);
+                    calcEvalRow(safeStdId, type);
+                } else {
+                    shouldRecalc = true; // ตารางปกติค่อยไปคำนวณทีเดียวตอนจบ
+                }
+            }
+        });
+    });
+    
+    if(shouldRecalc) reCalcAllRows();
+    if (typeof showToast === 'function') showToast('✅ วางข้อมูลเรียบร้อยแล้ว', 'success');
+});
+</script>

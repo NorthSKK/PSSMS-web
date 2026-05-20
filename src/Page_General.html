@@ -1,0 +1,243 @@
+<input type="file" id="sarabunFileInput" accept=".pdf,image/png,image/jpeg" style="display: none;" onchange="handleSarabunFileUpload(event)">
+<input type="hidden" id="uploadTargetId">
+<input type="hidden" id="uploadTargetDocNum">
+
+<!-- Modal แก้ไขเอกสารสารบรรณ (Admin) -->
+<div class="modal fade pssms-modal" id="modalEditSarabun" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="fas fa-edit me-2" style="color:var(--p-accent);"></i>แก้ไขเอกสารสารบรรณ</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3">
+        <input type="hidden" id="editSarabunId">
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">ประเภทเอกสาร <span class="text-danger">*</span></label>
+          <select class="form-select" id="editSarabunDocType">
+            <option value="บันทึกข้อความ">ทะเบียนบันทึกข้อความ</option>
+            <option value="ทะเบียนคำสั่ง">ทะเบียนคำสั่ง</option>
+            <option value="ทะเบียนหนังสือรับ">ทะเบียนหนังสือรับ</option>
+            <option value="ทะเบียนหนังสือส่ง">ทะเบียนหนังสือส่ง</option>
+            <option value="ทะเบียนเกียรติบัตร">ทะเบียนเกียรติบัตร</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">เลขที่เอกสาร <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="editSarabunDocNumber">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">เรื่อง <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="editSarabunSubject" rows="2" style="resize:vertical;"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">ผู้ขอ / ผู้ปฏิบัติ</label>
+          <input type="text" class="form-control" id="editSarabunRequester">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-7">
+            <label class="form-label small text-muted mb-1">ลงวันที่</label>
+            <input type="date" class="form-control" id="editSarabunTargetDate">
+          </div>
+          <div class="col-5">
+            <label class="form-label small text-muted mb-1">สถานะ</label>
+            <select class="form-select" id="editSarabunStatus">
+              <option value="รอดำเนินการ">รอดำเนินการ</option>
+              <option value="ดำเนินการแล้ว">ดำเนินการแล้ว</option>
+              <option value="ยกเลิก">ยกเลิก</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-soft" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-accent fw-bold" onclick="submitEditSarabun()">
+          <i class="fas fa-save me-1"></i>บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container-fluid pssms-page pssms-dept-general" id="generalPageContainer">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-folder-open me-2" style="color:var(--p-accent);"></i>งานสารบรรณ</h4>
+      <p class="pssms-subtitle">ขอเลขที่เอกสาร · ทะเบียนเอกสารราชการ</p>
+    </div>
+  </div>
+
+  <div id="generalTabsContent">
+
+    <div id="sarabun">
+      <div class="row g-4">
+        
+        <div class="col-lg-5">
+          <div class="pssms-card h-100">
+            <div class="pssms-card-header">
+              <span><i class="fas fa-file-alt me-2" style="color:var(--p-accent);"></i>ขอเลขที่เอกสารใหม่</span>
+            </div>
+            <div class="p-3">
+              <form id="sarabunForm" onsubmit="event.preventDefault(); requestNewDocNumber();">
+
+                <!-- ประเภทเอกสาร -->
+                <div class="mb-3">
+                  <label class="form-label small text-muted mb-1">ประเภทเอกสาร <span class="text-danger">*</span></label>
+                  <select class="form-select w-100 fw-medium" id="docType" onchange="toggleSarabunFields()" required style="width:100%!important;">
+                    <option value="" selected disabled>-- เลือกประเภท --</option>
+                    <option value="บันทึกข้อความ">ทะเบียนบันทึกข้อความ</option>
+                    <option value="ทะเบียนคำสั่ง">ทะเบียนคำสั่ง</option>
+                    <option value="ทะเบียนหนังสือรับ">ทะเบียนหนังสือรับ</option>
+                    <option value="ทะเบียนหนังสือส่ง">ทะเบียนหนังสือส่ง</option>
+                    <option value="ทะเบียนเกียรติบัตร">ทะเบียนเกียรติบัตร</option>
+                  </select>
+                </div>
+
+                <!-- เรื่อง -->
+                <div class="mb-3" id="divSubject" style="display:none;">
+                  <label class="form-label small text-muted mb-1" id="lblSubject">เรื่อง <span class="text-danger">*</span></label>
+                  <textarea class="form-control" id="docSubject" rows="2" placeholder="ระบุเรื่องของเอกสาร..." required style="resize:vertical;"></textarea>
+                </div>
+
+                <!-- จำนวน -->
+                <div class="mb-3" id="divAmount" style="display:none;">
+                  <label class="form-label small text-muted mb-1">จำนวน (ฉบับ) <span class="text-danger">*</span></label>
+                  <input type="number" class="form-control" id="docAmount" value="1" min="1" max="500" style="max-width:120px;">
+                </div>
+
+                <!-- ที่/วันที่อ้างอิง -->
+                <div class="mb-3" id="divReference" style="display:none;">
+                  <div class="d-flex align-items-center gap-1 mb-1">
+                    <span class="small text-muted">เอกสารอ้างอิง</span>
+                    <span class="badge rounded-pill" style="font-size:.65rem;background:var(--p-subtle);color:var(--p-text-muted);">ไม่บังคับ</span>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-5" id="divDocRefNo">
+                      <label class="form-label small text-muted mb-1">ที่ (เลขที่)</label>
+                      <input type="text" class="form-control" id="docRefNo" placeholder="ที่ ศธ...">
+                    </div>
+                    <div class="col-7" id="divRefDocDate">
+                      <label class="form-label small text-muted mb-1" id="lblRefDocDate">ลงวันที่</label>
+                      <input type="date" class="form-control" id="refDocDate">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- จาก / ถึง -->
+                <div class="mb-3" id="divFromTo" style="display:none;">
+                  <div class="row g-2">
+                    <div class="col-6" id="divDocFrom">
+                      <label class="form-label small text-muted mb-1">จาก <span class="text-secondary fw-normal" id="lblDocFromReq"></span></label>
+                      <input type="text" class="form-control" id="docFrom" placeholder="ผู้ส่ง..." list="dl-docFrom">
+                    </div>
+                    <div class="col-6" id="divDocTo">
+                      <label class="form-label small text-muted mb-1">ถึง <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" id="docTo" placeholder="ผู้รับ..." list="dl-docTo">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- วันที่ / เวลา -->
+                <div class="mb-3" id="divDates" style="display:none;">
+                  <div class="row g-2">
+                    <div class="col-7" id="divTargetDate">
+                      <label class="form-label small text-muted mb-1" id="lblTargetDate">ลงวันที่ <span class="text-danger">*</span></label>
+                      <input type="date" class="form-control" id="docTargetDate">
+                    </div>
+                    <div class="col-5" id="divDocTime" style="display:none;">
+                      <label class="form-label small text-muted mb-1">เวลา <span class="text-danger">*</span></label>
+                      <input type="time" class="form-control text-center" id="docTime">
+                    </div>
+                    <div class="col-12" id="divActionDate">
+                      <label class="form-label small text-muted mb-1">วันที่ปฏิบัติ <span class="text-danger">*</span></label>
+                      <input type="date" class="form-control" id="docActionDate" style="background:var(--p-accent-soft);">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ผู้รับผิดชอบ -->
+                <div class="mb-3" id="divAssignee" style="display:none;">
+                  <label class="form-label small text-muted mb-1">การปฏิบัติ (ชื่อครู) <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="docAssignee" placeholder="ชื่อครู / แผนกที่รับผิดชอบ" list="dl-assignee">
+                </div>
+
+                <datalist id="dl-docFrom"></datalist>
+                <datalist id="dl-docTo"></datalist>
+                <datalist id="dl-assignee"></datalist>
+
+                <button type="submit" class="btn btn-accent w-100 fw-bold rounded-3 mt-1" id="btnRequestNumber" style="display:none;letter-spacing:.3px;">
+                  <i class="fas fa-inbox me-2" id="btnRequestIcon"></i><span id="btnRequestText">รับหนังสือ / ขอเลขรับ</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-7">
+          <div class="pssms-card h-100">
+            <div class="pssms-card-header" style="gap:.5rem;">
+              <div class="d-flex align-items-center gap-2 flex-grow-1" style="min-width:0;">
+                <i class="fas fa-list-alt flex-shrink-0" style="color:var(--p-text-muted);"></i>
+                <div class="input-group flex-grow-1" style="border-radius:20px;overflow:hidden;background:var(--p-subtle);">
+                  <span class="input-group-text bg-transparent border-0 text-muted px-2"><i class="fas fa-search" style="font-size:.8rem;"></i></span>
+                  <input type="text" class="form-control border-0 bg-transparent px-1" id="searchSarabunText" placeholder="ค้นหาเรื่อง, เลข, ผู้ส่ง..." onkeyup="filterSarabunData()" style="box-shadow:none;">
+                  <button class="btn btn-soft border-0 px-2" type="button" data-bs-toggle="collapse" data-bs-target="#advancedSearchBox" aria-expanded="false" title="ค้นหาขั้นสูง">
+                    <i class="fas fa-sliders-h" style="font-size:.8rem;"></i>
+                  </button>
+                </div>
+              </div>
+              <button class="btn btn-soft rounded-circle flex-shrink-0" onclick="loadSarabunHistory()" title="รีเฟรชข้อมูล" style="width:34px;height:34px;padding:0;">
+                <i class="fas fa-sync-alt" style="font-size:.8rem;"></i>
+              </button>
+            </div>
+            <div class="collapse mx-3 mt-2" id="advancedSearchBox">
+                 <div class="p-3 rounded-3" style="background:var(--p-subtle);border:1px solid var(--p-border)">
+                     <div class="row g-2">
+                         <div class="col-md-5">
+                            <label class="form-label small text-muted fw-bold mb-1">หมวดหมู่</label>
+                            <select class="form-select form-select-sm border-secondary" id="filterSarabunType" onchange="filterSarabunData()">
+                               <option value="ALL">📋 รวมทุกประเภทเอกสาร</option>
+                               <option value="บันทึกข้อความ">ทะเบียนบันทึกข้อความ</option>
+                               <option value="ทะเบียนคำสั่ง">ทะเบียนคำสั่ง</option>
+                               <option value="ทะเบียนหนังสือรับ">ทะเบียนหนังสือรับ</option>
+                               <option value="ทะเบียนหนังสือส่ง">ทะเบียนหนังสือส่ง</option>
+                               <option value="ทะเบียนเกียรติบัตร">ทะเบียนเกียรติบัตร</option>
+                            </select>
+                         </div>
+                         <div class="col-md-7">
+                            <label class="form-label small text-muted fw-bold mb-1">ช่วงวันที่ลงเอกสาร</label>
+                            <div class="input-group input-group-sm">
+                               <span class="input-group-text bg-white border-secondary text-muted">จาก</span>
+                               <input type="date" class="form-control border-secondary text-center px-1" id="searchStartDate" onchange="filterSarabunData()">
+                               <span class="input-group-text bg-white border-secondary text-muted">ถึง</span>
+                               <input type="date" class="form-control border-secondary text-center px-1" id="searchEndDate" onchange="filterSarabunData()">
+                               <button class="btn btn-outline-danger" onclick="document.getElementById('searchStartDate').value=''; document.getElementById('searchEndDate').value=''; document.getElementById('filterSarabunType').value='ALL'; filterSarabunData();" title="ล้างตัวกรอง"><i class="fas fa-times"></i></button>
+                            </div>
+                         </div>
+                     </div>
+                 </div>
+            </div>
+
+            <div class="table-responsive" style="max-height: 520px; overflow-y: auto;">
+              <table class="pssms-table mb-0">
+                <thead style="font-size: 0.85rem; position: sticky; top: 0; z-index: 10;">
+                  <tr>
+                    <th class="ps-4" style="width: 15%;">เลขทะเบียน</th>
+                    <th style="width: 38%;">รายละเอียดเอกสาร</th>
+                    <th style="width: 32%;">ข้อมูลการปฏิบัติ</th>
+                    <th class="text-center" style="width: 15%;">แนบไฟล์</th>
+                  </tr>
+                </thead>
+                <tbody id="sarabunTableBody">
+                  <tr><td colspan="4" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
