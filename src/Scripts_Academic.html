@@ -673,21 +673,25 @@ function submitAcademicData() {
     teacherId: user.id, signature: sigData
   };
 
-  // Optimistic: ปล่อย UI ทันที — save ทำ background
   showToast('⏳ กำลังบันทึก...', 'info', 2000);
-  sessionStorage.clear();
-  loadStudentList(true);
-  clearSignature();
-  btn.innerHTML = 'บันทึกข้อมูลทั้งหมด'; btn.disabled = false;
 
   safeRun(3)
-    .withFailureHandler(function(err) { showToast('❌ บันทึกไม่สำเร็จ: ' + (err.message||''), 'danger', 5000); })
+    .withFailureHandler(function(err) {
+      btn.innerHTML = 'บันทึกข้อมูลทั้งหมด'; btn.disabled = false;
+      showToast('❌ บันทึกไม่สำเร็จ: ' + (err.message||''), 'danger', 5000);
+    })
     .withSuccessHandler(function() {
       safeRun(3)
-        .withFailureHandler(function(err) { showToast('⚠️ เช็คชื่อบันทึกแล้ว แต่บันทึกการสอนไม่สำเร็จ: ' + (err.message||''), 'warning', 5000); })
+        .withFailureHandler(function(err) {
+          btn.innerHTML = 'บันทึกข้อมูลทั้งหมด'; btn.disabled = false;
+          sessionStorage.clear(); loadStudentList(true); clearSignature();
+          showToast('⚠️ เช็คชื่อบันทึกแล้ว แต่บันทึกการสอนไม่สำเร็จ: ' + (err.message||''), 'warning', 5000);
+        })
         .withSuccessHandler(function() {
+          btn.innerHTML = 'บันทึกข้อมูลทั้งหมด'; btn.disabled = false;
+          sessionStorage.clear(); loadStudentList(true); clearSignature();
           showToast('✅ บันทึกเสร็จสมบูรณ์', 'success', 3000);
-      }).saveLessonRecord(lessonRecord);
+        }).saveLessonRecord(lessonRecord);
   }).saveAttendanceBatch(attendanceBatch);
 }
 
