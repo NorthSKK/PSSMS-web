@@ -78,9 +78,9 @@
             </div>
           </div>
           <div class="col-md-3 col-6">
-            <div class="p-3 text-center rounded-3" style="background: var(--p-subtle); border: 1px solid var(--p-border);">
-              <div class="text-muted small">ชาย / หญิง</div>
-              <div class="fw-bold fs-6 mt-1"><span id="sumMale">0</span> / <span id="sumFemale">0</span></div>
+            <div class="p-3 text-center rounded-3" style="background: #f5f3ff; border: 1px solid #ddd6fe;">
+              <div class="small" style="color: #5b21b6;">🎓 จบการศึกษา</div>
+              <div class="fw-bold fs-5" id="sumGraduated" style="color: #5b21b6;">0</div>
             </div>
           </div>
         </div>
@@ -91,7 +91,7 @@
               <tr>
                 <th rowspan="2" class="align-middle">ชั้นเรียน</th>
                 <th colspan="2">เพศ</th>
-                <th colspan="2">สถานะ</th>
+                <th colspan="3">สถานะ</th>
                 <th rowspan="2" class="align-middle">รวม</th>
               </tr>
               <tr>
@@ -99,11 +99,19 @@
                 <th>หญิง</th>
                 <th>ปกติ</th>
                 <th>แขวนลอย</th>
+                <th>จบแล้ว</th>
               </tr>
             </thead>
             <tbody id="summaryTableBody"></tbody>
           </table>
         </div>
+      </div>
+
+      <div class="d-flex align-items-center gap-2 mb-2 px-1">
+        <label class="d-flex align-items-center gap-2 small text-muted" style="cursor:pointer;">
+          <input type="checkbox" id="showGraduatedToggle" onchange="filterTable()" style="width:15px;height:15px;">
+          แสดงนักเรียนที่จบการศึกษาแล้ว
+        </label>
       </div>
 
       <div id="studentAccordion">

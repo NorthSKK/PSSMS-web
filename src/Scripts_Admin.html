@@ -344,10 +344,10 @@ function loadUserData(forceRefresh) {
     _staffHomeroomMap = cached.hrMap || {};
     renderTable(allUsers);
   } else {
-    var tbS = document.getElementById('tableBodyStudent');
+    var accS = document.getElementById('studentAccordion');
     var tbT = document.getElementById('tableBodyStaff');
     var skel = '<tr>' + ['25%','30%','15%','15%','10%'].map(function(w){ return '<td><span class="pssms-skel d-inline-block" style="height:14px;width:'+w+'"></span></td>'; }).join('') + '</tr>';
-    if (tbS) tbS.innerHTML = skel.repeat(5);
+    if (accS) accS.innerHTML = '<div class="pssms-card p-0"><div class="table-responsive"><table class="pssms-table mb-0 text-nowrap"><tbody>' + skel.repeat(5) + '</tbody></table></div></div>';
     if (tbT) tbT.innerHTML = skel.repeat(4);
   }
   google.script.run.withSuccessHandler(function(d) {
@@ -386,41 +386,52 @@ function renderTable(data) {
   renderStudentSummary(data);
 }
 
+function _studentStatusBadge(status) {
+  if (status === 'ปกติ') return '<span class="badge bg-success-subtle text-success border border-success rounded-pill px-2">ปกติ</span>';
+  if (status === 'จบการศึกษา') return '<span class="badge bg-secondary-subtle text-secondary border border-secondary rounded-pill px-2">🎓 จบการศึกษา</span>';
+  return '<span class="badge bg-danger-subtle text-danger border border-danger rounded-pill px-2">แขวนลอย</span>';
+}
+
 function renderStudentAccordion(students) {
   var container = document.getElementById('studentAccordion');
   if (!container) return;
   var isSearching = (document.getElementById('searchInput') || {}).value;
-  if (students.length === 0) {
-    container.innerHTML = '<div class="pssms-card text-center p-5 text-muted">ไม่พบข้อมูลนักเรียน</div>';
+  var showGrad = (document.getElementById('showGraduatedToggle') || {}).checked;
+  var gradCount = students.filter(function(r) { return String(r[7] || '').trim() === 'จบการศึกษา'; }).length;
+  var visible = showGrad ? students : students.filter(function(r) { return String(r[7] || '').trim() !== 'จบการศึกษา'; });
+  if (visible.length === 0) {
+    var hint = !showGrad && gradCount ? ' (ซ่อนนักเรียนที่จบแล้ว ' + gradCount + ' คน)' : '';
+    container.innerHTML = '<div class="pssms-card text-center p-5 text-muted">ไม่พบข้อมูลนักเรียน' + hint + '</div>';
     return;
   }
-  // group by class
   var groups = {};
-  students.forEach(function(row) {
+  visible.forEach(function(row) {
     var cls = String(row[4] || '').trim() || 'ไม่ระบุ';
     if (!groups[cls]) groups[cls] = [];
     groups[cls].push(row);
   });
-  var sortedClasses = Object.keys(groups).sort(function(a, b) {
-    return a.localeCompare(b, 'th', { numeric: true });
-  });
-  // if first render (no expanded state) → expand first class
+  var sortedClasses = Object.keys(groups).sort(function(a, b) { return a.localeCompare(b, 'th', { numeric: true }); });
   if (_expandedGroups.size === 0 && !isSearching) _expandedGroups.add(sortedClasses[0]);
   var html = '';
   sortedClasses.forEach(function(cls, idx) {
     var rows = groups[cls];
-    var male = 0, female = 0, suspended = 0;
+    var male = 0, female = 0, suspended = 0, graduated = 0;
     rows.forEach(function(r) {
+      var st = String(r[7] || '').trim();
       if (/^(นาย|ด\.ช\.|ดช\.|เด็กชาย)/.test(String(r[2]))) male++; else female++;
-      if (String(r[7] || '').trim() === 'แขวนลอย') suspended++;
+      if (st === 'แขวนลอย') suspended++;
+      else if (st === 'จบการศึกษา') graduated++;
     });
     var safeId = 'sg_' + idx;
     var isOpen = isSearching ? true : _expandedGroups.has(cls);
+    var subInfo = 'ชาย ' + male + ' | หญิง ' + female;
+    if (suspended) subInfo += ' | <span class="text-danger">แขวนลอย ' + suspended + '</span>';
+    if (graduated) subInfo += ' | <span style="color:#5b21b6;">🎓 ' + graduated + '</span>';
     html += '<div class="pssms-card mb-2 p-0" style="overflow:hidden;">';
-    html += '<div class="d-flex align-items-center px-3 py-2 gap-2" style="cursor:pointer;background:var(--p-subtle);border-bottom:1px solid var(--p-border);" onclick="toggleStudentGroup(\'' + cls.replace(/'/g, "\\'") + '\',\'' + safeId + '\')">';
-    html += '<span class="fw-bold" style="font-size:.9rem;">' + cls + '</span>';
+    html += '<div class="student-group-header d-flex align-items-center px-3 py-2 gap-2" data-class="' + escapeAttr(cls) + '" data-body-id="' + safeId + '" style="cursor:pointer;background:var(--p-subtle);border-bottom:1px solid var(--p-border);">';
+    html += '<span class="fw-bold" style="font-size:.9rem;">' + escapeHtmlSafe(cls) + '</span>';
     html += '<span class="pssms-chip ms-1">' + rows.length + ' คน</span>';
-    html += '<span class="text-muted small ms-1">ชาย ' + male + ' | หญิง ' + female + (suspended ? ' | <span class="text-danger">แขวนลอย ' + suspended + '</span>' : '') + '</span>';
+    html += '<span class="text-muted small ms-1">' + subInfo + '</span>';
     html += '<i class="fas fa-chevron-' + (isOpen ? 'up' : 'down') + ' ms-auto text-muted" style="font-size:.75rem;"></i>';
     html += '</div>';
     html += '<div id="' + safeId + '"' + (isOpen ? '' : ' style="display:none;"') + '>';
@@ -428,14 +439,20 @@ function renderStudentAccordion(students) {
     html += '<th class="ps-4">รหัสนักเรียน</th><th>ชื่อ-สกุล</th><th class="text-center">สถานะ</th><th class="text-end pe-4">จัดการ</th>';
     html += '</tr></thead><tbody>';
     rows.forEach(function(row) {
+      var studentId = String(row[0] || '');
+      var studentName = String(row[2] || '');
       var status = String(row[7] || '').trim() || 'ปกติ';
-      var statusBadge = status === 'ปกติ' ? '<span class="badge bg-success-subtle text-success border border-success rounded-pill px-2">ปกติ</span>' : '<span class="badge bg-danger-subtle text-danger border border-danger rounded-pill px-2">แขวนลอย</span>';
-      var trClass = status === 'แขวนลอย' ? ' class="table-danger"' : '';
-      html += '<tr' + trClass + '><td class="ps-4 fw-bold text-primary">' + row[0] + '</td><td>' + row[2] + '</td><td class="text-center">' + statusBadge + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',\'' + row[0] + '\')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(\'' + row[0] + '\')"><i class="fas fa-trash"></i></button></td></tr>';
+      var trCls = status === 'แขวนลอย' ? ' class="table-danger"' : status === 'จบการศึกษา' ? ' class="text-muted"' : '';
+      html += '<tr' + trCls + '><td class="ps-4 fw-bold text-primary">' + escapeHtmlSafe(studentId) + '</td><td>' + escapeHtmlSafe(studentName) + '</td><td class="text-center">' + _studentStatusBadge(status) + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',' + jsArgAttr(studentId) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(' + jsArgAttr(studentId) + ')"><i class="fas fa-trash"></i></button></td></tr>';
     });
     html += '</tbody></table></div></div></div>';
   });
   container.innerHTML = html;
+  container.querySelectorAll('.student-group-header').forEach(function(header) {
+    header.addEventListener('click', function() {
+      toggleStudentGroup(header.getAttribute('data-class') || '', header.getAttribute('data-body-id') || '');
+    });
+  });
 }
 
 function toggleStudentGroup(cls, safeId) {
@@ -463,32 +480,38 @@ function renderStudentSummary(data) {
   const students = data.filter(row => row[3] === 'Student');
   if (students.length === 0) { summaryContainer.style.display = 'none'; return; }
   summaryContainer.style.display = 'block';
-  let totalActive = 0, totalSuspended = 0, totalMale = 0, totalFemale = 0;
+  let totalActive = 0, totalSuspended = 0, totalGraduated = 0, totalMale = 0, totalFemale = 0;
   const roomStats = {};
   students.forEach(s => {
-    const room = String(s[4]).trim() || "ไม่ระบุ";
+    const room = String(s[4]).trim() || 'ไม่ระบุ';
     const name = String(s[2]).trim();
-    const status = String(s[7]).trim() || "ปกติ";
+    const status = String(s[7]).trim() || 'ปกติ';
     const isMale = /^(นาย|ด\.ช\.|ดช\.|เด็กชาย)/.test(name);
-    if (status === 'ปกติ') totalActive++; else totalSuspended++;
+    if (status === 'ปกติ') totalActive++;
+    else if (status === 'จบการศึกษา') totalGraduated++;
+    else totalSuspended++;
     if (isMale) totalMale++; else totalFemale++;
-    if (!roomStats[room]) roomStats[room] = { male: 0, female: 0, active: 0, suspended: 0, total: 0 };
+    if (!roomStats[room]) roomStats[room] = { male: 0, female: 0, active: 0, suspended: 0, graduated: 0, total: 0 };
     if (isMale) roomStats[room].male++; else roomStats[room].female++;
-    if (status === 'ปกติ') roomStats[room].active++; else roomStats[room].suspended++;
+    if (status === 'ปกติ') roomStats[room].active++;
+    else if (status === 'จบการศึกษา') roomStats[room].graduated++;
+    else roomStats[room].suspended++;
     roomStats[room].total++;
   });
   document.getElementById('sumTotal').innerText = students.length;
   document.getElementById('sumActive').innerText = totalActive;
   document.getElementById('sumSuspended').innerText = totalSuspended;
+  const sumGrad = document.getElementById('sumGraduated');
+  if (sumGrad) sumGrad.innerText = totalGraduated;
   document.getElementById('sumMale').innerText = totalMale;
   document.getElementById('sumFemale').innerText = totalFemale;
   let html = '';
   const sortedRooms = Object.keys(roomStats).sort((a, b) => a.localeCompare(b, 'th', { numeric: true }));
   sortedRooms.forEach(room => {
-    const stat = roomStats[room];
-    html += `<tr><td class="fw-bold text-start ps-3"><span class="badge bg-light text-dark border border-secondary-subtle shadow-sm">${room}</span></td><td>${stat.male > 0 ? stat.male : '-'}</td><td>${stat.female > 0 ? stat.female : '-'}</td><td class="text-success fw-bold">${stat.active > 0 ? stat.active : '-'}</td><td class="text-danger">${stat.suspended > 0 ? stat.suspended : '-'}</td><td class="fw-bold text-primary bg-light">${stat.total}</td></tr>`;
+    const s = roomStats[room];
+    html += `<tr><td class="fw-bold text-start ps-3"><span class="badge bg-light text-dark border border-secondary-subtle shadow-sm">${room}</span></td><td>${s.male||'-'}</td><td>${s.female||'-'}</td><td class="text-success fw-bold">${s.active||'-'}</td><td class="text-danger">${s.suspended||'-'}</td><td style="color:#5b21b6;">${s.graduated||'-'}</td><td class="fw-bold text-primary bg-light">${s.total}</td></tr>`;
   });
-  html += `<tr class="table-light fw-bold text-dark"><td class="text-end pe-3">รวมทั้งหมด</td><td>${totalMale}</td><td>${totalFemale}</td><td class="text-success">${totalActive}</td><td class="text-danger">${totalSuspended}</td><td class="text-primary fs-6">${students.length}</td></tr>`;
+  html += `<tr class="table-light fw-bold text-dark"><td class="text-end pe-3">รวมทั้งหมด</td><td>${totalMale}</td><td>${totalFemale}</td><td class="text-success">${totalActive}</td><td class="text-danger">${totalSuspended}</td><td style="color:#5b21b6;">${totalGraduated}</td><td class="text-primary fs-6">${students.length}</td></tr>`;
   tbody.innerHTML = html;
 }
 
@@ -1299,6 +1322,7 @@ function escapeHtmlSafe(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
 function escapeAttr(s) { return escapeHtmlSafe(s).replace(/'/g, '&#39;'); }
+function jsArgAttr(s) { return escapeAttr(JSON.stringify(String(s == null ? '' : s))); }
 
 window.filterClubList = (typeof debounce === 'function') ? debounce(_filterClubListImpl, 180) : _filterClubListImpl;
 function _filterClubListImpl() {
