@@ -75,12 +75,19 @@ async function getTeacherTimetableWithStatus([teacherId]) {
   const [ttRes, club] = await Promise.all([
     query(
       `SELECT t.subject_code, t.subject_name, t.level, t.room, t.location, t.period, t.day,
-              EXISTS(
-                SELECT 1 FROM academic_records ar
-                WHERE ar.teacher_id=$1 AND ar.date=$4
-                  AND ar.subject_code=t.subject_code
-                  AND ar.class=(t.level||'/'||t.room)
-                  AND ar.term=$2 AND ar.year=$3
+              (
+                EXISTS(
+                  SELECT 1 FROM attendance a
+                  WHERE a.teacher_id=$1 AND a.date=$4
+                    AND a.subject_code=t.subject_code
+                    AND a.class=(t.level||'/'||t.room)
+                    AND a.term=$2 AND a.year=$3
+                ) OR EXISTS(
+                  SELECT 1 FROM morning_activity ma
+                  WHERE ma.teacher_id=$1 AND ma.date=$4
+                    AND ma.class=(t.level||'/'||t.room)
+                    AND UPPER(t.subject_code)='HR'
+                )
               ) AS has_record
        FROM timetable t
        WHERE t.teacher_id=$1 AND t.day=$5 AND t.term=$2 AND t.year=$3
