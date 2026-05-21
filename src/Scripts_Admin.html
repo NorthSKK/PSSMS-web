@@ -366,27 +366,94 @@ function loadUserData(forceRefresh) {
   }).getAllUsers();
 }
 
+var _expandedGroups = new Set();
+
 function renderTable(data) {
-  const tbodyStudent = document.getElementById('tableBodyStudent');
-  const tbodyStaff = document.getElementById('tableBodyStaff');
-  if(!tbodyStudent || !tbodyStaff) return;
-  let htmlStudent = ''; let htmlStaff = '';
-  data.forEach(row => {
-    const rawStatus = row[7] ? String(row[7]).trim() : "ปกติ";
-    if (row[3] === 'Student') {
-      let statusBadge = rawStatus === 'ปกติ' ? '<span class="badge bg-success-subtle text-success border border-success rounded-pill px-3">ปกติ</span>' : '<span class="badge bg-danger-subtle text-danger border border-danger rounded-pill px-3">แขวนลอย</span>';
-      let trClass = rawStatus === 'แขวนลอย' ? 'table-danger' : '';
-      htmlStudent += `<tr class="${trClass}"><td class="ps-4 fw-bold text-primary">${row[0]}</td><td>${row[2]}</td><td><span class="badge bg-light text-dark border">${row[4]}</span></td><td class="text-center">${statusBadge}</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal('edit', '${row[0]}')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete('${row[0]}')"><i class="fas fa-trash"></i></button></td></tr>`;
-    } else {
-      let roleBadge = row[3] === 'Admin' ? '<span class="badge bg-danger">Admin</span>' : '<span class="badge bg-success">Teacher</span>';
-      const hrClass = _staffHomeroomMap[row[0]] || '';
-      const hrBadge = hrClass ? `<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);border:1px solid var(--p-accent);">${hrClass}</span>` : '<span class="text-muted small">—</span>';
-      htmlStaff += `<tr><td class="ps-4 text-muted">${row[0]}</td><td class="fw-bold">${row[2]}</td><td>${row[4]}</td><td class="text-center">${roleBadge}</td><td class="text-center">${hrBadge}</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal('edit', '${row[0]}')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete('${row[0]}')"><i class="fas fa-trash"></i></button></td></tr>`;
-    }
-  });
-  tbodyStudent.innerHTML = htmlStudent || '<tr><td colspan="5" class="text-center p-5 text-muted">ไม่พบข้อมูลนักเรียน</td></tr>';
-  tbodyStaff.innerHTML = htmlStaff || '<tr><td colspan="5" class="text-center p-5 text-muted">ไม่พบข้อมูลบุคลากร</td></tr>';
+  var students = data.filter(function(r) { return r[3] === 'Student'; });
+  var staff = data.filter(function(r) { return r[3] !== 'Student'; });
+  renderStudentAccordion(students);
+  var tbodyStaff = document.getElementById('tableBodyStaff');
+  if (tbodyStaff) {
+    var htmlStaff = '';
+    staff.forEach(function(row) {
+      var roleBadge = row[3] === 'Admin' ? '<span class="badge bg-danger">Admin</span>' : row[3] === 'Executive' ? '<span class="badge bg-info">Executive</span>' : '<span class="badge bg-success">Teacher</span>';
+      var hrClass = _staffHomeroomMap[row[0]] || '';
+      var hrBadge = hrClass ? '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);border:1px solid var(--p-accent);">' + hrClass + '</span>' : '<span class="text-muted small">—</span>';
+      htmlStaff += '<tr><td class="ps-4 text-muted">' + row[0] + '</td><td class="fw-bold">' + row[2] + '</td><td>' + row[4] + '</td><td class="text-center">' + roleBadge + '</td><td class="text-center">' + hrBadge + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',\'' + row[0] + '\')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(\'' + row[0] + '\')"><i class="fas fa-trash"></i></button></td></tr>';
+    });
+    tbodyStaff.innerHTML = htmlStaff || '<tr><td colspan="6" class="text-center p-5 text-muted">ไม่พบข้อมูลบุคลากร</td></tr>';
+  }
   renderStudentSummary(data);
+}
+
+function renderStudentAccordion(students) {
+  var container = document.getElementById('studentAccordion');
+  if (!container) return;
+  var isSearching = (document.getElementById('searchInput') || {}).value;
+  if (students.length === 0) {
+    container.innerHTML = '<div class="pssms-card text-center p-5 text-muted">ไม่พบข้อมูลนักเรียน</div>';
+    return;
+  }
+  // group by class
+  var groups = {};
+  students.forEach(function(row) {
+    var cls = String(row[4] || '').trim() || 'ไม่ระบุ';
+    if (!groups[cls]) groups[cls] = [];
+    groups[cls].push(row);
+  });
+  var sortedClasses = Object.keys(groups).sort(function(a, b) {
+    return a.localeCompare(b, 'th', { numeric: true });
+  });
+  // if first render (no expanded state) → expand first class
+  if (_expandedGroups.size === 0 && !isSearching) _expandedGroups.add(sortedClasses[0]);
+  var html = '';
+  sortedClasses.forEach(function(cls, idx) {
+    var rows = groups[cls];
+    var male = 0, female = 0, suspended = 0;
+    rows.forEach(function(r) {
+      if (/^(นาย|ด\.ช\.|ดช\.|เด็กชาย)/.test(String(r[2]))) male++; else female++;
+      if (String(r[7] || '').trim() === 'แขวนลอย') suspended++;
+    });
+    var safeId = 'sg_' + idx;
+    var isOpen = isSearching ? true : _expandedGroups.has(cls);
+    html += '<div class="pssms-card mb-2 p-0" style="overflow:hidden;">';
+    html += '<div class="d-flex align-items-center px-3 py-2 gap-2" style="cursor:pointer;background:var(--p-subtle);border-bottom:1px solid var(--p-border);" onclick="toggleStudentGroup(\'' + cls.replace(/'/g, "\\'") + '\',\'' + safeId + '\')">';
+    html += '<span class="fw-bold" style="font-size:.9rem;">' + cls + '</span>';
+    html += '<span class="pssms-chip ms-1">' + rows.length + ' คน</span>';
+    html += '<span class="text-muted small ms-1">ชาย ' + male + ' | หญิง ' + female + (suspended ? ' | <span class="text-danger">แขวนลอย ' + suspended + '</span>' : '') + '</span>';
+    html += '<i class="fas fa-chevron-' + (isOpen ? 'up' : 'down') + ' ms-auto text-muted" style="font-size:.75rem;"></i>';
+    html += '</div>';
+    html += '<div id="' + safeId + '"' + (isOpen ? '' : ' style="display:none;"') + '>';
+    html += '<div class="table-responsive"><table class="pssms-table mb-0 text-nowrap" style="font-size:.85rem;"><thead><tr>';
+    html += '<th class="ps-4">รหัสนักเรียน</th><th>ชื่อ-สกุล</th><th class="text-center">สถานะ</th><th class="text-end pe-4">จัดการ</th>';
+    html += '</tr></thead><tbody>';
+    rows.forEach(function(row) {
+      var status = String(row[7] || '').trim() || 'ปกติ';
+      var statusBadge = status === 'ปกติ' ? '<span class="badge bg-success-subtle text-success border border-success rounded-pill px-2">ปกติ</span>' : '<span class="badge bg-danger-subtle text-danger border border-danger rounded-pill px-2">แขวนลอย</span>';
+      var trClass = status === 'แขวนลอย' ? ' class="table-danger"' : '';
+      html += '<tr' + trClass + '><td class="ps-4 fw-bold text-primary">' + row[0] + '</td><td>' + row[2] + '</td><td class="text-center">' + statusBadge + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',\'' + row[0] + '\')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(\'' + row[0] + '\')"><i class="fas fa-trash"></i></button></td></tr>';
+    });
+    html += '</tbody></table></div></div></div>';
+  });
+  container.innerHTML = html;
+}
+
+function toggleStudentGroup(cls, safeId) {
+  var body = document.getElementById(safeId);
+  var header = body ? body.previousElementSibling : null;
+  if (!body) return;
+  var isOpen = body.style.display !== 'none';
+  if (isOpen) {
+    body.style.display = 'none';
+    _expandedGroups.delete(cls);
+  } else {
+    body.style.display = '';
+    _expandedGroups.add(cls);
+  }
+  if (header) {
+    var icon = header.querySelector('i.fa-chevron-up, i.fa-chevron-down');
+    if (icon) { icon.classList.toggle('fa-chevron-up', !isOpen); icon.classList.toggle('fa-chevron-down', isOpen); }
+  }
 }
 
 function renderStudentSummary(data) {
