@@ -6,12 +6,16 @@ async function getMorningActivityData([date, className]) {
      FROM morning_activity WHERE date=$1 AND class=$2 ORDER BY student_id`,
     [date, className]
   );
+  const normArea = v => ['ปกติ','มา','เข้าแถว'].includes(v) ? 'ปกติ' : (v === 'ไม่ปกติ' ? 'ไม่ปกติ' : 'ปกติ');
+  const normDuty = v => ['ทำหน้าที่','มา','ทำ','ปกติ'].includes(v) ? 'ทำหน้าที่' : (v === 'ไม่ทำหน้าที่' ? 'ไม่ทำหน้าที่' : 'ทำหน้าที่');
+  const normFlag = v => ['เข้าแถว','มา','ปกติ','เข้า'].includes(v) ? 'เข้าแถว' : (v === 'ไม่เข้าแถว' ? 'ไม่เข้าแถว' : 'เข้าแถว');
+
   const result = {};
   for (const r of rows) {
     result[String(r.student_id).trim()] = {
-      area: r.area_status || '',
-      duty: r.duty_status || '',
-      flag: r.flag_status || '',
+      area: normArea(r.area_status),
+      duty: normDuty(r.duty_status),
+      flag: normFlag(r.flag_status),
     };
   }
   return result;

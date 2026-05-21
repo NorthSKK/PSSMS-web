@@ -106,10 +106,54 @@ async function getCourseSessionList([teacherId, subjectCode, className, term, ye
 }
 
 async function getMassiveAttendanceGrid([teacherId, subjectCode, className, term, year]) {
-  const studentsRes = await require('./students').getStudentsByClass([
-    className,
-    null,
-  ]);
+  const thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const toThaiDate = (dateStr) => {
+    const d = new Date(dateStr);
+    return `${d.getUTCDate()} ${thaiMonths[d.getUTCMonth()]}`;
+  };
+
+  const studentsRes = await require('./students').getStudentsByClass([className, null]);
+  const isHR = String(subjectCode).toUpperCase() === 'HR';
+
+  if (isHR) {
+    const sessionsRes = await query(
+      `SELECT to_char(date,'YYYY-MM-DD') as date
+       FROM morning_activity
+       WHERE teacher_id=$1 AND class=$2 AND term=$3 AND year=$4
+       GROUP BY date ORDER BY date`,
+      [teacherId, className, term, year]
+    );
+    const attRes = await query(
+      `SELECT id, student_id, to_char(date,'YYYY-MM-DD') as date_str,
+              CASE WHEN area_status IN ('มา','ปกติ','เข้าแถว','เข้า') THEN 'ปกติ'
+                   WHEN area_status = 'ไม่ปกติ' THEN 'ไม่ปกติ'
+                   ELSE 'ปกติ' END as area,
+              CASE WHEN duty_status IN ('มา','ทำหน้าที่','ทำ','ปกติ') THEN 'ทำหน้าที่'
+                   WHEN duty_status = 'ไม่ทำหน้าที่' THEN 'ไม่ทำหน้าที่'
+                   ELSE 'ทำหน้าที่' END as duty,
+              CASE WHEN flag_status IN ('มา','เข้าแถว','เข้า','ปกติ') THEN 'เข้าแถว'
+                   WHEN flag_status = 'ไม่เข้าแถว' THEN 'ไม่เข้าแถว'
+                   ELSE 'เข้าแถว' END as flag
+       FROM morning_activity
+       WHERE teacher_id=$1 AND class=$2 AND term=$3 AND year=$4`,
+      [teacherId, className, term, year]
+    );
+    const attendance = {};
+    for (const r of attRes.rows) {
+      if (!attendance[r.student_id]) attendance[r.student_id] = {};
+      attendance[r.student_id][r.date_str + '_area'] = { status: r.area, rowIdx: r.id };
+      attendance[r.student_id][r.date_str + '_duty'] = { status: r.duty, rowIdx: r.id };
+      attendance[r.student_id][r.date_str + '_flag'] = { status: r.flag, rowIdx: r.id };
+    }
+    // Expand each date into 3 sessions: area, duty, flag
+    const sessions = [];
+    for (const r of sessionsRes.rows) {
+      sessions.push({ date: r.date, type: 'area', label: 'บริเวณ',   displayDate: toThaiDate(r.date) });
+      sessions.push({ date: r.date, type: 'duty', label: 'หน้าที่',  displayDate: '' });
+      sessions.push({ date: r.date, type: 'flag', label: 'เข้าแถว', displayDate: '' });
+    }
+    return { students: studentsRes, sessions, attendance, isHR: true };
+  }
 
   const sessionsRes = await query(
     `SELECT session_id,
@@ -123,16 +167,16 @@ async function getMassiveAttendanceGrid([teacherId, subjectCode, className, term
   );
 
   const attRes = await query(
-    `SELECT id, student_id, session_id, status
+    `SELECT id, student_id, to_char(date,'YYYY-MM-DD') as date_str, period, status
      FROM attendance
      WHERE teacher_id=$1 AND subject_code=$2 AND class=$3 AND term=$4 AND year=$5`,
     [teacherId, subjectCode, className, term, year]
   );
 
-  const attendanceMap = {};
+  const attendance = {};
   for (const r of attRes.rows) {
-    if (!attendanceMap[r.student_id]) attendanceMap[r.student_id] = {};
-    attendanceMap[r.student_id][r.session_id] = { status: r.status, rowIdx: r.id };
+    if (!attendance[r.student_id]) attendance[r.student_id] = {};
+    attendance[r.student_id][r.date_str + '_' + r.period] = { status: r.status, rowIdx: r.id };
   }
 
   return {
@@ -141,27 +185,40 @@ async function getMassiveAttendanceGrid([teacherId, subjectCode, className, term
       sessionId: r.session_id,
       date: r.date,
       period: r.period,
+      displayDate: toThaiDate(r.date),
     })),
-    attendanceMap,
+    attendance,
   };
 }
 
-async function saveMassiveAttendanceGrid([updates, newRows]) {
+// args: subjectCode, subjectName, className, term, year, updates, newRecords, teacherId
+async function saveMassiveAttendanceGrid([subjectCode, subjectName, className, term, year, updates, newRecords, teacherId]) {
+  const isHR = String(subjectCode).toUpperCase() === 'HR';
+
+  const hrColMap = { area: 'area_status', duty: 'duty_status', flag: 'flag_status' };
   if (Array.isArray(updates)) {
     for (const u of updates) {
-      await query(`UPDATE attendance SET status=$1 WHERE id=$2`, [u.status, u.rowIdx]);
+      if (isHR) {
+        const col = hrColMap[u.hrType] || 'area_status';
+        await query(`UPDATE morning_activity SET ${col}=$1 WHERE id=$2`, [u.status, u.rowIdx]);
+      } else {
+        await query(`UPDATE attendance SET status=$1 WHERE id=$2`, [u.status, u.rowIdx]);
+      }
     }
   }
-  if (Array.isArray(newRows) && newRows.length > 0) {
-    for (const r of newRows) {
+
+  if (!isHR && Array.isArray(newRecords) && newRecords.length > 0) {
+    for (const r of newRecords) {
+      const sessionId = `${r.date}|${subjectCode}|${className}|${r.period}`;
       await query(
         `INSERT INTO attendance(date,term,year,subject_code,subject_name,class,period,student_id,student_name,status,session_id,teacher_id)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [r.date, r.term, r.year, r.subjectCode, r.subjectName, r.className,
-         r.period, r.studentId, r.studentName, r.status, r.sessionId, r.teacherId || '']
+        [r.date, term, year, subjectCode, subjectName, className,
+         r.period, r.studentId, r.studentName, r.status, sessionId, teacherId || '']
       );
     }
   }
+
   return { status: 'success', message: 'บันทึกตารางเช็คชื่อสำเร็จ' };
 }
 

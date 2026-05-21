@@ -30,18 +30,6 @@ function initAcademicPage() {
   reloadTimetableByDate();
   setTimeout(setupSignatureCanvas, 300);
 
-  // 🌟 แอบดึงปุ่มระบบลับมาแสดงในหน้าหลัก
-  setTimeout(() => {
-      const cp = document.querySelector('#selectClass')?.closest('.card-body');
-      if (cp && !document.getElementById('btnMassiveGrid')) {
-          cp.insertAdjacentHTML('beforeend', `
-            <hr class="text-muted opacity-25 my-3">
-            <button id="btnMassiveGrid" class="btn btn-dark w-100 fw-bold shadow-sm animate__animated animate__fadeInUp" onclick="openMassiveGrid()" style="border: 2px dashed #dc3545;">
-              <i class="fas fa-magic me-2 text-warning"></i>เช็คชื่อแบบตารางรวม (ทั้งเทอม)
-            </button>
-          `);
-      }
-  }, 800);
 }
 
 function updateThaiDateDisplay() {
@@ -323,7 +311,7 @@ function renderMorningTable(students, historyData = {}) {
           <th class="text-start">ชื่อ-สกุล</th>
           <th style="min-width:130px;">เขตพื้นที่</th>
           <th style="min-width:130px;">เวรห้องเรียน</th>
-          <th style="min-width:130px;">หน้าเสาธง</th>
+          <th style="min-width:130px;">เข้าแถวเช้า</th>
         </tr>`;
     }
   }
@@ -456,18 +444,7 @@ function viewTodayHistory() {
 }
 
 function viewAllHistory() {
-  const classVal = document.getElementById('selectClass').value;
-  if(!classVal) { showAlert("กรุณาเลือกวิชาที่สอนก่อนครับ"); return; }
-  
-  const item = JSON.parse(classVal);
-  const subjectCode = item[0];
-  const className = getRealClassName(); 
-
-  showLoader(true);
-  google.script.run.withSuccessHandler(function(sessions) {
-    showLoader(false);
-    renderSessionListModal(sessions, subjectCode, className);
-  }).getCourseSessionList(subjectCode, className);
+  openMassiveGrid();
 }
 
 function renderSessionListModal(sessions, subjectCode, className) {
@@ -726,70 +703,136 @@ function openMassiveGrid() {
         massiveGridData.className = className;
         renderMassiveGridModal();
     }).withFailureHandler(err => { showLoader(false); showAlert("Error: "+err.message); })
-    .getMassiveAttendanceGrid(subjectCode, className, user.currentTerm, user.currentYear);
+    .getMassiveAttendanceGrid(user.id, subjectCode, className, user.currentTerm, user.currentYear);
 }
 
 function getSelectColor(status) {
-    if(status === 'มา') return 'text-success border-success fw-bold';
+    if(['มา','ปกติ','ทำหน้าที่','เข้าแถว'].includes(status)) return 'text-success border-success fw-bold';
     if(status === 'สาย') return 'text-dark border-warning bg-warning bg-opacity-25 fw-bold';
     if(status === 'ลา') return 'text-dark border-info bg-info bg-opacity-25 fw-bold';
-    if(status === 'ขาด') return 'text-white border-danger bg-danger fw-bold';
-    if(status === '-') return 'text-muted border-secondary bg-light'; 
+    if(['ขาด','ไม่ปกติ','ไม่ทำหน้าที่','ไม่เข้าแถว'].includes(status)) return 'text-white border-danger bg-danger fw-bold';
+    if(status === '-') return 'text-muted border-secondary bg-light';
     return '';
 }
 
+function _massiveSessionKey(sess) {
+    return sess.type ? (sess.date + '_' + sess.type) : (sess.date + '_' + sess.period);
+}
+
 function renderMassiveGridModal() {
-    let theadHtml = `<tr>
-        <th class="bg-dark text-white align-middle text-center" style="position: sticky; left: 0; z-index: 20; min-width: 40px;">ที่</th>
-        <th class="bg-dark text-white align-middle" style="position: sticky; left: 40px; z-index: 20; min-width: 150px;">ชื่อ-สกุล</th>`;
-        
-    massiveGridData.sessions.forEach((sess, idx) => {
-        theadHtml += `<th class="bg-primary text-white text-center border-start border-end" style="min-width: 80px;">
-            <div class="small fw-normal">${sess.displayDate}</div>
-            <div class="badge bg-light text-dark mt-1">คาบ ${sess.period}</div>
-        </th>`;
-    });
-    
-    theadHtml += `<th class="bg-success text-white text-center align-middle" style="min-width: 120px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" onclick="openAddSessionModal()">
-        <i class="fas fa-plus-circle fa-lg mb-1"></i><br>ดึงคาบเรียนเพิ่ม
-    </th></tr>`;
-    
+    const isHR = !!massiveGridData.isHR;
+    const sessions = massiveGridData.sessions;
+
+    // ── Header ──────────────────────────────────────────────
+    const stickyBase = 'position: sticky; z-index: 20;';
+    let theadHtml = '';
+
+    if (isHR) {
+        // Row 1: ที่ | ชื่อ-สกุล | [date colspan=3] × N | (no add-session btn for HR)
+        theadHtml += `<tr>
+            <th class="bg-dark text-white align-middle text-center" style="${stickyBase} left:0; min-width:40px;" rowspan="2">ที่</th>
+            <th class="bg-dark text-white align-middle" style="${stickyBase} left:40px; min-width:150px;" rowspan="2">ชื่อ-สกุล</th>`;
+        const dates = [...new Set(sessions.map(s => s.date))];
+        dates.forEach(d => {
+            const label = sessions.find(s => s.date === d && s.type === 'area')?.displayDate || d;
+            theadHtml += `<th class="bg-primary text-white text-center border-start" colspan="3" style="min-width:210px;font-size:0.8rem;">${label}</th>`;
+        });
+        theadHtml += `<th class="bg-success text-white text-center align-middle" rowspan="2" style="min-width:80px;cursor:pointer;" onclick="openAddSessionModal()">
+            <i class="fas fa-plus-circle fa-lg mb-1"></i><br><small>เพิ่มวัน</small>
+        </th></tr>`;
+
+        // Row 2: เขตพื้นที่ | เวรห้องเรียน | เข้าแถวเช้า (per date)
+        theadHtml += `<tr>`;
+        dates.forEach(() => {
+            theadHtml += `
+                <th class="bg-primary bg-opacity-75 text-white text-center border-start" style="min-width:70px;font-size:0.72rem;padding:2px 1px;">เขตพื้นที่</th>
+                <th class="bg-primary bg-opacity-75 text-white text-center" style="min-width:70px;font-size:0.72rem;padding:2px 1px;">เวรห้องเรียน</th>
+                <th class="bg-primary bg-opacity-75 text-white text-center border-end" style="min-width:70px;font-size:0.72rem;padding:2px 1px;">เข้าแถวเช้า</th>`;
+        });
+        theadHtml += `</tr>`;
+    } else {
+        theadHtml += `<tr>
+            <th class="bg-dark text-white align-middle text-center" style="${stickyBase} left:0; min-width:40px;">ที่</th>
+            <th class="bg-dark text-white align-middle" style="${stickyBase} left:40px; min-width:150px;">ชื่อ-สกุล</th>`;
+        sessions.forEach(sess => {
+            theadHtml += `<th class="bg-primary text-white text-center border-start border-end" style="min-width:80px;">
+                <div class="small fw-normal">${sess.displayDate}</div>
+                <div class="badge bg-light text-dark mt-1">คาบ ${sess.period}</div>
+            </th>`;
+        });
+        theadHtml += `<th class="bg-success text-white text-center align-middle" style="min-width:120px;cursor:pointer;" onclick="openAddSessionModal()">
+            <i class="fas fa-plus-circle fa-lg mb-1"></i><br>ดึงคาบเรียนเพิ่ม
+        </th></tr>`;
+    }
+
+    // ── Body ─────────────────────────────────────────────────
     let tbodyHtml = '';
-    
-    massiveGridData.students.sort((a, b) => String(a[0] || "").localeCompare(String(b[0] || ""), 'th', {numeric: true}));
-    
+    massiveGridData.students.sort((a, b) => String(a[0]||'').localeCompare(String(b[0]||''), 'th', {numeric:true}));
+
     massiveGridData.students.forEach((std, sIdx) => {
         const stdId = String(std[0]).trim();
-        const cleanStdId = String(parseInt(stdId, 10)); 
-        
+        const cleanStdId = String(parseInt(stdId, 10));
+
         tbodyHtml += `<tr>
-            <td class="text-center fw-bold text-muted align-middle bg-white border-bottom" style="position: sticky; left: 0; z-index: 10;">${sIdx + 1}</td>
-            <td class="bg-white border-bottom align-middle px-2" style="position: sticky; left: 40px; z-index: 10;">
+            <td class="text-center fw-bold text-muted align-middle bg-white border-bottom" style="position:sticky;left:0;z-index:10;">${sIdx+1}</td>
+            <td class="bg-white border-bottom align-middle px-2" style="position:sticky;left:40px;z-index:10;">
                 <div class="fw-bold text-dark" style="font-size:0.85rem;">${std[2]}</div>
                 <div class="small text-muted font-monospace">${stdId}</div>
             </td>`;
-            
-        massiveGridData.sessions.forEach(sess => {
-            const sessionKey = sess.date + '_' + sess.period;
-            const att = massiveGridData.attendance[cleanStdId] ? massiveGridData.attendance[cleanStdId][sessionKey] : null;
-            
+
+        sessions.forEach(sess => {
+            const sessionKey = _massiveSessionKey(sess);
+            const att = massiveGridData.attendance[cleanStdId]?.[sessionKey];
             const status = att ? att.status : '-';
             const rowIdx = att ? att.rowIdx : '';
             const isNew = att ? 'false' : 'true';
-            
-            tbodyHtml += `<td class="text-center p-1 border-start border-end align-middle">
-                <select id="mass_${cleanStdId}_${sessionKey}" data-rowidx="${rowIdx}" data-isnew="${isNew}" class="form-select form-select-sm text-center shadow-sm ${getSelectColor(status)}" style="cursor: pointer;" onchange="this.className='form-select form-select-sm text-center shadow-sm '+getSelectColor(this.value)">
-                    <option value="-" ${status==='-'?'selected':''} class="d-none">-</option>
-                    <option value="มา" ${status==='มา'?'selected':''}>มา</option>
-                    <option value="สาย" ${status==='สาย'?'selected':''}>สาย</option>
-                    <option value="ลา" ${status==='ลา'?'selected':''}>ลา</option>
-                    <option value="ขาด" ${status==='ขาด'?'selected':''}>ขาด</option>
+            const borderClass = sess.type === 'flag' ? 'border-end' : (sess.type === 'area' ? 'border-start' : '');
+            const cellPad = isHR ? 'p-0' : 'p-1';
+            const selStyle = isHR ? 'cursor:pointer;font-size:0.72rem;padding:2px 1px;min-width:70px;width:100%;' : 'cursor:pointer;';
+            const hrOpts = {
+                area: [['ปกติ','ปกติ'],['ไม่ปกติ','ไม่ปกติ']],
+                duty: [['ทำหน้าที่','ทำหน้าที่'],['ไม่ทำหน้าที่','ไม่ทำหน้าที่']],
+                flag: [['เข้าแถว','เข้าแถว'],['ไม่เข้าแถว','ไม่เข้าแถว']],
+            };
+            const opts = isHR
+                ? hrOpts[sess.type].map(([v,l]) => `<option value="${v}" ${status===v?'selected':''}>${l}</option>`).join('')
+                : `<option value="-" ${status==='-'?'selected':''} class="d-none">-</option>
+                   <option value="มา"  ${status==='มา' ?'selected':''}>มา</option>
+                   <option value="สาย" ${status==='สาย'?'selected':''}>สาย</option>
+                   <option value="ลา"  ${status==='ลา' ?'selected':''}>ลา</option>
+                   <option value="ขาด" ${status==='ขาด'?'selected':''}>ขาด</option>`;
+            tbodyHtml += `<td class="text-center ${cellPad} align-middle ${borderClass}">
+                <select id="mass_${cleanStdId}_${sessionKey}" data-rowidx="${rowIdx}" data-isnew="${isNew}" data-hrtype="${sess.type||''}"
+                    class="form-select form-select-sm text-center shadow-sm ${getSelectColor(status)}" style="${selStyle}"
+                    onchange="this.className='form-select form-select-sm text-center shadow-sm '+getSelectColor(this.value)">
+                    ${opts}
                 </select>
             </td>`;
         });
-        
-        tbodyHtml += `<td class="bg-light border-bottom"></td></tr>`;
+
+        if (!isHR) tbodyHtml += `<td class="bg-light border-bottom"></td>`;
+        tbodyHtml += `</tr>`;
     });
+
+    // ── Summary row ──────────────────────────────────────────
+    tbodyHtml += `<tr class="table-secondary fw-bold">
+        <td colspan="2" class="text-center align-middle px-2" style="position:sticky;left:0;z-index:10;background:#e9ecef;">รวมไม่มา</td>`;
+    sessions.forEach(sess => {
+        const sessionKey = _massiveSessionKey(sess);
+        let count = 0;
+        massiveGridData.students.forEach(std => {
+            const cid = String(parseInt(String(std[0]).trim(), 10));
+            const att = massiveGridData.attendance[cid]?.[sessionKey];
+            const neg = isHR
+                ? ['ไม่ปกติ','ไม่ทำหน้าที่','ไม่เข้าแถว'].includes(att?.status)
+                : att && att.status && att.status !== 'มา' && att.status !== '-';
+            if (neg) count++;
+        });
+        const borderClass = sess.type === 'flag' ? 'border-end' : (sess.type === 'area' ? 'border-start' : '');
+        tbodyHtml += `<td class="text-center align-middle ${borderClass} ${count>0?'text-danger':'text-success'}">${count>0?count:'✓'}</td>`;
+    });
+    if (!isHR) tbodyHtml += `<td class="bg-light"></td>`;
+    tbodyHtml += `</tr>`;
 
     const modalHtml = `
     <div class="modal fade" id="massiveGridModal" tabindex="-1" aria-hidden="true">
@@ -813,10 +856,10 @@ function renderMassiveGridModal() {
                 <div class="modal-footer bg-white border-top p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center">
                         <button class="btn btn-outline-success fw-bold px-4 rounded-pill shadow-sm" onclick="markAllAsPresent()">
-                            <i class="fas fa-check-double me-2"></i>เช็ค 'มา' ทั้งหมด (เฉพาะช่องว่าง)
+                            <i class="fas fa-check-double me-2"></i>${isHR ? "เช็ค 'ปกติ' ทั้งหมด (ช่องที่ยังไม่บันทึก)" : "เช็ค 'มา' ทั้งหมด (เฉพาะช่องว่าง)"}
                         </button>
-                        <span class="text-danger small fw-bold ms-3 d-none d-lg-block">
-                            <i class="fas fa-info-circle me-1"></i>ช่องที่เลือก สาย/ลา/ขาด ไว้แล้ว จะไม่ถูกเปลี่ยน
+                        <span class="text-muted small ms-3 d-none d-lg-block">
+                            <i class="fas fa-info-circle me-1"></i>${isHR ? 'ช่องที่ไม่ปกติจะไม่ถูกเปลี่ยน' : 'ช่องที่เลือก สาย/ลา/ขาด ไว้แล้ว จะไม่ถูกเปลี่ยน'}
                         </span>
                     </div>
                     <div>
@@ -836,105 +879,139 @@ function renderMassiveGridModal() {
     modal.show();
 }
 
-// 🌟 ฟังก์ชันใหม่: กวาดช่องว่างให้เป็น "มา" ทั้งหมด
 function markAllAsPresent() {
-    Swal.fire({ title: "เช็ค 'มา' ทุกช่องว่าง?", text: "ช่องที่เช็ค ลา/สาย/ขาด ไปแล้วจะไม่ถูกเปลี่ยนแปลง", icon: 'question', showCancelButton: true, confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก' }).then(r => {
-    if (!r.isConfirmed) return;
+    const isHR = !!massiveGridData.isHR;
+    const hrPositive = { area: 'ปกติ', duty: 'ทำหน้าที่', flag: 'เข้าแถว' };
+    const hrNegative = { area: 'ไม่ปกติ', duty: 'ไม่ทำหน้าที่', flag: 'ไม่เข้าแถว' };
+    const title = isHR ? "เช็ค 'ปกติ' ทุกช่องที่ยังไม่บันทึก?" : "เช็ค 'มา' ทุกช่องว่าง?";
+    const text  = isHR ? "ช่องที่เลือก ไม่ปกติ/ไม่ทำหน้าที่/ไม่เข้าแถว จะไม่ถูกเปลี่ยน" : "ช่องที่เช็ค ลา/สาย/ขาด ไว้แล้วจะไม่ถูกเปลี่ยน";
 
-    let count = 0;
-    massiveGridData.sessions.forEach(sess => {
-        const sessionKey = sess.date + '_' + sess.period;
-        massiveGridData.students.forEach(std => {
-            const cleanStdId = String(parseInt(String(std[0]).trim(), 10));
-            const select = document.getElementById(`mass_${cleanStdId}_${sessionKey}`);
-            
-            // เปลี่ยนเฉพาะช่องที่ยังเป็น '-' อยู่
-            if (select && select.value === '-') {
-                select.value = 'มา';
-                select.className = 'form-select form-select-sm text-center shadow-sm ' + getSelectColor('มา');
-                count++;
-            }
+    Swal.fire({ title, text, icon: 'question', showCancelButton: true, confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก' }).then(r => {
+        if (!r.isConfirmed) return;
+        let count = 0;
+        massiveGridData.sessions.forEach(sess => {
+            const sessionKey = _massiveSessionKey(sess);
+            massiveGridData.students.forEach(std => {
+                const cleanStdId = String(parseInt(String(std[0]).trim(), 10));
+                const select = document.getElementById(`mass_${cleanStdId}_${sessionKey}`);
+                if (!select) return;
+                if (isHR) {
+                    const posVal = hrPositive[sess.type];
+                    const negVal = hrNegative[sess.type];
+                    const isNew = select.getAttribute('data-isnew') === 'true';
+                    // เปลี่ยนเฉพาะช่องใหม่ (ยังไม่บันทึก) ไม่แตะช่องที่เป็น negative
+                    if (isNew && select.value !== negVal) {
+                        select.value = posVal;
+                        select.className = 'form-select form-select-sm text-center shadow-sm ' + getSelectColor(posVal);
+                        count++;
+                    }
+                } else {
+                    if (select.value === '-') {
+                        select.value = 'มา';
+                        select.className = 'form-select form-select-sm text-center shadow-sm ' + getSelectColor('มา');
+                        count++;
+                    }
+                }
+            });
         });
+        const msg = isHR
+            ? (count > 0 ? `✅ เช็ค 'ปกติ' ${count} ช่อง — กดบันทึกเพื่อยืนยัน` : 'ไม่มีช่องใหม่ที่ต้องเช็ค')
+            : (count > 0 ? `✅ เช็ค 'มา' ${count} ช่อง — กดบันทึกเพื่อยืนยัน` : 'ไม่มีช่องว่างแล้ว');
+        showAlert(msg);
     });
+}
 
-    if (count > 0) {
-        showAlert(`✅ ทำการเช็ค 'มา' ให้ทั้งหมด ${count} ช่องเรียบร้อยแล้ว!\n\nอย่าลืมกดปุ่ม [บันทึกข้อมูลทั้งหมด] เพื่อยืนยันลงฐานข้อมูลด้วยนะครับ`);
-    } else {
-        showAlert("ไม่มีช่องว่างที่ต้องเช็คเพิ่มแล้วครับ");
-    }
+function _thaiDateFront(dateStr) {
+    const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    const d = new Date(dateStr);
+    return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
+}
+
+function _pushHRSessions(dateStr) {
+    const hrMeta = {area:'เขตพื้นที่', duty:'เวรห้องเรียน', flag:'เข้าแถวเช้า'};
+    let added = false;
+    ['area','duty','flag'].forEach((type, i) => {
+        if (!massiveGridData.sessions.some(s => s.date === dateStr && s.type === type)) {
+            massiveGridData.sessions.push({
+                date: dateStr, type, label: hrMeta[type],
+                displayDate: i === 0 ? _thaiDateFront(dateStr) : ''
+            });
+            added = true;
+        }
     });
+    return added;
 }
 
 function openAddSessionModal() {
     const oldModal = document.getElementById('addSessionModal');
     if(oldModal) oldModal.remove();
 
+    const isHR = !!massiveGridData.isHR;
     const today = new Date();
     const todayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    
-    const pastMonth = new Date();
-    pastMonth.setMonth(pastMonth.getMonth() - 1);
+    const pastMonth = new Date(); pastMonth.setMonth(pastMonth.getMonth() - 1);
     const pastMonthStr = new Date(pastMonth.getTime() - (pastMonth.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+
+    const periodField = isHR ? '' : `
+        <div class="col-6">
+            <label class="fw-bold small text-muted mb-1">คาบที่สอน (เช่น 1, 2):</label>
+            <input type="number" id="as_auto_period" class="form-control form-control-sm border-success shadow-none" placeholder="ระบุคาบ">
+        </div>`;
+    const periodFieldSingle = isHR ? '' : `
+        <div class="mb-4">
+            <label class="fw-bold small text-muted mb-1">คาบที่สอน:</label>
+            <input type="number" id="as_single_period" class="form-control form-control-sm border-secondary shadow-none" placeholder="เช่น 1">
+        </div>`;
 
     const modalHtml = `
     <div class="modal fade" id="addSessionModal" tabindex="-1" style="z-index: 1060;">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg border-0" style="border-radius: 12px; overflow: hidden;">
                 <div class="modal-header bg-success text-white border-0 p-3">
-                    <h5 class="modal-title fw-bold mb-0"><i class="fas fa-magic me-2"></i>เครื่องมือสร้างคาบเรียนอัตโนมัติ</h5>
+                    <h5 class="modal-title fw-bold mb-0"><i class="fas fa-magic me-2"></i>${isHR ? 'เพิ่มวันกิจกรรมโฮมรูม' : 'เครื่องมือสร้างคาบเรียนอัตโนมัติ'}</h5>
                     <button type="button" class="btn-close btn-close-white shadow-none" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4 bg-light">
                     <ul class="nav nav-pills nav-justified mb-3 shadow-sm rounded bg-white p-1" role="tablist">
                         <li class="nav-item"><a class="nav-link fw-bold active rounded" data-bs-toggle="pill" href="#autoTab">ดึงอัตโนมัติ (รายสัปดาห์)</a></li>
-                        <li class="nav-item"><a class="nav-link fw-bold rounded text-secondary" data-bs-toggle="pill" href="#singleTab">เพิ่มทีละคาบ (เจาะจง)</a></li>
+                        <li class="nav-item"><a class="nav-link fw-bold rounded text-secondary" data-bs-toggle="pill" href="#singleTab">เพิ่มทีละวัน (เจาะจง)</a></li>
                     </ul>
-                    
                     <div class="tab-content bg-white p-3 rounded shadow-sm border">
                         <div class="tab-pane fade show active" id="autoTab">
-                            <div class="alert alert-success small mb-3 border-0 bg-success bg-opacity-10 text-dark">
-                                <i class="fas fa-robot text-success me-1"></i> ระบบจะสร้างคอลัมน์คาบเรียนให้ทุกสัปดาห์ตามช่วงวันที่เลือกครับ
-                            </div>
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
-                                    <label class="fw-bold small text-muted mb-1">สอนทุกวัน:</label>
+                                    <label class="fw-bold small text-muted mb-1">${isHR ? 'มีทุกวัน:' : 'สอนทุกวัน:'}</label>
                                     <select id="as_auto_day" class="form-select form-select-sm border-success shadow-none">
-                                       <option value="1">จันทร์ (Monday)</option>
-                                       <option value="2">อังคาร (Tuesday)</option>
-                                       <option value="3">พุธ (Wednesday)</option>
-                                       <option value="4">พฤหัสบดี (Thursday)</option>
-                                       <option value="5">ศุกร์ (Friday)</option>
+                                       ${isHR ? '<option value="all">ทุกวัน (จันทร์-ศุกร์)</option>' : ''}
+                                       <option value="1">จันทร์</option>
+                                       <option value="2">อังคาร</option>
+                                       <option value="3">พุธ</option>
+                                       <option value="4">พฤหัสบดี</option>
+                                       <option value="5">ศุกร์</option>
                                     </select>
                                 </div>
-                                <div class="col-6">
-                                    <label class="fw-bold small text-muted mb-1">คาบที่สอน (เช่น 1, 2):</label> 
-                                    <input type="number" id="as_auto_period" class="form-control form-control-sm border-success shadow-none" placeholder="ระบุคาบ">
-                                </div>
+                                ${periodField}
                             </div>
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
-                                    <label class="fw-bold small text-muted mb-1">เริ่มตั้งแต่วันที่:</label> 
+                                    <label class="fw-bold small text-muted mb-1">เริ่มตั้งแต่:</label>
                                     <input type="date" id="as_auto_start" class="form-control form-control-sm border-success shadow-none" value="${pastMonthStr}">
                                 </div>
                                 <div class="col-6">
-                                    <label class="fw-bold small text-muted mb-1">ถึงวันที่:</label> 
+                                    <label class="fw-bold small text-muted mb-1">ถึงวันที่:</label>
                                     <input type="date" id="as_auto_end" class="form-control form-control-sm border-success shadow-none" value="${todayStr}">
                                 </div>
                             </div>
                             <button class="btn btn-success w-100 fw-bold shadow-sm py-2" onclick="confirmAddAutoSessions()">
-                                <i class="fas fa-bolt me-2"></i>สร้างคาบเรียนอัตโนมัติ
+                                <i class="fas fa-bolt me-2"></i>สร้างอัตโนมัติ
                             </button>
                         </div>
-
                         <div class="tab-pane fade" id="singleTab">
                             <div class="mb-3">
-                                <label class="fw-bold small text-muted mb-1">วันที่สอน:</label> 
+                                <label class="fw-bold small text-muted mb-1">วันที่:</label>
                                 <input type="date" id="as_single_date" class="form-control form-control-sm border-secondary shadow-none" value="${todayStr}">
                             </div>
-                            <div class="mb-4">
-                                <label class="fw-bold small text-muted mb-1">คาบที่สอน:</label> 
-                                <input type="number" id="as_single_period" class="form-control form-control-sm border-secondary shadow-none" placeholder="เช่น 1">
-                            </div>
+                            ${periodFieldSingle}
                             <button class="btn btn-dark w-100 fw-bold shadow-sm py-2" onclick="confirmAddSingleSession()">
                                 <i class="fas fa-plus me-2"></i>เพิ่มลงตาราง
                             </button>
@@ -949,126 +1026,189 @@ function openAddSessionModal() {
 }
 
 function confirmAddSingleSession() {
+    const isHR = !!massiveGridData.isHR;
     const dateStr = document.getElementById('as_single_date').value;
-    const periodStr = document.getElementById('as_single_period').value;
-    
-    if(!dateStr || !periodStr) { showAlert("กรุณากรอกข้อมูลให้ครบถ้วนครับ"); return; }
-    
-    if (massiveGridData.sessions.some(s => s.date === dateStr && s.period === periodStr)) {
-        { showAlert("⚠️ คาบเรียนนี้มีแสดงอยู่ในตารางแล้วครับ!"); return; }
+    if (!dateStr) { showAlert("กรุณาเลือกวันที่"); return; }
+
+    if (isHR) {
+        if (!_pushHRSessions(dateStr)) { showAlert("⚠️ วันนี้มีอยู่ในตารางแล้ว"); return; }
+    } else {
+        const periodStr = document.getElementById('as_single_period').value;
+        if (!periodStr) { showAlert("กรุณาระบุคาบ"); return; }
+        if (massiveGridData.sessions.some(s => s.date === dateStr && s.period === periodStr)) {
+            showAlert("⚠️ คาบเรียนนี้มีอยู่แล้วในตาราง"); return;
+        }
+        massiveGridData.sessions.push({ date: dateStr, period: periodStr, displayDate: _thaiDateFront(dateStr) });
     }
-    
-    massiveGridData.sessions.push({ date: dateStr, period: periodStr, displayDate: dateStr });
-    massiveGridData.sessions.sort((a, b) => a.date.localeCompare(b.date) || parseInt(a.period) - parseInt(b.period));
+
+    massiveGridData.sessions.sort((a, b) => a.date.localeCompare(b.date) || (a.type||a.period||'').localeCompare(b.type||b.period||''));
     renderMassiveGridModal();
     bootstrap.Modal.getInstance(document.getElementById('addSessionModal')).hide();
 }
 
 function confirmAddAutoSessions() {
-    const dayOfWeek = parseInt(document.getElementById('as_auto_day').value);
-    const period = document.getElementById('as_auto_period').value;
+    const isHR = !!massiveGridData.isHR;
+    const dayVal = document.getElementById('as_auto_day').value;
+    const allWeekdays = dayVal === 'all';
+    const dayOfWeek = allWeekdays ? null : parseInt(dayVal);
+    const period = isHR ? '0' : document.getElementById('as_auto_period')?.value;
     const startStr = document.getElementById('as_auto_start').value;
     const endStr = document.getElementById('as_auto_end').value;
 
-    if(!period || !startStr || !endStr) { showAlert("กรุณากรอกข้อมูลให้ครบถ้วนครับ"); return; }
+    if (!isHR && !period) { showAlert("กรุณาระบุคาบ"); return; }
+    if (!startStr || !endStr) { showAlert("กรุณาเลือกช่วงวันที่"); return; }
 
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
     let currentDate = new Date(startDate);
-    let addedCount = 0;
+    let addedDays = 0;
 
     while (currentDate <= endDate) {
-        if (currentDate.getDay() === dayOfWeek) {
+        const dow = currentDate.getDay();
+        const match = allWeekdays ? (dow >= 1 && dow <= 5) : dow === dayOfWeek;
+        if (match) {
             const localDate = new Date(currentDate.getTime() - (currentDate.getTimezoneOffset() * 60000));
             const dStr = localDate.toISOString().split('T')[0];
-            
-            if (!massiveGridData.sessions.some(s => s.date === dStr && s.period === period)) {
-                massiveGridData.sessions.push({ date: dStr, period: period, displayDate: dStr });
-                addedCount++;
+            if (isHR) {
+                if (_pushHRSessions(dStr)) addedDays++;
+            } else {
+                if (!massiveGridData.sessions.some(s => s.date === dStr && s.period === period)) {
+                    massiveGridData.sessions.push({ date: dStr, period, displayDate: _thaiDateFront(dStr) });
+                    addedDays++;
+                }
             }
         }
         currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    if(addedCount > 0) {
-        massiveGridData.sessions.sort((a, b) => a.date.localeCompare(b.date) || parseInt(a.period) - parseInt(b.period));
+    if (addedDays > 0) {
+        massiveGridData.sessions.sort((a, b) => a.date.localeCompare(b.date) || (a.type||a.period||'').localeCompare(b.type||b.period||''));
         renderMassiveGridModal();
         bootstrap.Modal.getInstance(document.getElementById('addSessionModal')).hide();
-        showAlert(`✅ ดึงคาบเรียนอัตโนมัติสำเร็จ ได้คอลัมน์เพิ่มมา ${addedCount} คาบครับ!`);
+        showAlert(`✅ เพิ่มสำเร็จ ${addedDays} วัน`);
     } else {
-        showAlert("⚠️ ไม่พบวันที่ตรงกับเงื่อนไข หรือคาบเรียนเหล่านี้มีอยู่แล้วในตารางครับ");
+        showAlert("⚠️ ไม่พบวันที่ตรงกับเงื่อนไข หรือมีอยู่แล้วทั้งหมด");
     }
+}
+
+function _saveHRNewRows(hrNewRows, user, onDone, onError) {
+    // hrNewRows = [{date, studentId, studentName, area, duty, flag}, ...]
+    // รวม per-date → payload records
+    const byDate = {};
+    hrNewRows.forEach(r => {
+        if (!byDate[r.date]) byDate[r.date] = [];
+        byDate[r.date].push({ studentId: r.studentId, studentName: r.studentName, area: r.area, duty: r.duty, flag: r.flag });
+    });
+    const dates = Object.keys(byDate);
+    let idx = 0;
+    const saveNext = () => {
+        if (idx >= dates.length) { onDone(); return; }
+        const date = dates[idx++];
+        const payload = {
+            date, term: user.currentTerm, year: user.currentYear,
+            className: massiveGridData.className, teacherId: user.id,
+            records: byDate[date]
+        };
+        safeRun(3).withFailureHandler(onError).withSuccessHandler(res => {
+            if (res.status !== 'success') { onError({ message: res.message }); return; }
+            saveNext();
+        }).saveMorningActivityBatch(payload);
+    };
+    saveNext();
 }
 
 function saveMassiveGrid() {
     const updates = [];
     const newRecords = [];
+    const hrNewMap = {};
     const user = getSessionUser();
     
     massiveGridData.sessions.forEach(sess => {
-        const sessionKey = sess.date + '_' + sess.period;
+        const sessionKey = _massiveSessionKey(sess);
         massiveGridData.students.forEach(std => {
             const stdId = String(std[0]).trim();
             const cleanStdId = String(parseInt(stdId, 10));
             const select = document.getElementById(`mass_${cleanStdId}_${sessionKey}`);
             if (!select) return;
-            
+
             const status = select.value;
-            if (status === '-') return; 
-            
+            if (status === '-') return;
+
             const rowIdx = select.getAttribute('data-rowidx');
+            const hrType = select.getAttribute('data-hrtype') || '';
             const isNew = select.getAttribute('data-isnew') === 'true';
-            
+
             if (!isNew && rowIdx) {
-                const origAtt = massiveGridData.attendance[cleanStdId] && massiveGridData.attendance[cleanStdId][sessionKey];
+                const origAtt = massiveGridData.attendance[cleanStdId]?.[sessionKey];
                 if (origAtt && origAtt.status !== status) {
-                    updates.push({ rowIdx: parseInt(rowIdx), status: status });
+                    updates.push({ rowIdx: parseInt(rowIdx), status, hrType });
                 }
             } else if (isNew) {
-                newRecords.push({
-                    date: sess.date, period: sess.period, studentId: stdId, studentName: std[2], status: status
-                });
+                if (massiveGridData.isHR) {
+                    // รวม area/duty/flag ต่อ student-date ไว้ merge ทีหลัง
+                    const key = sess.date + '_' + stdId;
+                    if (!hrNewMap[key]) hrNewMap[key] = { date: sess.date, studentId: stdId, studentName: std[2], area: 'ปกติ', duty: 'ทำหน้าที่', flag: 'เข้าแถว' };
+                    hrNewMap[key][sess.type] = status;
+                } else {
+                    newRecords.push({ date: sess.date, period: sess.period, studentId: stdId, studentName: std[2], status });
+                }
             }
         });
     });
     
-    if (updates.length === 0 && newRecords.length === 0) return showAlert("ยังไม่มีการเปลี่ยนแปลงข้อมูลครับ (ช่องสีเทา '-' จะไม่ถูกบันทึก)");
-    Swal.fire({
-        title: 'ยืนยันการบันทึกข้อมูล?',
-        html: `อัปเดตข้อมูลเดิม: <b>${updates.length}</b> รายการ<br>เพิ่มเช็คชื่อคาบใหม่: <b>${newRecords.length}</b> รายการ`,
-        icon: 'question', showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก'
-    }).then(r => {
+    const hrNewRows = Object.values(hrNewMap);
+    const totalChanges = updates.length + newRecords.length + hrNewRows.length;
+    if (totalChanges === 0) return showAlert("ยังไม่มีการเปลี่ยนแปลงข้อมูล");
+
+    const isHR = !!massiveGridData.isHR;
+    const summaryHtml = isHR
+        ? `อัปเดตข้อมูลเดิม: <b>${updates.length}</b> รายการ<br>เพิ่มวันใหม่: <b>${hrNewRows.length}</b> วัน (${hrNewRows.length / (massiveGridData.students.length || 1) | 0} นักเรียน)`
+        : `อัปเดตข้อมูลเดิม: <b>${updates.length}</b> รายการ<br>เพิ่มเช็คชื่อคาบใหม่: <b>${newRecords.length}</b> รายการ`;
+
+    Swal.fire({ title: 'ยืนยันการบันทึกข้อมูล?', html: summaryHtml, icon: 'question', showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก' })
+    .then(r => {
         if (!r.isConfirmed) return;
         const btn = document.querySelector('#massiveGridModal .btn-success');
         const oldText = btn.innerHTML;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังประมวลผล...';
         btn.disabled = true;
-        safeRun(3).withFailureHandler(err => {
+
+        const onError = err => { btn.innerHTML = oldText; btn.disabled = false; showAlert("❌ " + err.message); };
+        const onDone = () => {
             btn.innerHTML = oldText; btn.disabled = false;
-            showAlert("❌ เกิดข้อผิดพลาด: " + err.message);
-        }).withSuccessHandler(res => {
-            btn.innerHTML = oldText; btn.disabled = false;
-            if (res.status === 'success') {
-                showAlert("✅ " + res.message);
-                const modalEl = document.getElementById('massiveGridModal');
-                const modalObj = bootstrap.Modal.getInstance(modalEl);
-                if (modalObj) modalObj.hide();
-                setTimeout(() => {
-                    if (modalEl) modalEl.remove();
-                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-                    document.body.classList.remove('modal-open');
-                    document.body.style.overflow = '';
-                    document.body.style.paddingRight = '';
-                    sessionStorage.removeItem(`risk_dash_${user.id}_${user.currentTerm}_${user.currentYear}`);
-                    loadStudentList(true);
-                }, 400);
-            } else {
-                showAlert("❌ เกิดข้อผิดพลาด: " + res.message);
-            }
-        }).saveMassiveAttendanceGrid(
-            massiveGridData.subjectCode, massiveGridData.subjectName, massiveGridData.className,
-            user.currentTerm, user.currentYear, updates, newRecords, user.id
-        );
+            showAlert("✅ บันทึกสำเร็จ");
+            const modalEl = document.getElementById('massiveGridModal');
+            bootstrap.Modal.getInstance(modalEl)?.hide();
+            setTimeout(() => {
+                modalEl?.remove();
+                document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = ''; document.body.style.paddingRight = '';
+                sessionStorage.removeItem(`risk_dash_${user.id}_${user.currentTerm}_${user.currentYear}`);
+                loadStudentList(true);
+            }, 400);
+        };
+
+        if (isHR && hrNewRows.length > 0 && updates.length === 0) {
+            // ไม่มี update — บันทึกวันใหม่อย่างเดียว
+            _saveHRNewRows(hrNewRows, user, onDone, onError);
+        } else if (isHR && hrNewRows.length > 0) {
+            // มีทั้ง update + new rows — update ก่อน แล้ว insert
+            safeRun(3).withFailureHandler(onError).withSuccessHandler(res => {
+                if (res.status !== 'success') { onError({ message: res.message }); return; }
+                _saveHRNewRows(hrNewRows, user, onDone, onError);
+            }).saveMassiveAttendanceGrid(
+                massiveGridData.subjectCode, massiveGridData.subjectName, massiveGridData.className,
+                user.currentTerm, user.currentYear, updates, [], user.id
+            );
+        } else {
+            safeRun(3).withFailureHandler(onError).withSuccessHandler(res => {
+                if (res.status === 'success') onDone(); else onError({ message: res.message });
+            }).saveMassiveAttendanceGrid(
+                massiveGridData.subjectCode, massiveGridData.subjectName, massiveGridData.className,
+                user.currentTerm, user.currentYear, updates, newRecords, user.id
+            );
+        }
     });
 }
 
