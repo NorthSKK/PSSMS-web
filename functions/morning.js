@@ -6,15 +6,15 @@ async function getMorningActivityData([date, className]) {
      FROM morning_activity WHERE date=$1 AND class=$2 ORDER BY student_id`,
     [date, className]
   );
-  return rows.map(r => ({
-    rowIdx: r.id,
-    studentId: r.student_id,
-    studentName: r.student_name || '',
-    areaStatus: r.area_status || '',
-    dutyStatus: r.duty_status || '',
-    flagStatus: r.flag_status || '',
-    sessionId: r.session_id || '',
-  }));
+  const result = {};
+  for (const r of rows) {
+    result[String(r.student_id).trim()] = {
+      area: r.area_status || '',
+      duty: r.duty_status || '',
+      flag: r.flag_status || '',
+    };
+  }
+  return result;
 }
 
 async function saveMorningActivityBatch([payload]) {
