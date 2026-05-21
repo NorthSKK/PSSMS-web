@@ -976,9 +976,33 @@ function tcPrintMembers() {
     byClass[cls].forEach(function(m,i){ body += '<tr><td style="border:1px solid #999;padding:6px;text-align:center;">'+(i+1)+'</td><td style="border:1px solid #999;padding:6px;">'+_tcEsc(m.studentId)+'</td><td style="border:1px solid #999;padding:6px;">'+_tcEsc(m.studentName)+'</td><td style="border:1px solid #999;padding:6px;">&nbsp;</td></tr>'; });
     body += '</tbody></table>';
   });
-  const win = window.open('','_blank');
-  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+_tcEsc(_tcCurrentClub.clubName)+'</title><style>body{font-family:"Sarabun","Kanit",sans-serif;padding:20px;}</style></head><body>'+body+'<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt></body></html>');
-  win.document.close();
+  const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+_tcEsc(_tcCurrentClub.clubName)+'</title>'
+    + '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">'
+    + '<style>body{font-family:"Sarabun",sans-serif;padding:20px;background:#e8edf3;}'
+    + '.page{max-width:210mm;margin:0 auto;background:#fff;padding:15mm;box-shadow:0 0 10px rgba(0,0,0,.15);}'
+    + '.ctrl{text-align:center;padding:12px;margin-bottom:16px;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.1);position:sticky;top:0;z-index:100;}'
+    + '.btn{padding:8px 20px;border:none;border-radius:5px;cursor:pointer;font-size:13pt;font-family:"Sarabun",sans-serif;font-weight:bold;margin:0 4px;}'
+    + '.btn-p{background:#0d6efd;color:#fff;} .btn-c{background:#6c757d;color:#fff;}'
+    + '@media print{.ctrl{display:none!important;}body{background:#fff;}@page{size:A4;margin:15mm;}}'
+    + '</style></head><body>'
+    + '<div class="ctrl"><button class="btn btn-p" onclick="window.print()">🖨️ พิมพ์</button>'
+    + '<button class="btn btn-c" onclick="if(window.parent&&window.parent._closeClubPrintOverlay)window.parent._closeClubPrintOverlay();else window.close();">✕ ปิด</button></div>'
+    + '<div class="page">'+body+'</div>'
+    + '<script>window.onload=function(){window.print();}<\/script></body></html>';
+  let iframe = document.getElementById('clubPrintIframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'clubPrintIframe';
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999999;border:none;background:#e8edf3;';
+    document.body.appendChild(iframe);
+  }
+  iframe.style.display = 'block';
+  const doc = iframe.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+  window._closeClubPrintOverlay = function() {
+    iframe.style.display = 'none';
+    iframe.src = 'about:blank';
+  };
 }
 
 function _tcEsc(s) {

@@ -640,6 +640,31 @@ async function promoteStudentsToNextYear() {
   };
 }
 
+async function exportClubsForTerm([term, year]) {
+  const clubsRes = await query(
+    `SELECT club_id, club_name, capacity FROM clubs WHERE term=$1 AND year=$2 ORDER BY club_name`,
+    [term, year]
+  );
+  const clubs = [];
+  for (const c of clubsRes.rows) {
+    const advRes = await query(
+      `SELECT teacher_name FROM club_advisors WHERE club_id=$1 AND term=$2 AND year=$3`,
+      [c.club_id, term, year]
+    );
+    const memRes = await query(
+      `SELECT student_id, student_name, class_name FROM club_members WHERE club_id=$1 AND term=$2 AND year=$3 ORDER BY class_name, student_id`,
+      [c.club_id, term, year]
+    );
+    clubs.push({
+      clubName: c.club_name,
+      capacity: c.capacity,
+      advisors: advRes.rows.map(r => ({ teacherName: r.teacher_name })),
+      members: memRes.rows.map(r => ({ studentId: r.student_id, studentName: r.student_name, className: r.class_name })),
+    });
+  }
+  return { term, year, clubs };
+}
+
 module.exports = {
   getTeacherRiskDashboard,
   getTeacherAtRiskDashboard,
@@ -671,4 +696,5 @@ module.exports = {
   adminAddMember,
   adminRemoveMember,
   promoteStudentsToNextYear,
+  exportClubsForTerm,
 };

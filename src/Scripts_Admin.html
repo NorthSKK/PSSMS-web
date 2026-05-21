@@ -1490,7 +1490,6 @@ function exportClubsPrint() {
   if (!_clubList.length) { showAlert('ยังไม่มีชุมนุมในเทอมนี้'); return; }
   google.script.run.withSuccessHandler(payload => {
     if (!payload || !payload.clubs) { showAlert('ไม่สามารถดึงข้อมูลได้'); return; }
-    const win = window.open('', '_blank');
     let body = `<h1 style="text-align:center;">รายชื่อสมาชิกชุมนุม (ทั้งหมด)</h1>
       <h3 style="text-align:center;">ภาคเรียนที่ ${payload.term} ปีการศึกษา ${payload.year}</h3>
       <p style="text-align:center;">จำนวน ${payload.clubs.length} ชุมนุม · พิมพ์เมื่อ ${new Date().toLocaleString('th-TH')}</p>`;
@@ -1528,10 +1527,36 @@ function exportClubsPrint() {
       }
       body += '</div>';
     });
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>รายชื่อชุมนุม ${payload.term}/${payload.year}</title>
-      <style>body{font-family:"Sarabun","Kanit",sans-serif;padding:20px;}</style></head><body>${body}
-      <script>window.onload=()=>window.print();<\/script></body></html>`);
-    win.document.close();
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>รายชื่อชุมนุม ${payload.term}/${payload.year}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+      <style>
+        body{font-family:"Sarabun",sans-serif;padding:20px;background:#e8edf3;}
+        .page{max-width:210mm;margin:0 auto;background:#fff;padding:15mm;box-shadow:0 0 10px rgba(0,0,0,.15);}
+        .ctrl{text-align:center;padding:12px;margin-bottom:16px;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.1);position:sticky;top:0;z-index:100;}
+        .btn{padding:8px 20px;border:none;border-radius:5px;cursor:pointer;font-size:13pt;font-family:"Sarabun",sans-serif;font-weight:bold;margin:0 4px;}
+        .btn-p{background:#0d6efd;color:#fff;} .btn-c{background:#6c757d;color:#fff;}
+        @media print{.ctrl{display:none!important;}body{background:#fff;padding:0;}.page{box-shadow:none;padding:0;}@page{size:A4;margin:15mm;}}
+      </style></head><body>
+      <div class="ctrl">
+        <button class="btn btn-p" onclick="window.print()">🖨️ พิมพ์</button>
+        <button class="btn btn-c" onclick="if(window.parent&&window.parent._closeAdminClubPrintOverlay)window.parent._closeAdminClubPrintOverlay();else window.close();">✕ ปิด</button>
+      </div>
+      <div class="page">${body}</div>
+      <script>window.onload=()=>window.print();<\/script></body></html>`;
+    let iframe = document.getElementById('adminClubPrintIframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'adminClubPrintIframe';
+      iframe.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999999;border:none;background:#e8edf3;';
+      document.body.appendChild(iframe);
+    }
+    iframe.style.display = 'block';
+    const doc = iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    window._closeAdminClubPrintOverlay = function() {
+      iframe.style.display = 'none';
+      iframe.src = 'about:blank';
+    };
   }).exportClubsForTerm(user.currentTerm, user.currentYear);
 }
 

@@ -19,6 +19,7 @@ const clubsWrite = require('../functions/clubs_write');
 const sarabun = require('../functions/sarabun');
 const budget = require('../functions/budget');
 const missing = require('../functions/missing');
+const pp5 = require('../functions/generatePP5Template');
 
 const handlers = {
   // Auth
@@ -179,6 +180,8 @@ const handlers = {
   uploadSarabunFile:               (args) => missing.uploadSarabunFile(args),
   getTeacherListForDropdown:       () => missing.getTeacherListForDropdown(),
   getPrintConfigData:              (args) => missing.getPrintConfigData(args),
+  generatePP5Template:             (args) => pp5.generatePP5Template(args),
+  exportClubsForTerm:              (args) => missing.exportClubsForTerm(args),
   getMyClub:                       (args) => missing.getMyClub(args),
   getMyClubs:                      (args) => missing.getMyClubs(args),
   getCurriculumBySubject:          (args) => missing.getCurriculumBySubject(args),
