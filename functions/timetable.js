@@ -15,7 +15,11 @@ async function _getTeacherClub(teacherId, term, year) {
 
 // Returns array [subjectCode, subjectName, classId, room, location, period, day] with optional extras
 function _applyClubOverride(arr, club) {
-  if (!club || String(arr[1] || '').indexOf('ชุมนุม') < 0) return arr;
+  const isClub = String(arr[1] || '').indexOf('ชุมนุม') >= 0;
+  if (!isClub) return arr;
+  if (!club) {
+    return ['ยังไม่ลงทะเบียน', 'ยังไม่ลงทะเบียนชุมนุม', arr[2], arr[3], arr[4], arr[5], arr[6], arr[7]];
+  }
   return ['CLUB_' + club.clubId, club.clubName, 'ชุมนุม', arr[3], arr[4], arr[5], arr[6], arr[7]];
 }
 
@@ -87,6 +91,14 @@ async function getTeacherTimetableWithStatus([teacherId]) {
                   WHERE ma.teacher_id=$1 AND ma.date=$4
                     AND ma.class=(t.level||'/'||t.room)
                     AND UPPER(t.subject_code)='HR'
+                ) OR (
+                  t.subject_name LIKE '%ชุมนุม%' AND
+                  EXISTS(
+                    SELECT 1 FROM attendance a
+                    WHERE a.teacher_id=$1 AND a.date=$4
+                      AND a.subject_code LIKE 'CLUB_%'
+                      AND a.term=$2 AND a.year=$3
+                  )
                 )
               ) AS has_record
        FROM timetable t

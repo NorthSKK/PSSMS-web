@@ -8,10 +8,10 @@ function initSubjectConfigPage() {
   document.getElementById('configTerm').value = user.currentTerm;
   document.getElementById('configYear').value = user.currentYear;
   const select = document.getElementById('configClassSelect'); select.innerHTML = `<option value="">⏳ กำลังโหลดวิชา...</option>`;
-  const subjectCacheKey = `v2_subjects_${user.id}_${user.currentTerm}_${user.currentYear}`;
+  const subjectCacheKey = `v3_subjects_${user.id}_${user.currentTerm}_${user.currentYear}`;
   const cachedSubjects = sessionStorage.getItem(subjectCacheKey);
 
-  if (cachedSubjects && cachedSubjects !== "[]") { buildConfigSubjectDropdown(JSON.parse(cachedSubjects)); } 
+  if (cachedSubjects && cachedSubjects !== "[]") { buildConfigSubjectDropdown(JSON.parse(cachedSubjects)); }
   else {
      google.script.run.withFailureHandler(err => { select.innerHTML = `<option value="">❌ โหลดข้อมูลล้มเหลว</option>`; showAlert("Error: " + err.message); })
        .withSuccessHandler(subjects => { sessionStorage.setItem(subjectCacheKey, JSON.stringify(subjects)); buildConfigSubjectDropdown(subjects); })
@@ -23,20 +23,26 @@ function buildConfigSubjectDropdown(subjects) {
   const select = document.getElementById('configClassSelect');
   if(subjects.length === 0) { select.innerHTML = `<option value="">⚠️ ไม่พบวิชาในเทอมนี้</option>`; return; }
 
-  // 🧠 สมองกลจัดเรียง: เอาวิชาปกติไว้บน เอากิจกรรม(ก, I) ไว้ล่างสุด และเรียงตามรหัสวิชา -> ห้องเรียน
-  subjects.sort((a, b) => {
+  const normal = subjects.filter(s => !String(s[0]||'').startsWith('CLUB'));
+  const clubs  = subjects.filter(s =>  String(s[0]||'').startsWith('CLUB'));
+
+  normal.sort((a, b) => {
       const codeA = String(a[0] || '').trim();
       const codeB = String(b[0] || '').trim();
       const isActA = codeA.startsWith('ก') || codeA.toLowerCase().startsWith('i');
       const isActB = codeB.startsWith('ก') || codeB.toLowerCase().startsWith('i');
-
-      if (isActA !== isActB) return isActA ? 1 : -1; // แยกกิจกรรมไปไว้ข้างล่าง
-      if (codeA !== codeB) return codeA.localeCompare(codeB, 'th'); // เรียงตามรหัสวิชา
-      return String(a[2] || '').localeCompare(String(b[2] || ''), 'th'); // เรียงตามห้องเรียน
+      if (isActA !== isActB) return isActA ? 1 : -1;
+      if (codeA !== codeB) return codeA.localeCompare(codeB, 'th');
+      return String(a[2] || '').localeCompare(String(b[2] || ''), 'th');
   });
 
   let html = '<option value="">-- เลือกรายวิชาที่ต้องการตั้งค่า --</option>';
-  subjects.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[0]} - ${sub[1]} (${sub[2]})</option>`; });
+  normal.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[0]} - ${sub[1]} (${sub[2]})</option>`; });
+  if (clubs.length > 0) {
+    html += `<optgroup label="── ชุมนุม ──">`;
+    clubs.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[1]}</option>`; });
+    html += `</optgroup>`;
+  }
   select.innerHTML = html;
 }
 
@@ -303,7 +309,7 @@ function initScoreEntryPage() {
   const select = document.getElementById('scoreClassSelect');
   select.innerHTML = `<option value="">⏳ กำลังโหลดวิชา...</option>`;
   
-  const subjectCacheKey = `v2_subjects_${user.id}_${user.currentTerm}_${user.currentYear}`;
+  const subjectCacheKey = `v3_subjects_${user.id}_${user.currentTerm}_${user.currentYear}`;
   const cachedSubjects = sessionStorage.getItem(subjectCacheKey);
 
   if (cachedSubjects && cachedSubjects !== "[]") {
@@ -320,19 +326,26 @@ function buildScoreSubjectDropdown(subjects) {
   const select = document.getElementById('scoreClassSelect');
   if(subjects.length === 0) { select.innerHTML = `<option value="">⚠️ ไม่พบวิชาในเทอมนี้</option>`; return; }
 
-  subjects.sort((a, b) => {
+  const normal = subjects.filter(s => !String(s[0]||'').startsWith('CLUB'));
+  const clubs  = subjects.filter(s =>  String(s[0]||'').startsWith('CLUB'));
+
+  normal.sort((a, b) => {
       const codeA = String(a[0] || '').trim();
       const codeB = String(b[0] || '').trim();
       const isActA = codeA.startsWith('ก') || codeA.toLowerCase().startsWith('i');
       const isActB = codeB.startsWith('ก') || codeB.toLowerCase().startsWith('i');
-
-      if (isActA !== isActB) return isActA ? 1 : -1; 
-      if (codeA !== codeB) return codeA.localeCompare(codeB, 'th'); 
-      return String(a[2] || '').localeCompare(String(b[2] || ''), 'th'); 
+      if (isActA !== isActB) return isActA ? 1 : -1;
+      if (codeA !== codeB) return codeA.localeCompare(codeB, 'th');
+      return String(a[2] || '').localeCompare(String(b[2] || ''), 'th');
   });
 
   let html = '<option value="">-- เลือกรายวิชาที่ต้องการบันทึก --</option>';
-  subjects.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[0]} - ${sub[1]} (${sub[2]})</option>`; });
+  normal.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[0]} - ${sub[1]} (${sub[2]})</option>`; });
+  if (clubs.length > 0) {
+    html += `<optgroup label="── ชุมนุม ──">`;
+    clubs.forEach(sub => { html += `<option value='${JSON.stringify(sub)}'>${sub[1]}</option>`; });
+    html += `</optgroup>`;
+  }
   select.innerHTML = html;
 
   let pendingSub = sessionStorage.getItem('pending_score_subject');

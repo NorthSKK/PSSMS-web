@@ -25,6 +25,7 @@ router.get('/script/:name', async (req, res) => {
   try {
     const content = await fs.readFile(path.join(SRC_DIR, name + '.html'), 'utf8');
     const js = content.replace(/<script[^>]*>/gi, '').replace(/<\/script>/gi, '');
+    res.set('Cache-Control', 'no-store');
     res.type('application/javascript').send(js);
   } catch {
     res.status(404).type('application/javascript').send(`// '${name}' not found`);

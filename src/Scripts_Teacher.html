@@ -182,7 +182,7 @@ function initTeacherDashboard() {
   // Falls back to legacy per-call loaders ถ้า bundle fail.
   const now = new Date();
   const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-  const scheduleCacheKey = `today_schedule_v2_${user.id}_${localDate}`;
+  const scheduleCacheKey = `today_schedule_v3_${user.id}_${localDate}`;
   const riskCacheKey = `grade_risk_v2_${user.id}_${user.currentTerm}_${user.currentYear}`;
   const atRiskCacheKey = `risk_dash_${user.id}_${user.currentTerm}_${user.currentYear}`;
 
@@ -249,7 +249,7 @@ function loadTeacherDashboardLegacy(user) {
   try {
     const now = new Date();
     const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    const scheduleCacheKey = `today_schedule_v2_${user.id}_${localDate}`;
+    const scheduleCacheKey = `today_schedule_v3_${user.id}_${localDate}`;
     if (!sessionStorage.getItem(scheduleCacheKey)) {
       google.script.run.withSuccessHandler(data => {
         sessionStorage.setItem(scheduleCacheKey, JSON.stringify(data));

@@ -1620,14 +1620,13 @@ function ttoPopulateTeacherDropdowns() {
 }
 
 function ttoSwitchTab(tab, btn) {
-  ['overview','manage','swap','dup','homeroom'].forEach(function(t) {
+  ['overview','manage','swap','dup'].forEach(function(t) {
     var el = document.getElementById('ttoTab' + t.charAt(0).toUpperCase() + t.slice(1));
     if (el) el.classList.toggle('d-none', t !== tab);
   });
   document.querySelectorAll('#ttOverviewPage .nav-link').forEach(function(b) { b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
   if (tab === 'dup') ttoCheckDuplicates();
-  if (tab === 'homeroom') ttoLoadHomeroom();
 }
 
 function ttoRenderGrid() {
@@ -1788,34 +1787,37 @@ var _ttoClassList = [];
 
 function initHomeroomPage() {
   if (!document.getElementById('ttoHomeroomBody')) return;
-  var user = getUser();
-  if (!user) return;
-  var termEl = document.getElementById('ttoTerm');
-  var yearEl = document.getElementById('ttoYear');
-  if (termEl) termEl.value = user.currentTerm || '1';
-  if (yearEl) yearEl.value = user.currentYear || '';
   var tbody = document.getElementById('ttoHomeroomBody');
   if (tbody) tbody.innerHTML = _skelTbody(6);
   google.script.run
-    .withSuccessHandler(function(teachers) {
-      if (!document.getElementById('ttoHomeroomBody')) return;
-      _ttoTeachers = teachers || [];
+    .withSuccessHandler(function(cfg) {
+      window._hrActiveTerm = cfg.term || '1';
+      window._hrActiveYear = cfg.year || '';
       google.script.run
-        .withSuccessHandler(function(rows) {
+        .withSuccessHandler(function(teachers) {
           if (!document.getElementById('ttoHomeroomBody')) return;
-          _ttoAllRows = rows || [];
-          _ttoBuildClassList();
-          ttoLoadHomeroom();
+          _ttoTeachers = teachers || [];
+          google.script.run
+            .withSuccessHandler(function(rows) {
+              if (!document.getElementById('ttoHomeroomBody')) return;
+              _ttoAllRows = rows || [];
+              _ttoBuildClassList();
+              ttoLoadHomeroom();
+            })
+            .withFailureHandler(function() {
+              if (document.getElementById('ttoHomeroomBody')) ttoLoadHomeroom();
+            })
+            .getFilteredTimetables('', window._hrActiveTerm, window._hrActiveYear);
         })
         .withFailureHandler(function() {
           if (document.getElementById('ttoHomeroomBody')) ttoLoadHomeroom();
         })
-        .getFilteredTimetables('', termEl ? termEl.value : user.currentTerm, yearEl ? yearEl.value : user.currentYear);
+        .getTeachersForTimetable();
     })
     .withFailureHandler(function() {
       if (document.getElementById('ttoHomeroomBody')) ttoLoadHomeroom();
     })
-    .getTeachersForTimetable();
+    .getSystemConfig();
 }
 
 function _ttoBuildClassList() {
@@ -1877,7 +1879,8 @@ function ttoHrLevelChange(sel) {
 function ttoLoadHomeroom() {
   var tbody = document.getElementById('ttoHomeroomBody');
   if (!tbody) return;
-  var termEl = document.getElementById('ttoTerm'), yearEl = document.getElementById('ttoYear');
+  var _hrTerm = window._hrActiveTerm || '1';
+  var _hrYear = window._hrActiveYear || '';
   tbody.innerHTML = _skelTbody(6);
   google.script.run
     .withSuccessHandler(function(data) {
@@ -1897,7 +1900,7 @@ function ttoLoadHomeroom() {
     .withFailureHandler(function(err) {
       tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger p-4">' + _ttoEsc(err.message) + '</td></tr>';
     })
-    .getHomeroomAssignments(termEl ? termEl.value : '', yearEl ? yearEl.value : '');
+    .getHomeroomAssignments(_hrTerm, _hrYear);
 }
 
 function _ttoRenderHomeroomTable() {
@@ -1946,7 +1949,8 @@ function ttoAddHomeroomRow() {
 function ttoSaveAllHomeroom() {
   var tbody = document.getElementById('ttoHomeroomBody');
   if (!tbody) return;
-  var termEl = document.getElementById('ttoTerm'), yearEl = document.getElementById('ttoYear');
+  var _hrTerm = window._hrActiveTerm || '1';
+  var _hrYear = window._hrActiveYear || '';
   var assignments = [];
   tbody.querySelectorAll('tr').forEach(function(tr) {
     var levelEl = tr.querySelector('.hr-level'), roomEl = tr.querySelector('.hr-room');
@@ -1986,7 +1990,7 @@ function ttoSaveAllHomeroom() {
       if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
       showAlert('❌ ' + err.message);
     })
-    .setAllHomeroomTeachers(assignments, termEl ? termEl.value : '', yearEl ? yearEl.value : '');
+    .setAllHomeroomTeachers(assignments, _hrTerm, _hrYear);
 }
 
 function ttoCheckDuplicates() {

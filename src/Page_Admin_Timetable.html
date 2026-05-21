@@ -56,11 +56,6 @@
         <span class="badge bg-danger ms-1 d-none" id="ttoDupBadge">0</span>
       </button>
     </li>
-    <li class="nav-item">
-      <button class="nav-link fw-medium px-3" id="ttoTabHomeroomBtn" onclick="ttoSwitchTab('homeroom',this)">
-        <i class="fas fa-home me-1"></i>ครูที่ปรึกษา
-      </button>
-    </li>
   </ul>
 
   <!-- Tab: ตารางรวมทุกครู -->
@@ -224,41 +219,6 @@
     </div>
   </div>
 
-  <!-- Tab: ครูที่ปรึกษา -->
-  <div id="ttoTabHomeroom" class="d-none">
-    <div class="pssms-card mb-3">
-      <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
-        <div class="text-muted small">กำหนดครูที่ปรึกษาประจำห้องเรียน — ระบบสร้าง โฮมรูม / แนะแนว (จ.คาบ7) / วิถีพุทธ (ศ.คาบ7) อัตโนมัติ</div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-soft btn-sm" onclick="ttoAddHomeroomRow()">
-            <i class="fas fa-plus me-1"></i>เพิ่มห้อง
-          </button>
-          <button class="btn btn-accent btn-sm" id="ttoSaveAllHomeroomBtn" onclick="ttoSaveAllHomeroom()">
-            <i class="fas fa-save me-1"></i>บันทึกทั้งหมด
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="pssms-card p-0">
-      <div class="table-responsive">
-        <table class="pssms-table mb-0" style="font-size:.85rem;">
-          <thead>
-            <tr>
-              <th style="width:100px;">ระดับชั้น</th>
-              <th style="width:70px;">ห้อง</th>
-              <th>ครูที่ปรึกษา 1 / 2</th>
-              <th style="width:140px;">สถานที่แนะแนว<br><span class="fw-normal text-muted" style="font-size:.75rem;">จ.คาบ7</span></th>
-              <th style="width:140px;">สถานที่วิถีพุทธ<br><span class="fw-normal text-muted" style="font-size:.75rem;">ศ.คาบ7</span></th>
-              <th style="width:44px;"></th>
-            </tr>
-          </thead>
-          <tbody id="ttoHomeroomBody">
-            <tr><td colspan="6" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- Edit Modal (Admin — full fields incl. SubjectCode + TeacherID) -->

@@ -80,6 +80,7 @@ const handlers = {
   deleteTimetableRow:              (args) => timetableAdmin.deleteTimetableRow(args),
   importTimetableCSV:              (args) => timetableAdmin.importTimetableCSV(args),
   swapTimetableTeacher:            (args) => timetableAdmin.swapTimetableTeacher(args),
+  teacherUpdateTimetableRow:       (args) => timetableAdmin.teacherUpdateTimetableRow(args),
   getHomeroomAssignments:          (args) => timetableAdmin.getHomeroomAssignments(args),
   setHomeroomTeacher:              (args) => timetableAdmin.setHomeroomTeacher(args),
   setAllHomeroomTeachers:          (args) => timetableAdmin.setAllHomeroomTeachers(args),

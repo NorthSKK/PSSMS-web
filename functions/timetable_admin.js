@@ -83,25 +83,51 @@ async function swapTimetableTeacher([rowId1, rowId2]) {
   const [a, b] = rows;
   await query(`UPDATE timetable SET teacher_id=$1 WHERE id=$2`, [b.teacher_id, a.id]);
   await query(`UPDATE timetable SET teacher_id=$1 WHERE id=$2`, [a.teacher_id, b.id]);
-  return { success: true };
+  return { status: 'success', message: 'แลกตารางสอนสำเร็จ' };
+}
+
+async function teacherUpdateTimetableRow([teacherId, rowIndex, newData]) {
+  const { rows } = await query(
+    `SELECT teacher_id FROM timetable WHERE id=$1`, [rowIndex]
+  );
+  if (!rows.length) throw new Error('ไม่พบรายการ');
+  if (String(rows[0].teacher_id).trim() !== String(teacherId).trim())
+    throw new Error('ไม่มีสิทธิ์แก้ไขรายการนี้');
+  // Only allow editing display fields — subject_code/teacher_id/term/year are locked in DB
+  await query(
+    `UPDATE timetable SET subject_name=$1, level=$2, room=$3, location=$4, day=$5, period=$6 WHERE id=$7`,
+    [newData[1], newData[2], newData[3], newData[4] || '', newData[6], newData[7], rowIndex]
+  );
+  return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
 async function getHomeroomAssignments([term, year]) {
   const { rows } = await query(
-    `SELECT id, level, room, teacher_id,
-            (SELECT full_name FROM users WHERE username=timetable.teacher_id) as teacher_name
+    `SELECT level, room, teacher_id, subject_code, subject_name, location
      FROM timetable
-     WHERE (UPPER(subject_code)='HR' OR subject_name ILIKE '%โฮมรูม%')
+     WHERE (UPPER(subject_code)='HR' OR subject_name ILIKE '%โฮมรูม%'
+            OR subject_name ILIKE '%แนะแนว%' OR subject_name ILIKE '%วิถีพุทธ%')
        AND term=$1 AND year=$2
-     ORDER BY level, room`,
+     ORDER BY level, room, id`,
     [term, year]
   );
-  return rows.map(r => ({
-    rowIndex: r.id,
-    className: `${r.level}/${r.room}`,
-    teacherId: r.teacher_id,
-    teacherName: r.teacher_name || '',
-  }));
+  const map = {};
+  for (const r of rows) {
+    const key = `${r.level}/${r.room}`;
+    if (!map[key]) map[key] = { level: r.level, room: r.room, teacherIds: [], advisoryLoc: '', buddhistLoc: '' };
+    const code = String(r.subject_code || '').toUpperCase();
+    const name = String(r.subject_name || '');
+    if (code === 'HR' || name.includes('โฮมรูม')) {
+      if (r.teacher_id && !map[key].teacherIds.includes(r.teacher_id)) map[key].teacherIds.push(r.teacher_id);
+    } else if (name.includes('แนะแนว')) {
+      map[key].advisoryLoc = r.location || '';
+    } else if (name.includes('วิถีพุทธ')) {
+      map[key].buddhistLoc = r.location || '';
+    }
+  }
+  return Object.values(map).sort((a, b) =>
+    `${a.level}/${a.room}`.localeCompare(`${b.level}/${b.room}`, 'th', { numeric: true })
+  );
 }
 
 async function setHomeroomTeacher([teacherId, className, term, year]) {
@@ -133,11 +159,52 @@ async function setHomeroomTeacher([teacherId, className, term, year]) {
 }
 
 async function setAllHomeroomTeachers([assignments, term, year]) {
-  if (!Array.isArray(assignments)) return { success: true };
-  const results = await Promise.all(
-    assignments.map(a => setHomeroomTeacher([a.teacherId, a.className, term, year]))
-  );
-  return { success: true, updated: results.length };
+  if (!Array.isArray(assignments) || assignments.length === 0)
+    return { status: 'success', message: 'ไม่มีข้อมูลที่จะบันทึก' };
+  const { pool } = require('../lib/db');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const a of assignments) {
+      const { level, room, teacherIds = [], opts = {} } = a;
+      if (!level || !room) continue;
+      await client.query(
+        `DELETE FROM timetable
+         WHERE (UPPER(subject_code)='HR' OR subject_name ILIKE '%โฮมรูม%'
+                OR subject_name ILIKE '%แนะแนว%' OR subject_name ILIKE '%วิถีพุทธ%')
+           AND level=$1 AND room=$2 AND term=$3 AND year=$4`,
+        [level, room, term, year]
+      );
+      for (const tid of teacherIds) {
+        if (!tid) continue;
+        await client.query(
+          `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year,location)
+           VALUES('HR','กิจกรรมโฮมรูมหน้าเสาธง',$1,$2,$3,'จันทร์','0',$4,$5,'ลานหน้าเสาธง')`,
+          [level, room, tid, term, year]
+        );
+      }
+      const t1 = teacherIds[0];
+      if (t1) {
+        await client.query(
+          `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year,location)
+           VALUES('-','แนะแนว',$1,$2,$3,'จันทร์','7',$4,$5,$6)`,
+          [level, room, t1, term, year, opts.advisoryLoc || '']
+        );
+        await client.query(
+          `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year,location)
+           VALUES('-','วิถีพุทธ',$1,$2,$3,'ศุกร์','7',$4,$5,$6)`,
+          [level, room, t1, term, year, opts.buddhistLoc || '']
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  return { status: 'success', message: `บันทึกครูที่ปรึกษา ${assignments.length} ห้องเรียนสำเร็จ` };
 }
 
 module.exports = {
@@ -146,6 +213,7 @@ module.exports = {
   deleteTimetableRow,
   importTimetableCSV,
   swapTimetableTeacher,
+  teacherUpdateTimetableRow,
   getHomeroomAssignments,
   setHomeroomTeacher,
   setAllHomeroomTeachers,

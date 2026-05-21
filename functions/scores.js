@@ -60,7 +60,10 @@ function normID(id) {
 }
 
 async function getAllInOneScoreGridData([subjectCode, className, term, year]) {
-  const students = await require('./students').getStudentsByClass([className, null]);
+  const isClub = String(subjectCode || '').startsWith('CLUB');
+  const students = isClub
+    ? await require('./students').getStudentsByClub([subjectCode])
+    : await require('./students').getStudentsByClass([className, null]);
 
   let configObj = await getSubjectConfig([subjectCode, className, term, year]);
   if (!configObj) configObj = { ratio: '70:10:20', indicators: [], examIndicators: null };

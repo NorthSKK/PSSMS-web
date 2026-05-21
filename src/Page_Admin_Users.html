@@ -45,7 +45,7 @@
       </button>
     </li>
     <li class="nav-item" role="presentation">
-      <button class="nav-link fw-medium px-3" id="homeroom-tab" data-bs-toggle="tab" data-bs-target="#homeroom-pane" type="button" role="tab">
+      <button class="nav-link fw-medium px-3" id="homeroom-tab" data-bs-toggle="tab" data-bs-target="#homeroom-pane" type="button" role="tab" onclick="setTimeout(initHomeroomPage, 0)">
         <i class="fas fa-home me-2"></i>ครูที่ปรึกษาประจำชั้น
       </button>
     </li>
@@ -151,26 +151,13 @@
     <div class="tab-pane fade" id="homeroom-pane" role="tabpanel">
 
       <div class="pssms-card mb-3">
-        <div class="row g-2 align-items-end">
-          <div class="col-sm-3">
-            <label class="form-label small fw-medium" style="color:var(--p-text-muted);">ภาคเรียน</label>
-            <select id="ttoTerm" class="form-select form-select-sm" onchange="ttoLoadHomeroom()">
-              <option value="1">1</option>
-              <option value="2">2</option>
-            </select>
-          </div>
-          <div class="col-sm-3">
-            <label class="form-label small fw-medium" style="color:var(--p-text-muted);">ปีการศึกษา</label>
-            <input type="number" id="ttoYear" class="form-control form-control-sm" onchange="ttoLoadHomeroom()">
-          </div>
-          <div class="col-auto ms-auto d-flex gap-2">
-            <button class="btn btn-soft btn-sm" onclick="ttoAddHomeroomRow()">
-              <i class="fas fa-plus me-1"></i>เพิ่มห้อง
-            </button>
-            <button class="btn btn-accent btn-sm" id="ttoSaveAllHomeroomBtn" onclick="ttoSaveAllHomeroom()">
-              <i class="fas fa-save me-1"></i>บันทึก
-            </button>
-          </div>
+        <div class="d-flex justify-content-end gap-2">
+          <button class="btn btn-soft btn-sm" onclick="ttoAddHomeroomRow()">
+            <i class="fas fa-plus me-1"></i>เพิ่มห้อง
+          </button>
+          <button class="btn btn-accent btn-sm" id="ttoSaveAllHomeroomBtn" onclick="ttoSaveAllHomeroom()">
+            <i class="fas fa-save me-1"></i>บันทึก
+          </button>
         </div>
       </div>
 
