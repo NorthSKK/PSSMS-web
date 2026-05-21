@@ -16,7 +16,7 @@ async function _getTeacherClub(teacherId, term, year) {
 // Returns array [subjectCode, subjectName, classId, room, location, period, day] with optional extras
 function _applyClubOverride(arr, club) {
   if (!club || String(arr[1] || '').indexOf('ชุมนุม') < 0) return arr;
-  return ['CLUB_' + club.clubId, club.clubName, 'ชุมนุม', arr[3], arr[4], arr[5], arr[6]];
+  return ['CLUB_' + club.clubId, club.clubName, 'ชุมนุม', arr[3], arr[4], arr[5], arr[6], arr[7]];
 }
 
 async function getTeacherTimetableByDate([teacherId, dateStr]) {
@@ -93,10 +93,9 @@ async function getTeacherTimetableWithStatus([teacherId]) {
   return ttRes.rows.map(r => {
     const classId = `${r.level}/${r.room}`;
     const base = _applyClubOverride(
-      [r.subject_code, r.subject_name, classId, r.room, r.location || '', r.period, r.day],
+      [r.subject_code, r.subject_name, classId, r.room, r.location || '', r.period, r.day, r.has_record || false],
       club
     );
-    // Spread array into object so numeric-key access (r[0]) and named access (r.hasRecord) both work
     return { ...base, hasRecord: r.has_record || false, date: todayStr };
   });
 }
