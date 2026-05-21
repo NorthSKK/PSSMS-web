@@ -377,9 +377,12 @@ function renderTable(data) {
     var htmlStaff = '';
     staff.forEach(function(row) {
       var roleBadge = row[3] === 'Admin' ? '<span class="badge bg-danger">Admin</span>' : row[3] === 'Executive' ? '<span class="badge bg-info">Executive</span>' : '<span class="badge bg-success">Teacher</span>';
+      var staffId = String(row[0] || '');
+      var staffName = String(row[2] || '');
+      var staffDept = String(row[4] || '');
       var hrClass = _staffHomeroomMap[row[0]] || '';
-      var hrBadge = hrClass ? '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);border:1px solid var(--p-accent);">' + hrClass + '</span>' : '<span class="text-muted small">—</span>';
-      htmlStaff += '<tr><td class="ps-4 text-muted">' + row[0] + '</td><td class="fw-bold">' + row[2] + '</td><td>' + row[4] + '</td><td class="text-center">' + roleBadge + '</td><td class="text-center">' + hrBadge + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',\'' + row[0] + '\')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(\'' + row[0] + '\')"><i class="fas fa-trash"></i></button></td></tr>';
+      var hrBadge = hrClass ? '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);border:1px solid var(--p-accent);">' + escapeHtmlSafe(hrClass) + '</span>' : '<span class="text-muted small">—</span>';
+      htmlStaff += '<tr><td class="ps-4 text-muted">' + escapeHtmlSafe(staffId) + '</td><td class="fw-bold">' + escapeHtmlSafe(staffName) + '</td><td>' + escapeHtmlSafe(staffDept) + '</td><td class="text-center">' + roleBadge + '</td><td class="text-center">' + hrBadge + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',' + jsArgAttr(staffId) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(' + jsArgAttr(staffId) + ')"><i class="fas fa-trash"></i></button></td></tr>';
     });
     tbodyStaff.innerHTML = htmlStaff || '<tr><td colspan="6" class="text-center p-5 text-muted">ไม่พบข้อมูลบุคลากร</td></tr>';
   }
@@ -509,7 +512,7 @@ function renderStudentSummary(data) {
   const sortedRooms = Object.keys(roomStats).sort((a, b) => a.localeCompare(b, 'th', { numeric: true }));
   sortedRooms.forEach(room => {
     const s = roomStats[room];
-    html += `<tr><td class="fw-bold text-start ps-3"><span class="badge bg-light text-dark border border-secondary-subtle shadow-sm">${room}</span></td><td>${s.male||'-'}</td><td>${s.female||'-'}</td><td class="text-success fw-bold">${s.active||'-'}</td><td class="text-danger">${s.suspended||'-'}</td><td style="color:#5b21b6;">${s.graduated||'-'}</td><td class="fw-bold text-primary bg-light">${s.total}</td></tr>`;
+    html += `<tr><td class="fw-bold text-start ps-3"><span class="badge bg-light text-dark border border-secondary-subtle shadow-sm">${escapeHtmlSafe(room)}</span></td><td>${s.male||'-'}</td><td>${s.female||'-'}</td><td class="text-success fw-bold">${s.active||'-'}</td><td class="text-danger">${s.suspended||'-'}</td><td style="color:#5b21b6;">${s.graduated||'-'}</td><td class="fw-bold text-primary bg-light">${s.total}</td></tr>`;
   });
   html += `<tr class="table-light fw-bold text-dark"><td class="text-end pe-3">รวมทั้งหมด</td><td>${totalMale}</td><td>${totalFemale}</td><td class="text-success">${totalActive}</td><td class="text-danger">${totalSuspended}</td><td style="color:#5b21b6;">${totalGraduated}</td><td class="text-primary fs-6">${students.length}</td></tr>`;
   tbody.innerHTML = html;
