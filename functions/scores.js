@@ -101,14 +101,26 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year]) {
     };
   }
 
+  const { getSemesterReport } = require('./attendanceReport');
+  let attStats = {}, attDetails = {}, attSessions = [];
+  try {
+    const attReport = await getSemesterReport([subjectCode, className, term, year]);
+    attSessions = (attReport.meta && attReport.meta.sessionsList) || [];
+    for (const s of attReport.students || []) {
+      const nid = normID(s.id);
+      attStats[nid] = s.percent;
+      attDetails[nid] = { present: s.present, late: s.late, leave: s.leave, absent: s.absent, records: s.records || {} };
+    }
+  } catch (_) { /* attendance optional — don't fail the whole request */ }
+
   return {
     config: configObj,
     students,
     existingScores,
     existingQuals,
-    attStats: {},
-    attDetails: {},
-    attSessions: [],
+    attStats,
+    attDetails,
+    attSessions,
   };
 }
 
