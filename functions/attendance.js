@@ -1,8 +1,9 @@
 const { query } = require('../lib/db');
 
-async function saveAttendanceBatch([list]) {
+async function saveAttendanceBatch([list], user) {
   if (!Array.isArray(list) || list.length === 0) return { status: 'success', saved: 0 };
 
+  const teacherId = String(user?.id || '');
   const first = list[0];
   const sessionId = `${first.date}|${first.subjectCode}|${first.className}|${first.period}`;
   const { pool } = require('../lib/db');
@@ -16,7 +17,7 @@ async function saveAttendanceBatch([list]) {
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [item.date, item.term, item.year, item.subjectCode, item.subjectName,
          item.className, item.period, item.studentId, item.studentName,
-         item.status, sessionId, item.teacherId || '']
+         item.status, sessionId, teacherId]
       );
     }
     await client.query('COMMIT');
@@ -29,7 +30,7 @@ async function saveAttendanceBatch([list]) {
   return { status: 'success', saved: list.length, sessionId };
 }
 
-async function saveLessonRecord([record]) {
+async function saveLessonRecord([record], user) {
   const r = record || {};
   await query(
     `INSERT INTO academic_records(date,term,year,subject_code,subject_name,class,period,topic,present,absent,leave,teacher_id,session_id)
@@ -39,7 +40,7 @@ async function saveLessonRecord([record]) {
       r.date, r.term, r.year, r.subjectCode, r.subjectName,
       r.className, r.period, r.topic || '',
       r.present || 0, r.absent || 0, r.leave || 0,
-      r.teacherId || '', r.sessionId || '',
+      String(user?.id || r.teacherId || ''), r.sessionId || '',
     ]
   );
   return { status: 'success' };

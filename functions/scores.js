@@ -127,7 +127,7 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year]) {
   };
 }
 
-async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId]) {
+async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId], user) {
   if (!Array.isArray(scoreRows) || scoreRows.length === 0) return { status: 'success', message: 'ไม่มีคะแนนที่ต้องบันทึก' };
   const { pool } = require('../lib/db');
   const client = await pool.connect();
@@ -146,7 +146,7 @@ async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId
       await client.query(
         `INSERT INTO score_history(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)
          VALUES($1,$2,$3,$4,$5,$6,$7)`,
-        [teacherId || '', studentId, subjectCode, indicatorId, String(score), term, year]
+        [String(user?.id || teacherId || ''), studentId, subjectCode, indicatorId, String(score), term, year]
       );
     }
     await client.query('COMMIT');
@@ -164,7 +164,7 @@ async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId
 //   scoreRecords: [{studentId, indicatorId, score, ...}],
 //   qualRecords:  [{studentId, char1-4, charTotal, char(=grade), read1-4, readTotal, read(=grade)}],
 //   gradeRecords: [...] }
-async function saveAllInOneWithConfig([payload]) {
+async function saveAllInOneWithConfig([payload], user) {
   const p = payload || {};
   const { subjectCode, className, teacherId, term, year, newConfig, scoreRecords, qualRecords } = p;
 
@@ -187,7 +187,7 @@ async function saveAllInOneWithConfig([payload]) {
   }
 
   if (Array.isArray(scoreRecords) && scoreRecords.length > 0) {
-    await saveAllInOneScores([scoreRecords, subjectCode, term, year, teacherId]);
+    await saveAllInOneScores([scoreRecords, subjectCode, term, year, teacherId], user);
   }
 
   if (Array.isArray(qualRecords) && qualRecords.length > 0) {

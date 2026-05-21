@@ -24,16 +24,16 @@ async function updateTimetableRow([rowIndex, data]) {
      location=$5,teacher_id=$6,day=$7,period=$8,term=$9,year=$10 WHERE id=$11`,
     [...data, rowIndex]
   );
-  return { success: true };
+  return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
 async function deleteTimetableRow([rowIndex]) {
   await query(`DELETE FROM timetable WHERE id=$1`, [rowIndex]);
-  return { success: true };
+  return { status: 'success', message: 'ลบสำเร็จ' };
 }
 
 async function importTimetableCSV([rows]) {
-  if (!Array.isArray(rows) || rows.length === 0) return { success: true, imported: 0 };
+  if (!Array.isArray(rows) || rows.length === 0) return { status: 'success', message: 'ไม่มีข้อมูล', imported: 0 };
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   let count = 0;
@@ -71,7 +71,7 @@ async function importTimetableCSV([rows]) {
   } finally {
     client.release();
   }
-  return { success: true, imported: count };
+  return { status: 'success', message: `นำเข้า ${count} รายการ`, imported: count };
 }
 
 async function swapTimetableTeacher([rowId1, rowId2]) {
@@ -155,7 +155,7 @@ async function setHomeroomTeacher([teacherId, className, term, year]) {
       [level, room, teacherId, term, year]
     );
   }
-  return { success: true };
+  return { status: 'success', message: 'บันทึกครูที่ปรึกษาสำเร็จ' };
 }
 
 async function setAllHomeroomTeachers([assignments, term, year]) {

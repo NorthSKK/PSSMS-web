@@ -2,8 +2,11 @@ const { query } = require('../lib/db');
 const getSystemConfig = require('./getSystemConfig');
 const cache = require('../lib/cache');
 
-module.exports = async function getAllUsers() {
-  const cached = cache.get('all_users');
+module.exports = async function getAllUsers(args, user) {
+  const isAdmin = String(user?.role || '').trim().toUpperCase() === 'ADMIN';
+
+  const cacheKey = isAdmin ? 'all_users_admin' : 'all_users_redacted';
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
 
   const config = await getSystemConfig();
@@ -14,12 +17,11 @@ module.exports = async function getAllUsers() {
     [config.year]
   );
 
-  // Return array-of-arrays matching Sheets row format:
   // [0]username [1]password [2]full_name [3]role [4]department [5]email [6]year [7]status
   const result = rows.map(r => [
-    r.username, r.password, r.full_name, r.role,
+    r.username, isAdmin ? r.password : '', r.full_name, r.role,
     r.department || '', r.email || '', r.year || '', r.status || 'ปกติ',
   ]);
-  cache.set('all_users', result, 300);
+  cache.set(cacheKey, result, 300);
   return result;
 };

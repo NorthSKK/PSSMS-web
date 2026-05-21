@@ -1,9 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const { adminOnly, teacherOrAdmin } = require('../lib/permissions');
 
 // Functions callable without a valid session token
 const PUBLIC_FNS = new Set(['checkLogin', 'getSystemConfig']);
+
+const ADMIN_ONLY = new Set([
+  'addUser', 'editUser', 'deleteUser', 'importStudentCSV', 'importTeacherCSV',
+  'saveSystemConfig', 'saveCalendarEvent', 'deleteCalendarEvent', 'importCalendarCSV',
+  'updateTimetableRow', 'deleteTimetableRow', 'importTimetableCSV', 'swapTimetableTeacher',
+  'setHomeroomTeacher', 'setAllHomeroomTeachers',
+  'approveLeave', 'rejectLeave', 'assignSubstitute', 'unassignSubstitute', 'manualCreateAffected',
+  'saveSchoolInfo', 'savePrintConfigData', 'importCurriculumCSV',
+  'setupCalendarDatabase', 'setupClubDatabase', 'setupCurriculumDatabase',
+  'promoteStudentsToNextYear', 'deleteClub', 'adminAddMember', 'adminRemoveMember',
+  'getAllUsers',
+]);
+
+const TEACHER_OR_ADMIN = new Set([
+  'saveAttendanceBatch', 'saveLessonRecord', 'updateAttendanceStatus', 'updateAttendanceBatch',
+  'saveMassiveAttendanceGrid', 'saveSubjectConfig', 'saveAllInOneScores', 'saveAllInOneWithConfig',
+  'saveDetailedLessonRecord', 'updateDetailedLessonRecord', 'deleteDetailedLessonRecord',
+  'saveMorningActivityBatch', 'createClub', 'updateClub', 'teacherUpdateTimetableRow',
+  'saveStudentRemarkDirectly', 'saveLeaveRequest', 'updateLeave', 'deleteLeave', 'reviewLeave',
+  'saveSubstituteAssignment', 'confirmSubstitute', 'saveBudget', 'saveSarabun', 'deleteSarabun',
+  'requestSarabunNumber', 'updateTaskStatus', 'uploadSarabunFile',
+]);
 
 const leaveBundle = require('../functions/getLeaveBundle');
 const attendance = require('../functions/attendance');
@@ -50,7 +73,7 @@ const handlers = {
   getAdminDashboardBundle:         require('../functions/getAdminDashboardBundle'),
 
   // Users — reads
-  getAllUsers:                      require('../functions/getAllUsers'),
+  getAllUsers:                      (args, user) => require('../functions/getAllUsers')(args, user),
   getTeachersForTimetable:          require('../functions/getTeachersForTimetable'),
   getTeacherListForClubDropdown:    require('../functions/getTeachersForTimetable'),
   getStudentSummaryStats:          (args) => usersWrite.getStudentSummaryStats(args),
@@ -86,8 +109,8 @@ const handlers = {
   setAllHomeroomTeachers:          (args) => timetableAdmin.setAllHomeroomTeachers(args),
 
   // Attendance
-  saveAttendanceBatch:             (args) => attendance.saveAttendanceBatch(args),
-  saveLessonRecord:                (args) => attendance.saveLessonRecord(args),
+  saveAttendanceBatch:             (args, user) => attendance.saveAttendanceBatch(args, user),
+  saveLessonRecord:                (args, user) => attendance.saveLessonRecord(args, user),
   updateAttendanceStatus:          (args) => attendance.updateAttendanceStatus(args),
   updateAttendanceBatch:           (args) => attendance.updateAttendanceBatch(args),
   getTodayAttendanceHistory:       (args) => attendance.getTodayAttendanceHistory(args),
@@ -106,8 +129,8 @@ const handlers = {
   getSubjectConfig:                (args) => scores.getSubjectConfig(args),
   saveSubjectConfig:               (args) => scores.saveSubjectConfig(args),
   getAllInOneScoreGridData:         (args) => scores.getAllInOneScoreGridData(args),
-  saveAllInOneScores:              (args) => scores.saveAllInOneScores(args),
-  saveAllInOneWithConfig:          (args) => scores.saveAllInOneWithConfig(args),
+  saveAllInOneScores:              (args, user) => scores.saveAllInOneScores(args, user),
+  saveAllInOneWithConfig:          (args, user) => scores.saveAllInOneWithConfig(args, user),
 
   // Academic reports
   getAllSubjectsReport:             require('../functions/getAllSubjectsReport'),
@@ -136,13 +159,13 @@ const handlers = {
   getLeaveRequestBundle:           (args) => leaveBundle.getLeaveRequestBundle(args),
   getPendingSubstitutes:           (args) => leaveBundle.getPendingSubstitutes(args),
   // Leave — writes
-  saveLeaveRequest:                (args) => leaveWrite.saveLeaveRequest(args),
-  approveLeave:                    (args) => leaveWrite.approveLeave(args),
-  rejectLeave:                     (args) => leaveWrite.rejectLeave(args),
-  reviewLeave:                     (args) => leaveWrite.reviewLeave(args),
+  saveLeaveRequest:                (args, user) => leaveWrite.saveLeaveRequest(args, user),
+  approveLeave:                    (args, user) => leaveWrite.approveLeave(args, user),
+  rejectLeave:                     (args, user) => leaveWrite.rejectLeave(args, user),
+  reviewLeave:                     (args, user) => leaveWrite.reviewLeave(args, user),
   updateLeave:                     (args) => leaveWrite.updateLeave(args),
   deleteLeave:                     (args) => leaveWrite.deleteLeave(args),
-  assignSubstitute:                (args) => leaveWrite.assignSubstitute(args),
+  assignSubstitute:                (args, user) => leaveWrite.assignSubstitute(args, user),
   unassignSubstitute:              (args) => leaveWrite.unassignSubstitute(args),
   manualCreateAffected:            (args) => leaveWrite.manualCreateAffected(args),
   saveSubstituteAssignment:        (args) => leaveWrite.saveSubstituteAssignment(args),
@@ -210,6 +233,14 @@ router.post('/:fnName', async (req, res) => {
     } catch {
       return res.json({ __error: 'Token invalid or expired' });
     }
+  }
+
+  // Role-based authorization
+  try {
+    if (ADMIN_ONLY.has(fnName)) adminOnly(user);
+    else if (TEACHER_OR_ADMIN.has(fnName)) teacherOrAdmin(user);
+  } catch (e) {
+    return res.json({ __error: e.message });
   }
 
   const handler = handlers[fnName];

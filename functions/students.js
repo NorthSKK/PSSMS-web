@@ -76,14 +76,14 @@ async function getStudentsByClass([className, year]) {
   }
 
   return matched.map(r => [
-    r.username, r.password, r.full_name, r.role,
+    r.username, '', r.full_name, r.role,
     r.department || '', r.email || '', r.year || '', r.status || 'ปกติ',
   ]);
 }
 
 async function getStudentsByClub([clubId]) {
   const { rows } = await query(
-    `SELECT u.username, u.password, u.full_name, u.role,
+    `SELECT u.username, u.full_name, u.role,
             u.department, u.email, u.year, u.status,
             cm.class_name
      FROM club_members cm
@@ -93,7 +93,7 @@ async function getStudentsByClub([clubId]) {
     [clubId]
   );
   return rows.map(r => [
-    r.username, r.password, r.full_name, r.role,
+    r.username, '', r.full_name, r.role,
     r.department || r.class_name || '', r.email || '', r.year || '', r.status || 'ปกติ',
   ]);
 }

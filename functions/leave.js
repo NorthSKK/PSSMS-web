@@ -1,13 +1,13 @@
 const { query } = require('../lib/db');
 
-async function saveLeaveRequest([requestData]) {
+async function saveLeaveRequest([requestData], user) {
   const r = requestData || {};
   const { rows } = await query(
     `INSERT INTO leave_records(teacher_id,staff_name,type,start_date,end_date,days,reason,status,year)
      VALUES($1,$2,$3,$4,$5,$6,$7,'รอพิจารณา',$8)
      RETURNING id`,
     [
-      r.teacherId || r.teacher_id || '',
+      String(user?.id || r.teacherId || r.teacher_id || ''),
       r.staffName || r.staff_name || '',
       r.type || 'ลาป่วย',
       r.startDate || r.start_date,
@@ -20,18 +20,18 @@ async function saveLeaveRequest([requestData]) {
   return { status: 'success', message: 'ส่งคำขอลาสำเร็จ', id: rows[0].id };
 }
 
-async function approveLeave([leaveId, reviewedBy, comment]) {
+async function approveLeave([leaveId, , comment], user) {
   await query(
     `UPDATE leave_records SET status='อนุมัติ', reviewed_by=$1, admin_comment=$2 WHERE id=$3`,
-    [reviewedBy || '', comment || '', leaveId]
+    [String(user?.id || ''), comment || '', leaveId]
   );
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
-async function rejectLeave([leaveId, reviewedBy, comment]) {
+async function rejectLeave([leaveId, , comment], user) {
   await query(
     `UPDATE leave_records SET status='ไม่อนุมัติ', reviewed_by=$1, admin_comment=$2 WHERE id=$3`,
-    [reviewedBy || '', comment || '', leaveId]
+    [String(user?.id || ''), comment || '', leaveId]
   );
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
@@ -63,16 +63,16 @@ async function confirmSubstitute([subId]) {
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
-async function reviewLeave([leaveId, status, comment, reviewerName]) {
+async function reviewLeave([leaveId, status, comment], user) {
   const dbStatus = status === 'อนุมัติ' ? 'อนุมัติ' : 'ปฏิเสธ';
   await query(
     `UPDATE leave_records SET status=$1, reviewed_by=$2, admin_comment=$3 WHERE id=$4`,
-    [dbStatus, reviewerName || '', comment || '', leaveId]
+    [dbStatus, String(user?.id || ''), comment || '', leaveId]
   );
   return { status: 'success', message: 'บันทึกการพิจารณาสำเร็จ' };
 }
 
-async function assignSubstitute([assignmentId, subTeacherId, note, assignedByName]) {
+async function assignSubstitute([assignmentId, subTeacherId, note], user) {
   const { rows } = await query(`SELECT full_name FROM users WHERE username=$1`, [subTeacherId]);
   const subTeacherName = rows[0] ? rows[0].full_name : '';
   await query(
@@ -80,7 +80,7 @@ async function assignSubstitute([assignmentId, subTeacherId, note, assignedByNam
      SET sub_teacher_id=$1, sub_teacher_name=$2, status='จัดแล้ว',
          assigned_by=$3, note=$4, assigned_at=NOW()
      WHERE id=$5`,
-    [subTeacherId, subTeacherName, assignedByName || '', note || '', assignmentId]
+    [subTeacherId, subTeacherName, String(user?.id || ''), note || '', assignmentId]
   );
   return { status: 'success', message: 'จัดสอนแทนสำเร็จ' };
 }
