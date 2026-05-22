@@ -61,12 +61,12 @@ async function updateAttendanceStatus([sessionId, studentId, newStatus], user) {
 async function updateAttendanceBatch([updates], user) {
   if (!Array.isArray(updates) || updates.length === 0) return { status: 'success', message: 'ไม่มีรายการที่ต้องแก้ไข' };
   await verifyAttendanceBatchOwner(user, updates.map(u => u.rowIdx));
-  for (const u of updates) {
-    await query(
-      `UPDATE attendance SET status=$1 WHERE id=$2`,
-      [u.status, u.rowIdx]
-    );
-  }
+  await query(
+    `UPDATE attendance SET status = v.status
+     FROM unnest($1::int[], $2::text[]) AS v(id, status)
+     WHERE attendance.id = v.id`,
+    [updates.map(u => u.rowIdx), updates.map(u => u.status)]
+  );
   return { status: 'success', message: `อัปเดตสำเร็จ ${updates.length} รายการ` };
 }
 

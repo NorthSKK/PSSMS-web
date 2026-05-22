@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const cache = require('../lib/cache');
 
 function normalizeClass(str) {
   return String(str || '').replace(/[^a-zA-Z0-9ก-๙]/g, '').toLowerCase();
@@ -6,6 +7,9 @@ function normalizeClass(str) {
 
 async function getStudentsByClass([className, year]) {
   const norm = normalizeClass(className);
+  const cacheKey = `students_${norm}_${year || 'active'}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
   const config = year ? { year } : await require('./getSystemConfig')();
   const y = String(year || config.year || '').trim();
   const activeYear = String((await require('./getSystemConfig')()).year || '').trim();
@@ -75,10 +79,12 @@ async function getStudentsByClass([className, year]) {
     matched = anyYear.filter(r => normalizeClass(r.department) === norm);
   }
 
-  return matched.map(r => [
+  const result = matched.map(r => [
     r.username, '', r.full_name, r.role,
     r.department || '', r.email || '', r.year || '', r.status || 'ปกติ',
   ]);
+  cache.set(cacheKey, result, 300);
+  return result;
 }
 
 async function getStudentsByClub([clubId]) {

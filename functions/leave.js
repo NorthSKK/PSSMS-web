@@ -128,31 +128,56 @@ async function manualCreateAffected([teacherId, startDate, endDate]) {
   if (!timetable.length) return { status: 'success', message: 'ไม่พบตารางสอน', created: 0 };
 
   const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
-  let created = 0;
+
+  // Collect all (date, period, timetable-row) candidates first
+  const candidates = [];
   const start = new Date(startDate);
   const end   = new Date(endDate);
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dayName = DAYS[d.getDay()];
     const dateStr = d.toISOString().slice(0, 10);
     for (const tt of timetable.filter(t => t.day === dayName)) {
-      const { rows: exists } = await query(
-        `SELECT id FROM substitute_assignments WHERE date=$1 AND period=$2 AND original_teacher_id=$3`,
-        [dateStr, tt.period, teacherId]
-      );
-      if (!exists.length) {
-        await query(
-          `INSERT INTO substitute_assignments
-           (date,period,day_of_week,original_teacher_id,original_teacher_name,
-            subject_code,subject_name,class,room,status)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'รอจัด')`,
-          [dateStr, tt.period, dayName, teacherId, tt.teacher_name || '',
-           tt.subject_code, tt.subject_name, tt.class_name, tt.room]
-        );
-        created++;
-      }
+      candidates.push({ dateStr, period: tt.period, dayName, tt });
     }
   }
-  return { status: 'success', message: `สร้าง ${created} คาบ`, created };
+  if (!candidates.length) return { status: 'success', message: 'สร้าง 0 คาบ', created: 0 };
+
+  // Batch-check which (date, period) already exist
+  const dates   = candidates.map(c => c.dateStr);
+  const periods = candidates.map(c => c.period);
+  const { rows: existing } = await query(
+    `SELECT date::text, period FROM substitute_assignments
+     WHERE original_teacher_id=$1 AND date=ANY($2::date[]) AND period=ANY($3)`,
+    [teacherId, [...new Set(dates)], [...new Set(periods)]]
+  );
+  const existSet = new Set(existing.map(r => `${r.date}|${r.period}`));
+
+  // Batch insert missing ones
+  const toInsert = candidates.filter(c => !existSet.has(`${c.dateStr}|${c.period}`));
+  if (!toInsert.length) return { status: 'success', message: 'สร้าง 0 คาบ', created: 0 };
+
+  const { pool } = require('../lib/db');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const { dateStr, period, dayName, tt } of toInsert) {
+      await client.query(
+        `INSERT INTO substitute_assignments
+         (date,period,day_of_week,original_teacher_id,original_teacher_name,
+          subject_code,subject_name,class,room,status)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'รอจัด')`,
+        [dateStr, period, dayName, teacherId, tt.teacher_name || '',
+         tt.subject_code, tt.subject_name, tt.class_name, tt.room]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  return { status: 'success', message: `สร้าง ${toInsert.length} คาบ`, created: toInsert.length };
 }
 
 module.exports = {

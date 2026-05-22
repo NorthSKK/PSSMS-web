@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const getSystemConfig = require('./getSystemConfig');
+const cache = require('../lib/cache');
 
 const DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
@@ -24,10 +25,14 @@ function _applyClubOverride(arr, club) {
 }
 
 async function getTeacherTimetableByDate([teacherId, dateStr]) {
-  const config = await getSystemConfig();
   const targetDate = dateStr ? new Date(dateStr) : new Date();
-  const targetDay = DAYS[targetDate.getDay()];
   const targetDateOnly = targetDate.toISOString().slice(0, 10);
+  const cacheKey = `tt_date_${teacherId}_${targetDateOnly}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  const config = await getSystemConfig();
+  const targetDay = DAYS[targetDate.getDay()];
   const { term, year } = config;
 
   const [ttRes, club] = await Promise.all([
@@ -62,6 +67,7 @@ async function getTeacherTimetableByDate([teacherId, dateStr]) {
     }
   } catch {}
 
+  cache.set(cacheKey, rows, 60);
   return rows;
 }
 

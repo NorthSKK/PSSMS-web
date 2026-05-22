@@ -2,6 +2,19 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { adminOnly, teacherOrAdmin, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
+const cache = require('../lib/cache');
+
+// Functions that invalidate timetable-related caches on success
+const TIMETABLE_WRITE_FNS = new Set([
+  'updateTimetableRow', 'deleteTimetableRow', 'importTimetableCSV',
+  'swapTimetableTeacher', 'setHomeroomTeacher', 'setAllHomeroomTeachers',
+  'teacherUpdateTimetableRow',
+]);
+// Functions that invalidate student-list caches on success
+const USER_WRITE_FNS = new Set([
+  'addUser', 'editUser', 'deleteUser', 'importStudentCSV', 'importTeacherCSV',
+  'promoteStudentsToNextYear',
+]);
 
 // Functions callable without a valid session token
 const PUBLIC_FNS = new Set(['checkLogin', 'getSystemConfig']);
@@ -254,6 +267,17 @@ router.post('/:fnName', async (req, res) => {
 
   try {
     const result = await handler(args, user);
+
+    // Invalidate related caches after successful writes
+    if (TIMETABLE_WRITE_FNS.has(fnName)) {
+      cache.delPrefix('tt_date_');
+      cache.delPrefix('tt_own_');
+    }
+    if (USER_WRITE_FNS.has(fnName)) {
+      cache.delPrefix('students_');
+      cache.del('all_users_admin');
+      cache.del('all_users_redacted');
+    }
 
     // Issue JWT on successful login
     let jwtToken = null;
