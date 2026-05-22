@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const { isAdmin, resolveTeacherId, verifyTeacherOwnsSubject } = require('../lib/permissions');
 
 async function getSubjectConfig([subjectCode, className, term, year]) {
   let rows;
@@ -33,10 +34,12 @@ async function getSubjectConfig([subjectCode, className, term, year]) {
   };
 }
 
-async function saveSubjectConfig([configData]) {
+async function saveSubjectConfig([configData], user) {
   const c = configData || {};
+  await verifyTeacherOwnsSubject(user, c.subjectCode, c.className, c.term, c.year);
   const ratio = c.scoreRatio || c.ratio ||
     (c.formative !== undefined ? `${c.formative}:${c.midterm || 0}:${c.final || 0}` : '70:10:20');
+  const effectiveTeacherId = resolveTeacherId(user, c.teacherId);
   await query(
     `INSERT INTO subject_config(subject_id,subject_code,class_name,term,year,score_ratio,indicators_json,teacher_id,exam_indicators_json)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -47,7 +50,7 @@ async function saveSubjectConfig([configData]) {
       c.subjectCode, c.className, c.term, c.year,
       ratio,
       JSON.stringify(c.indicators || []),
-      c.teacherId || '',
+      effectiveTeacherId,
       c.examIndicators ? JSON.stringify(c.examIndicators) : null,
     ]
   );
@@ -59,7 +62,8 @@ function normID(id) {
   return clean || '0';
 }
 
-async function getAllInOneScoreGridData([subjectCode, className, term, year]) {
+async function getAllInOneScoreGridData([subjectCode, className, term, year], user) {
+  await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
   const isClub = String(subjectCode || '').startsWith('CLUB');
   const students = isClub
     ? await require('./students').getStudentsByClub([subjectCode])
@@ -127,8 +131,7 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year]) {
   };
 }
 
-async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId], user) {
-  if (!Array.isArray(scoreRows) || scoreRows.length === 0) return { status: 'success', message: 'ไม่มีคะแนนที่ต้องบันทึก' };
+async function _writeScoreRows(scoreRows, subjectCode, term, year, auditTeacherId) {
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   try {
@@ -146,7 +149,7 @@ async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId
       await client.query(
         `INSERT INTO score_history(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)
          VALUES($1,$2,$3,$4,$5,$6,$7)`,
-        [String(user?.id || teacherId || ''), studentId, subjectCode, indicatorId, String(score), term, year]
+        [auditTeacherId, studentId, subjectCode, indicatorId, String(score), term, year]
       );
     }
     await client.query('COMMIT');
@@ -156,6 +159,12 @@ async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId
   } finally {
     client.release();
   }
+}
+
+async function saveAllInOneScores([scoreRows, subjectCode, term, year], user) {
+  if (!Array.isArray(scoreRows) || scoreRows.length === 0) return { status: 'success', message: 'ไม่มีคะแนนที่ต้องบันทึก' };
+  await verifyTeacherOwnsSubject(user, subjectCode, null, term, year);
+  await _writeScoreRows(scoreRows, subjectCode, term, year, String(user?.id || ''));
   return { status: 'success', message: `บันทึกสำเร็จ ${scoreRows.length} รายการ` };
 }
 
@@ -166,7 +175,10 @@ async function saveAllInOneScores([scoreRows, subjectCode, term, year, teacherId
 //   gradeRecords: [...] }
 async function saveAllInOneWithConfig([payload], user) {
   const p = payload || {};
-  const { subjectCode, className, teacherId, term, year, newConfig, scoreRecords, qualRecords } = p;
+  const { subjectCode, className, term, year, newConfig, scoreRecords, qualRecords } = p;
+
+  await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
+  const effectiveTeacherId = resolveTeacherId(user, p.teacherId);
 
   if (newConfig) {
     const ratio = `${newConfig.formative || 70}:${newConfig.midterm || 10}:${newConfig.final || 20}`;
@@ -180,14 +192,14 @@ async function saveAllInOneWithConfig([payload], user) {
         subjectCode, className, term, year,
         ratio,
         JSON.stringify(newConfig.indicators || []),
-        teacherId || '',
+        effectiveTeacherId,
         newConfig.examIndicators ? JSON.stringify(newConfig.examIndicators) : null,
       ]
     );
   }
 
   if (Array.isArray(scoreRecords) && scoreRecords.length > 0) {
-    await saveAllInOneScores([scoreRecords, subjectCode, term, year, teacherId], user);
+    await _writeScoreRows(scoreRecords, subjectCode, term, year, String(user?.id || ''));
   }
 
   if (Array.isArray(qualRecords) && qualRecords.length > 0) {

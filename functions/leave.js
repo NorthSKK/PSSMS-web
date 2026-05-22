@@ -20,7 +20,7 @@ async function saveLeaveRequest([requestData], user) {
   return { status: 'success', message: 'ส่งคำขอลาสำเร็จ', id: rows[0].id };
 }
 
-async function approveLeave([leaveId, , comment], user) {
+async function approveLeave([leaveId, /* reviewedByName — ignored, JWT user.id used instead */, comment], user) {
   await query(
     `UPDATE leave_records SET status='อนุมัติ', reviewed_by=$1, admin_comment=$2 WHERE id=$3`,
     [String(user?.id || ''), comment || '', leaveId]
@@ -28,7 +28,7 @@ async function approveLeave([leaveId, , comment], user) {
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
-async function rejectLeave([leaveId, , comment], user) {
+async function rejectLeave([leaveId, /* reviewedByName — ignored, JWT user.id used instead */, comment], user) {
   await query(
     `UPDATE leave_records SET status='ไม่อนุมัติ', reviewed_by=$1, admin_comment=$2 WHERE id=$3`,
     [String(user?.id || ''), comment || '', leaveId]
@@ -72,7 +72,7 @@ async function reviewLeave([leaveId, status, comment], user) {
   return { status: 'success', message: 'บันทึกการพิจารณาสำเร็จ' };
 }
 
-async function assignSubstitute([assignmentId, subTeacherId, note], user) {
+async function assignSubstitute([assignmentId, subTeacherId, note, /* assignedByName — ignored, JWT user.id used instead */], user) {
   const { rows } = await query(`SELECT full_name FROM users WHERE username=$1`, [subTeacherId]);
   const subTeacherName = rows[0] ? rows[0].full_name : '';
   await query(

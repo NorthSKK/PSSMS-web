@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { adminOnly, teacherOrAdmin } = require('../lib/permissions');
+const { adminOnly, teacherOrAdmin, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
 
 // Functions callable without a valid session token
 const PUBLIC_FNS = new Set(['checkLogin', 'getSystemConfig']);
@@ -111,24 +111,28 @@ const handlers = {
   // Attendance
   saveAttendanceBatch:             (args, user) => attendance.saveAttendanceBatch(args, user),
   saveLessonRecord:                (args, user) => attendance.saveLessonRecord(args, user),
-  updateAttendanceStatus:          (args) => attendance.updateAttendanceStatus(args),
-  updateAttendanceBatch:           (args) => attendance.updateAttendanceBatch(args),
-  getTodayAttendanceHistory:       (args) => attendance.getTodayAttendanceHistory(args),
-  getCourseSessionList:            (args) => attendance.getCourseSessionList(args),
-  getMassiveAttendanceGrid:        (args) => attendance.getMassiveAttendanceGrid(args),
-  saveMassiveAttendanceGrid:       (args) => attendance.saveMassiveAttendanceGrid(args),
-  getSemesterReport:               (args) => attendance.getSemesterReport(args),
+  updateAttendanceStatus:          (args, user) => attendance.updateAttendanceStatus(args, user),
+  updateAttendanceBatch:           (args, user) => attendance.updateAttendanceBatch(args, user),
+  getTodayAttendanceHistory:       (args, user) => attendance.getTodayAttendanceHistory(args, user),
+  getCourseSessionList:            (args, user) => attendance.getCourseSessionList(args, user),
+  getMassiveAttendanceGrid:        (args, user) => attendance.getMassiveAttendanceGrid(args, user),
+  saveMassiveAttendanceGrid:       (args, user) => attendance.saveMassiveAttendanceGrid(args, user),
+  getSemesterReport:               async (args, user) => {
+    const [subjectCode, className, term, year] = args;
+    await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
+    return attendance.getSemesterReport(args);
+  },
 
   // Detailed lesson records
-  getDetailedLessonRecords:        (args) => lessonRecords.getDetailedLessonRecords(args),
-  saveDetailedLessonRecord:        (args) => lessonRecords.saveDetailedLessonRecord(args),
-  deleteDetailedLessonRecord:      (args) => lessonRecords.deleteDetailedLessonRecord(args),
-  updateDetailedLessonRecord:      (args) => lessonRecords.updateDetailedLessonRecord(args),
+  getDetailedLessonRecords:        (args, user) => lessonRecords.getDetailedLessonRecords(args, user),
+  saveDetailedLessonRecord:        (args, user) => lessonRecords.saveDetailedLessonRecord(args, user),
+  deleteDetailedLessonRecord:      (args, user) => lessonRecords.deleteDetailedLessonRecord(args, user),
+  updateDetailedLessonRecord:      (args, user) => lessonRecords.updateDetailedLessonRecord(args, user),
 
   // Scores (ปพ.5)
   getSubjectConfig:                (args) => scores.getSubjectConfig(args),
-  saveSubjectConfig:               (args) => scores.saveSubjectConfig(args),
-  getAllInOneScoreGridData:         (args) => scores.getAllInOneScoreGridData(args),
+  saveSubjectConfig:               (args, user) => scores.saveSubjectConfig(args, user),
+  getAllInOneScoreGridData:         (args, user) => scores.getAllInOneScoreGridData(args, user),
   saveAllInOneScores:              (args, user) => scores.saveAllInOneScores(args, user),
   saveAllInOneWithConfig:          (args, user) => scores.saveAllInOneWithConfig(args, user),
 
@@ -137,8 +141,7 @@ const handlers = {
 
   // Calendar — filter personal events to owner only (admin sees all)
   getCalendarEvents: (args, user) => {
-    const isAdmin = String(user?.role || '').toUpperCase() === 'ADMIN';
-    return require('../functions/getCalendarEvents')(isAdmin ? null : user?.id);
+    return require('../functions/getCalendarEvents')(isAdmin(user) ? null : user?.id);
   },
 
   // Morning activity
@@ -217,7 +220,7 @@ const handlers = {
 
   // Todo (in-memory)
   getTodoList:                     require('../functions/getTodoList'),
-  saveTodoList:                    async ([userId, json]) => { require('../functions/getTodoList').save(userId, json); return true; },
+  saveTodoList:                    async ([userId, json]) => { await require('../functions/getTodoList').save(userId, json); return { status: 'success', message: 'บันทึกสำเร็จ' }; },
 };
 
 router.post('/:fnName', async (req, res) => {

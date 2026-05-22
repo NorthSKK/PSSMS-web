@@ -1,10 +1,12 @@
 const { query } = require('../lib/db');
+const { isAdmin, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner } = require('../lib/permissions');
 
 async function saveAttendanceBatch([list], user) {
   if (!Array.isArray(list) || list.length === 0) return { status: 'success', saved: 0 };
 
   const teacherId = String(user?.id || '');
   const first = list[0];
+  await verifyTeacherOwnsSubject(user, first.subjectCode, first.className, first.term, first.year);
   const sessionId = `${first.date}|${first.subjectCode}|${first.className}|${first.period}`;
   const { pool } = require('../lib/db');
   const client = await pool.connect();
@@ -32,6 +34,7 @@ async function saveAttendanceBatch([list], user) {
 
 async function saveLessonRecord([record], user) {
   const r = record || {};
+  await verifyTeacherOwnsSubject(user, r.subjectCode, r.className, r.term, r.year);
   await query(
     `INSERT INTO academic_records(date,term,year,subject_code,subject_name,class,period,topic,present,absent,leave,teacher_id,session_id)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
@@ -46,7 +49,8 @@ async function saveLessonRecord([record], user) {
   return { status: 'success' };
 }
 
-async function updateAttendanceStatus([sessionId, studentId, newStatus]) {
+async function updateAttendanceStatus([sessionId, studentId, newStatus], user) {
+  await verifySessionOwner(user, sessionId);
   await query(
     `UPDATE attendance SET status=$1 WHERE session_id=$2 AND student_id=$3`,
     [newStatus, sessionId, studentId]
@@ -54,8 +58,9 @@ async function updateAttendanceStatus([sessionId, studentId, newStatus]) {
   return { status: 'success' };
 }
 
-async function updateAttendanceBatch([updates]) {
+async function updateAttendanceBatch([updates], user) {
   if (!Array.isArray(updates) || updates.length === 0) return { status: 'success', message: 'ไม่มีรายการที่ต้องแก้ไข' };
+  await verifyAttendanceBatchOwner(user, updates.map(u => u.rowIdx));
   for (const u of updates) {
     await query(
       `UPDATE attendance SET status=$1 WHERE id=$2`,
@@ -65,14 +70,21 @@ async function updateAttendanceBatch([updates]) {
   return { status: 'success', message: `อัปเดตสำเร็จ ${updates.length} รายการ` };
 }
 
-async function getTodayAttendanceHistory([date, subjectCode, className]) {
+async function getTodayAttendanceHistory([date, subjectCode, className], user) {
+  const params = [date, subjectCode, className];
+  let teacherFilter = '';
+  if (!isAdmin(user)) {
+    params.push(String(user?.id || '').trim().toLowerCase());
+    teacherFilter = ` AND LOWER(teacher_id)=$${params.length}`;
+  }
   const { rows } = await query(
     `SELECT id, student_id, student_name, status, period, session_id,
             to_char(date,'YYYY-MM-DD') as date
      FROM attendance
      WHERE date=$1 AND subject_code=$2 AND class=$3
+       ${teacherFilter}
      ORDER BY student_id`,
-    [date, subjectCode, className]
+    params
   );
   return rows.map(r => ({
     rowIdx: r.id,
@@ -86,7 +98,9 @@ async function getTodayAttendanceHistory([date, subjectCode, className]) {
   }));
 }
 
-async function getCourseSessionList([teacherId, subjectCode, className, term, year]) {
+async function getCourseSessionList([, subjectCode, className, term, year], user) {
+  // Ignore payload teacherId; use JWT user.id (Admin may see any teacher's data via other endpoints)
+  const teacherId = String(user?.id || '');
   const { rows } = await query(
     `SELECT session_id,
             to_char(MIN(date),'YYYY-MM-DD') as date,
@@ -106,7 +120,9 @@ async function getCourseSessionList([teacherId, subjectCode, className, term, ye
   }));
 }
 
-async function getMassiveAttendanceGrid([teacherId, subjectCode, className, term, year]) {
+async function getMassiveAttendanceGrid([, subjectCode, className, term, year], user) {
+  // Ignore payload teacherId; use JWT user.id
+  const teacherId = String(user?.id || '');
   const thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   const toThaiDate = (dateStr) => {
     const d = new Date(dateStr);
@@ -192,12 +208,17 @@ async function getMassiveAttendanceGrid([teacherId, subjectCode, className, term
   };
 }
 
-// args: subjectCode, subjectName, className, term, year, updates, newRecords, teacherId
-async function saveMassiveAttendanceGrid([subjectCode, subjectName, className, term, year, updates, newRecords, teacherId]) {
+// args: subjectCode, subjectName, className, term, year, updates, newRecords, (ignored teacherId)
+async function saveMassiveAttendanceGrid([subjectCode, subjectName, className, term, year, updates, newRecords], user) {
+  await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
+  const teacherId = String(user?.id || '');
   const isHR = String(subjectCode).toUpperCase() === 'HR';
 
   const hrColMap = { area: 'area_status', duty: 'duty_status', flag: 'flag_status' };
-  if (Array.isArray(updates)) {
+  if (Array.isArray(updates) && updates.length > 0) {
+    if (!isHR) {
+      await verifyAttendanceBatchOwner(user, updates.map(u => u.rowIdx));
+    }
     for (const u of updates) {
       if (isHR) {
         const col = hrColMap[u.hrType] || 'area_status';
@@ -215,7 +236,7 @@ async function saveMassiveAttendanceGrid([subjectCode, subjectName, className, t
         `INSERT INTO attendance(date,term,year,subject_code,subject_name,class,period,student_id,student_name,status,session_id,teacher_id)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [r.date, term, year, subjectCode, subjectName, className,
-         r.period, r.studentId, r.studentName, r.status, sessionId, teacherId || '']
+         r.period, r.studentId, r.studentName, r.status, sessionId, teacherId]
       );
     }
   }
