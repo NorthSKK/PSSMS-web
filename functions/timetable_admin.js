@@ -130,30 +130,36 @@ async function getHomeroomAssignments([term, year]) {
   );
 }
 
+const WEEKDAYS = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+
 async function setHomeroomTeacher([teacherId, className, term, year]) {
   const parts = String(className).split('/');
   const level = parts[0] || '';
   const room = parts[1] || '';
 
-  const existing = await query(
-    `SELECT id FROM timetable
-     WHERE (UPPER(subject_code)='HR' OR subject_name ILIKE '%โฮมรูม%')
-       AND level=$1 AND room=$2 AND term=$3 AND year=$4`,
-    [level, room, term, year]
-  );
-  if (existing.rows.length > 0) {
-    await query(
-      `UPDATE timetable SET teacher_id=$1
+  const { pool } = require('../lib/db');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `DELETE FROM timetable
        WHERE (UPPER(subject_code)='HR' OR subject_name ILIKE '%โฮมรูม%')
-         AND level=$2 AND room=$3 AND term=$4 AND year=$5`,
-      [teacherId, level, room, term, year]
+         AND level=$1 AND room=$2 AND term=$3 AND year=$4`,
+      [level, room, term, year]
     );
-  } else {
-    await query(
-      `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year)
-       VALUES('HR','โฮมรูม',$1,$2,$3,'จันทร์','0',$4,$5)`,
-      [level, room, teacherId, term, year]
-    );
+    for (const day of WEEKDAYS) {
+      await client.query(
+        `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year)
+         VALUES('HR','กิจกรรมโฮมรูมหน้าเสาธง',$1,$2,$3,$4,'0',$5,$6)`,
+        [level, room, teacherId, day, term, year]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
   }
   return { status: 'success', message: 'บันทึกครูที่ปรึกษาสำเร็จ' };
 }
@@ -177,11 +183,13 @@ async function setAllHomeroomTeachers([assignments, term, year]) {
       );
       for (const tid of teacherIds) {
         if (!tid) continue;
-        await client.query(
-          `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year,location)
-           VALUES('HR','กิจกรรมโฮมรูมหน้าเสาธง',$1,$2,$3,'จันทร์','0',$4,$5,'ลานหน้าเสาธง')`,
-          [level, room, tid, term, year]
-        );
+        for (const day of WEEKDAYS) {
+          await client.query(
+            `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year,location)
+             VALUES('HR','กิจกรรมโฮมรูมหน้าเสาธง',$1,$2,$3,$4,'0',$5,$6,'ลานหน้าเสาธง')`,
+            [level, room, tid, day, term, year]
+          );
+        }
       }
       const t1 = teacherIds[0];
       if (t1) {

@@ -1,6 +1,9 @@
 const { query } = require('../lib/db');
+const { verifyLessonRecordOwner } = require('../lib/permissions');
 
-async function getDetailedLessonRecords([teacherId, term, year]) {
+async function getDetailedLessonRecords([, term, year], user) {
+  // Ignore payload teacherId; always query by JWT user.id
+  const teacherId = String(user?.id || '');
   const { rows } = await query(
     `SELECT id, to_char(timestamp,'YYYY-MM-DD HH24:MI') as ts,
             to_char(date,'YYYY-MM-DD') as date,
@@ -36,8 +39,10 @@ async function getDetailedLessonRecords([teacherId, term, year]) {
   }));
 }
 
-async function saveDetailedLessonRecord([record]) {
+async function saveDetailedLessonRecord([record], user) {
   const r = record || {};
+  // Use JWT user.id; ignore payload teacherId
+  const teacherId = String(user?.id || '');
   await query(
     `INSERT INTO detailed_lesson_records
      (date,term,year,subject_code,subject_name,class,period,topic,outcomes,problems,solutions,
@@ -51,23 +56,25 @@ async function saveDetailedLessonRecord([record]) {
       JSON.stringify(r.skills3r8c || []),
       r.studentResults || '',
       r.workFileUrl || '', r.atmosphereUrl || '',
-      r.teacherId || '', r.sessionId || '',
+      teacherId, r.sessionId || '',
     ]
   );
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
-async function deleteDetailedLessonRecord([ts]) {
+async function deleteDetailedLessonRecord([ts], user) {
   // ts = String(id) from getDetailedLessonRecords
   const id = parseInt(ts);
   if (isNaN(id)) throw new Error('Invalid record id');
+  await verifyLessonRecordOwner(user, id);
   await query(`DELETE FROM detailed_lesson_records WHERE id=$1`, [id]);
-  return { status: 'success', message: 'บันทึกสำเร็จ' };
+  return { status: 'success', message: 'ลบสำเร็จ' };
 }
 
-async function updateDetailedLessonRecord([ts, record]) {
+async function updateDetailedLessonRecord([ts, record], user) {
   const id = parseInt(ts);
   if (isNaN(id)) throw new Error('Invalid record id');
+  await verifyLessonRecordOwner(user, id);
   const r = record || {};
   await query(
     `UPDATE detailed_lesson_records SET
