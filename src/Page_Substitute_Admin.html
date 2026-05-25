@@ -4,10 +4,11 @@
       <h4><i class="fas fa-user-friends me-2" style="color:var(--p-accent);"></i>จัดตารางสอนแทน</h4>
       <p class="pssms-subtitle">จัดครูสอนแทนสำหรับครูที่ลา/ไปราชการ</p>
     </div>
-    <div class="d-flex gap-2">
-      <button class="btn btn-soft btn-sm" onclick="openManualCreateModal()">
-        <i class="fas fa-plus me-1"></i>เพิ่มเอง (ครูลานอกระบบ)
-      </button>
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      <button class="btn btn-accent btn-sm" onclick="subAdminReload()"><i class="fas fa-search me-1"></i>ค้นหา</button>
+      <button class="btn btn-sm btn-soft" onclick="subFilterPreset('thisWeek')">สัปดาห์นี้</button>
+      <button class="btn btn-sm btn-soft" onclick="subFilterPreset('nextWeek')">สัปดาห์หน้า</button>
+      <button class="btn btn-soft btn-sm" onclick="openManualCreateModal()"><i class="fas fa-plus me-1"></i>เพิ่มเอง</button>
     </div>
   </div>
 
@@ -32,23 +33,16 @@
   </ul>
 
   <!-- Filter -->
-  <div class="d-flex flex-wrap gap-2 align-items-start justify-content-between mb-3">
-    <div class="d-flex flex-wrap gap-2">
-      <div>
-        <label class="form-label small text-muted mb-1">จากวันที่</label>
-        <input type="date" class="form-control form-control-sm" id="subFilterFrom" onchange="subUpdateFilterDayLabel()">
-        <div class="small text-muted mt-1" id="subFilterFromDay" style="font-size:.75rem;"></div>
-      </div>
-      <div>
-        <label class="form-label small text-muted mb-1">ถึงวันที่</label>
-        <input type="date" class="form-control form-control-sm" id="subFilterTo" onchange="subUpdateFilterDayLabel()">
-        <div class="small text-muted mt-1" id="subFilterToDay" style="font-size:.75rem;"></div>
-      </div>
+  <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
+    <div>
+      <label class="form-label small text-muted mb-1">จากวันที่</label>
+      <input type="date" class="form-control form-control-sm" id="subFilterFrom" onchange="subUpdateFilterDayLabel()">
+      <div class="small text-muted mt-1" id="subFilterFromDay" style="font-size:.75rem;"></div>
     </div>
-    <div class="d-flex gap-1">
-      <button class="btn btn-accent btn-sm" onclick="subAdminReload()"><i class="fas fa-search me-1"></i>ค้นหา</button>
-      <button class="btn btn-sm btn-soft" onclick="subFilterPreset('thisWeek')">สัปดาห์นี้</button>
-      <button class="btn btn-sm btn-soft" onclick="subFilterPreset('nextWeek')">สัปดาห์หน้า</button>
+    <div>
+      <label class="form-label small text-muted mb-1">ถึงวันที่</label>
+      <input type="date" class="form-control form-control-sm" id="subFilterTo" onchange="subUpdateFilterDayLabel()">
+      <div class="small text-muted mt-1" id="subFilterToDay" style="font-size:.75rem;"></div>
     </div>
   </div>
 
