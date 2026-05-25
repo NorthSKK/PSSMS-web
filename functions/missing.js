@@ -468,7 +468,7 @@ async function getAvailableSubstitutes([date, period, originalSubjectCode, origi
             COUNT(sa.id) AS sub_count
      FROM users u
      LEFT JOIN substitute_assignments sa ON sa.sub_teacher_id=u.username
-     WHERE UPPER(u.role) IN ('TEACHER','ADMIN') AND u.username != $1
+     WHERE UPPER(u.role) = 'TEACHER' AND u.username != $1
      GROUP BY u.username, u.full_name, u.department
      ORDER BY u.full_name`,
     [originalTeacherId]

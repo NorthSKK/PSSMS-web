@@ -43,14 +43,10 @@
       <input type="date" class="form-control form-control-sm" id="subFilterTo" onchange="subUpdateFilterDayLabel()">
       <div class="small text-muted mt-1" id="subFilterToDay" style="font-size:.75rem;"></div>
     </div>
-    <div class="col-md-3 col-12">
-      <button class="btn btn-accent btn-sm w-100" onclick="subAdminReload()">
-        <i class="fas fa-search me-1"></i>ค้นหา
-      </button>
-    </div>
-    <div class="col-md-3 col-12 d-flex gap-1 flex-wrap">
-      <button class="btn btn-sm btn-soft flex-fill" onclick="subFilterPreset('thisWeek')">สัปดาห์นี้</button>
-      <button class="btn btn-sm btn-soft flex-fill" onclick="subFilterPreset('nextWeek')">สัปดาห์หน้า</button>
+    <div class="col-md-6 col-12 d-flex gap-1 flex-wrap align-items-center">
+      <button class="btn btn-accent btn-sm" onclick="subAdminReload()"><i class="fas fa-search me-1"></i>ค้นหา</button>
+      <button class="btn btn-sm btn-soft" onclick="subFilterPreset('thisWeek')">สัปดาห์นี้</button>
+      <button class="btn btn-sm btn-soft" onclick="subFilterPreset('nextWeek')">สัปดาห์หน้า</button>
     </div>
   </div>
 
