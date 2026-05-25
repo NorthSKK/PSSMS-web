@@ -29,6 +29,7 @@ const ADMIN_ONLY = new Set([
   'setupCalendarDatabase', 'setupClubDatabase', 'setupCurriculumDatabase',
   'promoteStudentsToNextYear', 'deleteClub', 'adminAddMember', 'adminRemoveMember',
   'getAllUsers',
+  'deleteSavingsTransaction', 'importSavingsCSV',
 ]);
 
 const TEACHER_OR_ADMIN = new Set([
@@ -39,6 +40,7 @@ const TEACHER_OR_ADMIN = new Set([
   'saveStudentRemarkDirectly', 'saveLeaveRequest', 'updateLeave', 'deleteLeave', 'reviewLeave',
   'saveSubstituteAssignment', 'confirmSubstitute', 'saveBudget', 'saveSarabun', 'deleteSarabun',
   'requestSarabunNumber', 'updateTaskStatus', 'uploadSarabunFile',
+  'saveSavingsTransaction',
 ]);
 
 const leaveBundle = require('../functions/getLeaveBundle');
@@ -56,6 +58,7 @@ const sarabun = require('../functions/sarabun');
 const budget = require('../functions/budget');
 const missing = require('../functions/missing');
 const pp5 = require('../functions/generatePP5Template');
+const savings = require('../functions/savings');
 
 const handlers = {
   // Auth
@@ -230,6 +233,15 @@ const handlers = {
   adminAddMember:                  (args) => missing.adminAddMember(args),
   adminRemoveMember:               (args) => missing.adminRemoveMember(args),
   promoteStudentsToNextYear:       () => missing.promoteStudentsToNextYear(),
+
+  // Savings
+  saveSavingsTransaction:          (args, user) => savings.saveSavingsTransaction(args, user),
+  getSavingsBalance:               (args) => savings.getSavingsBalance(args),
+  getSavingsSummary:               (args) => savings.getSavingsSummary(args),
+  getSavingsHistory:               (args) => savings.getSavingsHistory(args),
+  deleteSavingsTransaction:        (args) => savings.deleteSavingsTransaction(args),
+  importSavingsCSV:                (args) => savings.importSavingsCSV(args),
+  getClassListForSavings:          () => savings.getClassListForSavings(),
 
   // Todo (in-memory)
   getTodoList:                     require('../functions/getTodoList'),

@@ -1,0 +1,432 @@
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let _savingsRoster = [];       // [{ studentId, studentName, class }]
+let _csvRawText = '';
+let _csvParsedRows = [];
+
+// ── Init (called by loadPage) ──────────────────────────────────────────────
+function initSavingsPage() {
+  const user = JSON.parse(localStorage.getItem('pssms_user') || '{}');
+  if (!user) return;
+
+  // Show CSV import tab for Admin only
+  const isAdmin = String(user.role || '').trim().toUpperCase() === 'ADMIN';
+  document.getElementById('tabImportItem').style.display = isAdmin ? '' : 'none';
+
+  // Populate year dropdowns
+  const config = window._systemConfig || {};
+  const activeYear = String(config.year || new Date().getFullYear() + 543);
+  ['recordYear', 'importYear'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (let y = parseInt(activeYear) + 1; y >= parseInt(activeYear) - 3; y--) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = String(y);
+      if (String(y) === activeYear) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  });
+
+  // Active term
+  const activeTerm = String(config.term || '1');
+  ['recordTerm', 'importTerm'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.value = activeTerm;
+  });
+
+  // Load class list into all dropdowns
+  google.script.run.withSuccessHandler(function(classes) {
+    ['recordClass', 'summaryClass'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">-- เลือกห้อง --</option>';
+      (classes || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        sel.appendChild(opt);
+      });
+      if (cur) sel.value = cur;
+    });
+  }).getClassListForSavings();
+
+  switchSavingsTab('record');
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchSavingsTab(tab) {
+  ['record', 'summary', 'import'].forEach(t => {
+    document.getElementById('savings-tab-' + t).style.display = t === tab ? '' : 'none';
+    const link = document.getElementById('tab-' + t);
+    if (link) link.classList.toggle('active', t === tab);
+  });
+}
+
+// ── TAB: บันทึก ────────────────────────────────────────────────────────────
+function loadRecordRoster() {
+  const cls = document.getElementById('recordClass').value;
+  if (!cls) return;
+  document.getElementById('recordPanel').style.display = 'none';
+  document.getElementById('recordTableBody').innerHTML =
+    '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>กำลังโหลด...</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(students) {
+      _savingsRoster = students || [];
+      renderRecordTable();
+      document.getElementById('recordPanel').style.display = '';
+    })
+    .withFailureHandler(function(e) {
+      showToast('โหลดรายชื่อไม่สำเร็จ: ' + e.message, 'danger');
+    })
+    .getStudentsByClass([cls, null]);
+}
+
+function renderRecordTable() {
+  const tbody = document.getElementById('recordTableBody');
+  if (_savingsRoster.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">ไม่พบนักเรียน</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _savingsRoster.map((s, i) => `
+    <tr>
+      <td><input class="form-check-input student-check" type="checkbox" data-idx="${i}" checked></td>
+      <td class="text-muted small">${escHtml(s[0] || '')}</td>
+      <td>${escHtml(s[2] || '')}</td>
+      <td>
+        <input type="number" class="form-control form-control-sm savings-amount"
+               data-idx="${i}" min="0" placeholder="0" style="max-width:130px;">
+      </td>
+      <td>
+        <input type="text" class="form-control form-control-sm savings-note"
+               data-idx="${i}" placeholder="หมายเหตุ">
+      </td>
+    </tr>
+  `).join('');
+}
+
+function toggleAllSavings(checked) {
+  document.querySelectorAll('.student-check').forEach(cb => { cb.checked = checked; });
+}
+
+function fillAllSavings() {
+  const val = document.getElementById('fillAllAmount').value;
+  if (!val || parseFloat(val) <= 0) return;
+  document.querySelectorAll('.student-check:checked').forEach(cb => {
+    const idx = cb.dataset.idx;
+    const inp = document.querySelector(`.savings-amount[data-idx="${idx}"]`);
+    if (inp) inp.value = val;
+  });
+}
+
+async function submitSavings() {
+  const cls   = document.getElementById('recordClass').value;
+  const term  = document.getElementById('recordTerm').value;
+  const year  = document.getElementById('recordYear').value;
+  const mode  = document.querySelector('input[name="savingsMode"]:checked')?.value || 'deposit';
+
+  if (!cls) return showToast('เลือกห้องก่อน', 'warning');
+
+  const rows = [];
+  document.querySelectorAll('.student-check:checked').forEach(cb => {
+    const idx = parseInt(cb.dataset.idx);
+    const s = _savingsRoster[idx];
+    const amount = parseFloat(document.querySelector(`.savings-amount[data-idx="${idx}"]`)?.value || 0);
+    const note = document.querySelector(`.savings-note[data-idx="${idx}"]`)?.value || '';
+    if (amount > 0) {
+      rows.push({
+        studentId:   s[0],
+        studentName: s[2],
+        class:       cls,
+        type:        mode,
+        amount,
+        note,
+      });
+    }
+  });
+
+  if (rows.length === 0) return showToast('ไม่มีข้อมูลที่จะบันทึก', 'warning');
+
+  // Check for negative balances on withdraw
+  if (mode === 'withdraw') {
+    const atRisk = [];
+    await Promise.all(rows.map(async r => {
+      const res = await new Promise(resolve =>
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(() => resolve(null))
+          .getSavingsBalance([r.studentId])
+      );
+      if (res && res.balance - r.amount < 0) atRisk.push(r.studentName);
+    }));
+
+    if (atRisk.length > 0) {
+      const names = atRisk.slice(0, 5).join(', ') + (atRisk.length > 5 ? ` และอีก ${atRisk.length - 5} คน` : '');
+      const { isConfirmed } = await Swal.fire({
+        title: 'ยอดไม่พอ',
+        html: `<div class="text-start"><p>นักเรียนต่อไปนี้มียอดไม่พอถอน:</p><p class="text-danger fw-bold">${escHtml(names)}</p><p>ยืนยันถอนต่อไหม?</p></div>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ยืนยัน',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#dc3545',
+      });
+      if (!isConfirmed) return;
+    }
+  }
+
+  const modeLabel = mode === 'deposit' ? 'ฝาก' : 'ถอน';
+  const { isConfirmed } = await Swal.fire({
+    title: 'ยืนยันบันทึก',
+    html: `บันทึก<strong>ออมเงิน${modeLabel}</strong> ${rows.length} คน<br>ห้อง <strong>${escHtml(cls)}</strong> เทอม ${term}/${year}`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'บันทึก',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#6f42c1',
+  });
+  if (!isConfirmed) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      showToast(res.message, 'success');
+      // Clear amounts
+      document.querySelectorAll('.savings-amount').forEach(i => { i.value = ''; });
+      document.querySelectorAll('.savings-note').forEach(i => { i.value = ''; });
+      document.getElementById('fillAllAmount').value = '';
+    })
+    .withFailureHandler(function(e) { showToast('บันทึกไม่สำเร็จ: ' + e.message, 'danger'); })
+    .saveSavingsTransaction([rows, term, year]);
+}
+
+// ── TAB: ยอดคงเหลือ ────────────────────────────────────────────────────────
+function loadSavingsSummary() {
+  const cls = document.getElementById('summaryClass').value;
+  if (!cls) return showToast('เลือกห้องก่อน', 'warning');
+
+  document.getElementById('summaryPanel').style.display = 'none';
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      renderSummaryTable(cls, data);
+      document.getElementById('summaryPanel').style.display = '';
+    })
+    .withFailureHandler(function(e) { showToast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'danger'); })
+    .getSavingsSummary([cls]);
+}
+
+function renderSummaryTable(cls, data) {
+  const user = JSON.parse(localStorage.getItem('pssms_user') || '{}');
+  const isAdmin = String(user?.role || '').trim().toUpperCase() === 'ADMIN';
+  document.getElementById('summaryClassName').textContent = cls;
+
+  const tbody = document.getElementById('summaryTableBody');
+  const tfoot = document.getElementById('summaryTableFoot');
+
+  if (!data || data.students.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">ไม่มีข้อมูล</td></tr>';
+    tfoot.innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = data.students.map(s => `
+    <tr style="cursor:pointer;" onclick="toggleSavingsHistory('${escHtml(s.studentId)}','${escHtml(s.studentName)}',this)">
+      <td class="text-muted small">${escHtml(s.studentId)}</td>
+      <td>${escHtml(s.studentName)}</td>
+      <td class="text-end text-success">${fmtMoney(s.totalDeposit)}</td>
+      <td class="text-end text-danger">${fmtMoney(s.totalWithdraw)}</td>
+      <td class="text-end fw-bold ${s.balance < 0 ? 'text-danger' : ''}">${fmtMoney(s.balance)}</td>
+      <td><i class="fas fa-chevron-down text-muted" style="font-size:0.75rem;"></i></td>
+    </tr>
+    <tr class="history-row" id="hist-${escHtml(s.studentId)}" style="display:none;">
+      <td colspan="6" class="p-0">
+        <div class="p-3" style="background:#faf9ff;">
+          <div id="hist-content-${escHtml(s.studentId)}">
+            <div class="text-center text-muted small py-2"><i class="fas fa-spinner fa-spin me-1"></i>กำลังโหลด...</div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  const t = data.classTotal;
+  tfoot.innerHTML = `
+    <tr>
+      <td colspan="2">รวมทั้งห้อง</td>
+      <td class="text-end text-success">${fmtMoney(t.totalDeposit)}</td>
+      <td class="text-end text-danger">${fmtMoney(t.totalWithdraw)}</td>
+      <td class="text-end">${fmtMoney(t.balance)}</td>
+      <td></td>
+    </tr>
+  `;
+
+  // Store isAdmin for history rendering
+  tbody.dataset.isAdmin = isAdmin ? '1' : '0';
+}
+
+function toggleSavingsHistory(studentId, studentName, row) {
+  const histRow = document.getElementById('hist-' + studentId);
+  const icon = row.querySelector('.fa-chevron-down, .fa-chevron-up');
+  const isOpen = histRow.style.display !== 'none';
+
+  if (isOpen) {
+    histRow.style.display = 'none';
+    if (icon) { icon.classList.replace('fa-chevron-up', 'fa-chevron-down'); }
+    return;
+  }
+
+  histRow.style.display = '';
+  if (icon) { icon.classList.replace('fa-chevron-down', 'fa-chevron-up'); }
+
+  const tbody = document.getElementById('summaryTableBody');
+  const isAdmin = tbody.dataset.isAdmin === '1';
+
+  google.script.run
+    .withSuccessHandler(function(txns) { renderHistoryInline(studentId, txns, isAdmin); })
+    .withFailureHandler(function(e) {
+      document.getElementById('hist-content-' + studentId).innerHTML =
+        `<div class="text-danger small">${escHtml(e.message)}</div>`;
+    })
+    .getSavingsHistory([studentId]);
+}
+
+function renderHistoryInline(studentId, txns, isAdmin) {
+  const el = document.getElementById('hist-content-' + studentId);
+  if (!txns || txns.length === 0) {
+    el.innerHTML = '<div class="text-muted small py-1">ยังไม่มีรายการ</div>';
+    return;
+  }
+  el.innerHTML = `
+    <table class="table table-sm mb-0" style="font-size:0.82rem;">
+      <thead><tr>
+        <th>วันที่</th><th>ประเภท</th><th class="text-end">จำนวน</th>
+        <th>เทอม/ปี</th><th>หมายเหตุ</th>${isAdmin ? '<th></th>' : ''}
+      </tr></thead>
+      <tbody>
+        ${txns.map(t => `
+          <tr>
+            <td>${escHtml(t.date)}</td>
+            <td><span class="badge ${t.type === 'deposit' ? 'bg-success' : 'bg-danger'}">
+              ${t.type === 'deposit' ? 'ฝาก' : 'ถอน'}</span></td>
+            <td class="text-end">${fmtMoney(t.amount)}</td>
+            <td>${escHtml(t.term)}/${escHtml(t.year)}</td>
+            <td class="text-muted">${escHtml(t.note || '')}</td>
+            ${isAdmin ? `<td><button class="btn btn-sm btn-outline-danger py-0 px-1"
+              onclick="deleteSavingsTxn(${t.id},'${escHtml(studentId)}',event)"
+              title="ลบ"><i class="fas fa-trash-alt" style="font-size:0.7rem;"></i></button></td>` : ''}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function deleteSavingsTxn(id, studentId, e) {
+  e.stopPropagation();
+  const { isConfirmed } = await Swal.fire({
+    title: 'ลบรายการ?',
+    text: 'ไม่สามารถกู้คืนได้',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'ลบ',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#dc3545',
+  });
+  if (!isConfirmed) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      showToast(res.message, 'success');
+      // Reload history
+      google.script.run
+        .withSuccessHandler(function(txns) {
+          const tbody = document.getElementById('summaryTableBody');
+          const isAdmin = tbody.dataset.isAdmin === '1';
+          renderHistoryInline(studentId, txns, isAdmin);
+          // Reload full summary to update totals
+          loadSavingsSummary();
+        })
+        .getSavingsHistory([studentId]);
+    })
+    .withFailureHandler(function(err) { showToast('ลบไม่สำเร็จ: ' + err.message, 'danger'); })
+    .deleteSavingsTransaction([id]);
+}
+
+// ── TAB: นำเข้า CSV ────────────────────────────────────────────────────────
+function previewSavingsCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('csvFileName').textContent = file.name;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    _csvRawText = e.target.result;
+    const lines = _csvRawText.split(/\r?\n/).filter(Boolean);
+    _csvParsedRows = lines;
+    document.getElementById('csvTotalRows').textContent = `ทั้งหมด ${lines.length - 1} แถว`;
+
+    const header = lines[0] ? lines[0].split(',') : [];
+    const thead = document.getElementById('csvPreviewHead');
+    const tbody = document.getElementById('csvPreviewBody');
+
+    thead.innerHTML = '<tr>' + header.map(h => `<th>${escHtml(h.trim())}</th>`).join('') + '</tr>';
+    tbody.innerHTML = lines.slice(1, 101).map(line => {
+      const cols = line.split(',');
+      return '<tr>' + cols.map(c => `<td>${escHtml(c.trim())}</td>`).join('') + '</tr>';
+    }).join('');
+
+    document.getElementById('csvPreviewPanel').style.display = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function cancelCSVImport() {
+  document.getElementById('savingsCSVFile').value = '';
+  document.getElementById('csvFileName').textContent = '';
+  document.getElementById('csvPreviewPanel').style.display = 'none';
+  _csvRawText = '';
+  _csvParsedRows = [];
+}
+
+async function confirmCSVImport() {
+  if (!_csvRawText) return;
+  const term = document.getElementById('importTerm').value;
+  const year = document.getElementById('importYear').value;
+  const total = _csvParsedRows.length - 1;
+
+  const { isConfirmed } = await Swal.fire({
+    title: 'ยืนยันนำเข้า?',
+    html: `นำเข้า <strong>${total}</strong> แถว<br>เทอม <strong>${term}/${year}</strong><br><small class="text-muted">ข้อมูลซ้ำจะถูกข้ามอัตโนมัติ</small>`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'นำเข้า',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#6f42c1',
+  });
+  if (!isConfirmed) return;
+
+  Swal.fire({ title: 'กำลังนำเข้า...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      Swal.close();
+      Swal.fire({ title: 'นำเข้าสำเร็จ', text: res.message, icon: 'success' });
+      cancelCSVImport();
+    })
+    .withFailureHandler(function(err) {
+      Swal.close();
+      Swal.fire({ title: 'เกิดข้อผิดพลาด', text: err.message, icon: 'error' });
+    })
+    .importSavingsCSV([_csvRawText, term, year]);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmtMoney(n) {
+  if (n == null) return '0.00';
+  return parseFloat(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>

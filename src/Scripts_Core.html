@@ -523,6 +523,7 @@ function renderApp(user) {
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn personnel" onclick="loadPage('Page_Personnel')"><i class="fas fa-users"></i> <span>บุคลากร</span></a></li>`;
     menuHTML += `<li class="mb-1"><div class="dept-btn general" style="cursor:default;"><i class="fas fa-building"></i> <span>ฝ่ายทั่วไป</span></div></li>`;
     menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size:0.85rem;color:#6f42c1;" onclick="loadPage('Page_General')"><i class="fas fa-file-alt me-2" style="font-size:0.7rem;"></i>งานสารบรรณ</a></li>`;
+    menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size:0.85rem;color:#6f42c1;" onclick="loadPage('Page_Savings')"><i class="fas fa-piggy-bank me-2" style="font-size:0.7rem;"></i>ระบบออมเงิน</a></li>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size:0.85rem;color:#e83e8c;" onclick="loadPage('Page_Calendar')"><i class="fas fa-calendar-alt me-2" style="font-size:0.7rem;"></i>ปฏิทินปฏิบัติงาน</a></li>`;
   } else {
     startPage = (role === 'ADMIN') ? 'Page_Dashboard_Admin' : 'Page_Dashboard_Teacher';
@@ -579,6 +580,7 @@ function renderApp(user) {
     menuHTML += `
       <li class="mb-1"><div class="dept-btn general"><i class="fas fa-building"></i> <span>ฝ่ายทั่วไป</span></div></li>
       <li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #6f42c1;" onclick="loadPage('Page_General')"><i class="fas fa-file-alt me-2" style="font-size: 0.7rem;"></i>งานสารบรรณ</a></li>
+      <li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #6f42c1;" onclick="loadPage('Page_Savings')"><i class="fas fa-piggy-bank me-2" style="font-size: 0.7rem;"></i>ระบบออมเงิน</a></li>
       <li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #e83e8c;" onclick="loadPage('Page_Calendar')"><i class="fas fa-calendar-alt me-2" style="font-size: 0.7rem;"></i>ปฏิทินปฏิบัติงาน</a></li>
     `;
   }
@@ -713,7 +715,8 @@ var PAGE_DEPT = {
   Page_Personnel:'personnel', Page_Leave_Admin:'personnel',
   Page_Leave_Request:'personnel', Page_Substitute_Admin:'personnel', Page_Admin_Users:'personnel',
   Page_Homeroom:'personnel',
-  Page_General:'general'
+  Page_General:'general',
+  Page_Savings:'general'
 };
 var _DEPT_CLASSES = ['dept-academic','dept-budget','dept-personnel','dept-general'];
 function _setBodyDept(pageName) {
@@ -804,6 +807,7 @@ function setupPageContent(pageName, html) {
   if(pageName === 'Page_Score_Entry') initScoreEntryPage();
   if(pageName === 'Page_Grade_Summary') initGradeSummaryPage();
   if(pageName === 'Page_General') initSarabunPage();
+  if(pageName === 'Page_Savings') initSavingsPage();
   if(pageName === 'Page_Calendar') {
       if(typeof initCalendarPage === 'function') initCalendarPage();
   }
