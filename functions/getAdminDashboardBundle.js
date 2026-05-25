@@ -7,12 +7,8 @@ function section(fn) {
 }
 
 async function adminStaffStats(config) {
-  const [usersRes, leaveRes, subRes, pendingListRes] = await Promise.all([
-    query(
-      `SELECT UPPER(role) as role, COUNT(*) as cnt FROM users
-       WHERE UPPER(role) != 'STUDENT' OR year=$1 GROUP BY UPPER(role)`,
-      [config.year]
-    ),
+  const today = new Date().toISOString().slice(0, 10);
+  const [leaveRes, subRes, pendingListRes, staffCountRes, onLeaveRes] = await Promise.all([
     query(
       `SELECT COUNT(*) as cnt FROM leave_records WHERE status='รอพิจารณา' AND year=$1`,
       [config.year]
@@ -25,16 +21,20 @@ async function adminStaffStats(config) {
        FROM leave_records WHERE status='รอพิจารณา' AND year=$1 ORDER BY request_date DESC LIMIT 5`,
       [config.year]
     ),
+    query(`SELECT COUNT(*) as cnt FROM users WHERE UPPER(role) != 'STUDENT'`),
+    query(
+      `SELECT COUNT(DISTINCT teacher_id) as cnt FROM leave_records
+       WHERE status='อนุมัติ' AND start_date <= $1 AND end_date >= $1`,
+      [today]
+    ),
   ]);
 
-  let studentCount = 0, teacherCount = 0;
-  for (const r of usersRes.rows) {
-    if (r.role === 'STUDENT') studentCount += parseInt(r.cnt);
-    else teacherCount += parseInt(r.cnt);
-  }
+  const totalStaff = parseInt(staffCountRes.rows[0]?.cnt || 0);
+  const onLeave = parseInt(onLeaveRes.rows[0]?.cnt || 0);
 
   return {
-    studentCount, teacherCount,
+    staffPresent: Math.max(0, totalStaff - onLeave),
+    totalStaff,
     pendingLeaveCount: parseInt(leaveRes.rows[0]?.cnt || 0),
     pendingSubstitutes: parseInt(subRes.rows[0]?.cnt || 0),
     pendingLeaveList: pendingListRes.rows.map(r => ({
@@ -43,13 +43,28 @@ async function adminStaffStats(config) {
   };
 }
 
-async function studentSummaryStats(config) {
+async function todayStudentsAttendance() {
+  const today = new Date().toISOString().slice(0, 10);
   const { rows } = await query(
-    `SELECT year, COUNT(*) as cnt FROM users WHERE UPPER(role)='STUDENT' AND year=$1 GROUP BY year`,
-    [config.year]
+    `SELECT class,
+            COUNT(*) as total,
+            COUNT(CASE WHEN flag_status IN ('มา','เข้าแถว','เข้า','ปกติ') THEN 1 END) as present
+     FROM morning_activity WHERE date=$1
+     GROUP BY class ORDER BY class`,
+    [today]
   );
-  const total = rows.reduce((s, r) => s + parseInt(r.cnt), 0);
-  return { total, byYear: Object.fromEntries(rows.map(r => [r.year, parseInt(r.cnt)])) };
+  const totalPresent = rows.reduce((s, r) => s + parseInt(r.present), 0);
+  const totalStudents = rows.reduce((s, r) => s + parseInt(r.total), 0);
+  return {
+    present: totalPresent,
+    total: totalStudents,
+    byClass: rows.map(r => ({
+      class: r.class,
+      present: parseInt(r.present),
+      total: parseInt(r.total),
+    })),
+    date: today,
+  };
 }
 
 async function getAvailableTerms() {
@@ -65,15 +80,15 @@ async function getAvailableTerms() {
 module.exports = async function getAdminDashboardBundle() {
   const config = await getSystemConfig();
 
-  const [staffStats, studentSummary, calendarEvents, availableTerms] = await Promise.all([
+  const [staffStats, todayStudents, calendarEvents, availableTerms] = await Promise.all([
     section(() => adminStaffStats(config)),
-    section(() => studentSummaryStats(config)),
+    section(() => todayStudentsAttendance()),
     section(() => getCalendarEvents()),
     section(() => getAvailableTerms()),
   ]);
 
   return {
-    ts: Date.now(), staffStats, studentSummary, calendarEvents, availableTerms,
+    ts: Date.now(), staffStats, todayStudents, calendarEvents, availableTerms,
     systemConfig: { ok: true, data: config },
   };
 };

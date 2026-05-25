@@ -11,23 +11,23 @@
   </div>
 
   <!-- KPI Strip -->
-  <div class="row g-3 mb-3" id="adminKpiRow">
+  <div class="row g-3 mb-3">
     <div class="col-6 col-md-3">
-      <div class="pssms-card p-3 h-100">
-        <div class="small text-muted mb-1"><i class="fas fa-user-graduate me-1"></i>นักเรียนทั้งหมด</div>
+      <div class="pssms-card p-3 h-100" id="adminKpiStudentCard" onclick="_showTodayStudentDetail()" style="cursor:pointer;">
+        <div class="small text-muted mb-1"><i class="fas fa-flag me-1"></i>นักเรียนเข้าแถววันนี้</div>
         <div class="fw-bold fs-3" style="color:var(--p-accent);" id="adminKpiStudents">
           <div class="pssms-skel" style="height:32px;width:80px;border-radius:6px;"></div>
         </div>
-        <div class="small text-muted" id="adminKpiStudentsSub">ปีการศึกษาปัจจุบัน</div>
+        <div class="small text-muted" id="adminKpiStudentsSub">คลิกดูรายชั้น →</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="pssms-card p-3 h-100">
-        <div class="small text-muted mb-1"><i class="fas fa-chalkboard-teacher me-1"></i>ครูผู้สอน</div>
-        <div class="fw-bold fs-3" style="color:var(--p-accent);" id="adminKpiTeachers">
+        <div class="small text-muted mb-1"><i class="fas fa-users me-1"></i>บุคลากรมาวันนี้</div>
+        <div class="fw-bold fs-3" style="color:var(--p-accent);" id="adminKpiStaff">
           <div class="pssms-skel" style="height:32px;width:60px;border-radius:6px;"></div>
         </div>
-        <div class="small text-muted">บุคลากรทั้งหมด</div>
+        <div class="small text-muted" id="adminKpiStaffSub">บุคลากรทั้งหมด</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
@@ -50,46 +50,42 @@
     </div>
   </div>
 
+  <!-- Quick Actions -->
+  <div class="row g-3 mb-3">
+    <div class="col-4">
+      <button class="btn btn-soft w-100 py-3" onclick="loadPage('Page_Leave_Admin')">
+        <i class="fas fa-calendar-minus d-block mb-1" style="font-size:1.3rem;"></i>
+        <span class="small fw-medium">จัดการใบลา</span>
+      </button>
+    </div>
+    <div class="col-4">
+      <button class="btn btn-soft w-100 py-3" onclick="loadPage('Page_Substitute_Admin')">
+        <i class="fas fa-user-friends d-block mb-1" style="font-size:1.3rem;"></i>
+        <span class="small fw-medium">สอนแทน</span>
+      </button>
+    </div>
+    <div class="col-4">
+      <button class="btn btn-soft w-100 py-3" onclick="loadPage('Page_General')">
+        <i class="fas fa-file-alt d-block mb-1" style="font-size:1.3rem;"></i>
+        <span class="small fw-medium">งานสารบรรณ</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom row: ปฏิทิน (left 60%) + ใบลารอ (right 40%) -->
   <div class="row g-3">
-
-    <!-- Left: student table + chart -->
     <div class="col-12 col-lg-7">
-      <div class="pssms-card p-0 mb-3">
-        <div class="pssms-card-header"><span><i class="fas fa-users me-2" style="color:var(--p-text-muted);"></i>สถิตินักเรียนแยกชั้น</span></div>
-        <div class="table-responsive">
-          <table class="pssms-table mb-0 text-center" style="font-size:.88rem;">
-            <thead>
-              <tr>
-                <th class="text-start ps-3">ชั้น</th>
-                <th>ชาย</th>
-                <th>หญิง</th>
-                <th>รวม</th>
-              </tr>
-            </thead>
-            <tbody id="summaryTableBody">
-              <tr><td colspan="4" class="py-4 text-muted">
-                <div class="pssms-skel mx-auto" style="height:14px;width:60%;border-radius:4px;margin-bottom:8px;"></div>
-                <div class="pssms-skel mx-auto" style="height:14px;width:50%;border-radius:4px;"></div>
-              </td></tr>
-            </tbody>
-            <tfoot id="tableFooter" style="font-weight:600;background:var(--p-subtle);"></tfoot>
-          </table>
-        </div>
-      </div>
-
-      <div class="pssms-card">
-        <div class="pssms-card-header"><span><i class="fas fa-chart-bar me-2" style="color:var(--p-text-muted);"></i>กราฟแยกเพศตามชั้น</span></div>
-        <div class="p-3">
-          <canvas id="studentChart" height="160"></canvas>
+      <div class="pssms-card h-100">
+        <div class="pssms-card-header"><span><i class="fas fa-calendar-day me-2" style="color:var(--p-text-muted);"></i>กิจกรรมที่กำลังจะมาถึง</span></div>
+        <div id="adminCalendarStrip" class="p-2">
+          <div class="pssms-skel" style="height:44px;border-radius:8px;margin-bottom:6px;"></div>
+          <div class="pssms-skel" style="height:44px;border-radius:8px;margin-bottom:6px;"></div>
+          <div class="pssms-skel" style="height:44px;border-radius:8px;"></div>
         </div>
       </div>
     </div>
-
-    <!-- Right: pending leave + calendar -->
     <div class="col-12 col-lg-5">
-
-      <!-- Pending leave list -->
-      <div class="pssms-card mb-3">
+      <div class="pssms-card h-100">
         <div class="pssms-card-header d-flex justify-content-between align-items-center">
           <span><i class="fas fa-calendar-minus me-2" style="color:var(--p-text-muted);"></i>ใบลารอพิจารณา</span>
           <button class="btn btn-soft btn-sm" onclick="loadPage('Page_Leave_Admin')">ดูทั้งหมด</button>
@@ -99,17 +95,7 @@
           <div class="pssms-skel" style="height:48px;border-radius:8px;"></div>
         </div>
       </div>
-
-      <!-- Upcoming calendar -->
-      <div class="pssms-card">
-        <div class="pssms-card-header"><span><i class="fas fa-calendar-day me-2" style="color:var(--p-text-muted);"></i>กิจกรรมที่กำลังจะมาถึง</span></div>
-        <div id="adminCalendarStrip" class="p-2">
-          <div class="pssms-skel" style="height:44px;border-radius:8px;margin-bottom:6px;"></div>
-          <div class="pssms-skel" style="height:44px;border-radius:8px;margin-bottom:6px;"></div>
-          <div class="pssms-skel" style="height:44px;border-radius:8px;"></div>
-        </div>
-      </div>
-
     </div>
   </div>
+
 </div>

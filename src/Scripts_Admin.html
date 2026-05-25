@@ -27,18 +27,28 @@ function _renderAdminDashboard(bundle) {
     if (sub) sub.textContent = 'ภาคเรียนที่ ' + cfg.term + ' ปีการศึกษา ' + cfg.year;
   }
 
+  // Today students KPI (from morning activity)
+  var todayStudents = bundle.todayStudents && bundle.todayStudents.ok ? bundle.todayStudents.data : null;
+  if (todayStudents) {
+    var elS = document.getElementById('adminKpiStudents');
+    var elSsub = document.getElementById('adminKpiStudentsSub');
+    if (elS) elS.textContent = todayStudents.present.toLocaleString() + ' คน';
+    if (elSsub) elSsub.textContent = 'จาก ' + todayStudents.total + ' คน · คลิกดูรายชั้น →';
+    window._adminTodayStudentsData = todayStudents;
+  }
+
   // Staff stats KPI
   var stats = bundle.staffStats && bundle.staffStats.ok ? bundle.staffStats.data : null;
   if (stats) {
-    var elS = document.getElementById('adminKpiStudents');
-    var elT = document.getElementById('adminKpiTeachers');
+    var elStaff = document.getElementById('adminKpiStaff');
+    var elStaffSub = document.getElementById('adminKpiStaffSub');
     var elL = document.getElementById('adminKpiLeave');
     var elSb = document.getElementById('adminKpiSub');
     var cardL = document.getElementById('adminKpiLeaveCard');
     var cardSb = document.getElementById('adminKpiSubCard');
 
-    if (elS) elS.textContent = stats.studentCount.toLocaleString() + ' คน';
-    if (elT) elT.textContent = stats.teacherCount + ' คน';
+    if (elStaff) elStaff.textContent = stats.staffPresent + ' คน';
+    if (elStaffSub) elStaffSub.textContent = 'จากทั้งหมด ' + stats.totalStaff + ' คน';
 
     if (elL) {
       var lCount = stats.pendingLeaveCount || 0;
@@ -53,20 +63,46 @@ function _renderAdminDashboard(bundle) {
       if (sCount > 0) elSb.style.color = 'var(--p-warning)';
     }
 
-    // Pending leave list
     _renderAdminPendingLeave(stats.pendingLeaveList || [], stats.pendingLeaveCount || 0);
-  }
-
-  // Student summary table + chart
-  if (bundle.studentSummary && bundle.studentSummary.ok && bundle.studentSummary.data.length) {
-    renderStudentTable(bundle.studentSummary.data);
-    renderStudentChart(bundle.studentSummary.data);
   }
 
   // Calendar strip
   if (bundle.calendarEvents && bundle.calendarEvents.ok) {
     _renderAdminCalendarStrip(bundle.calendarEvents.data || []);
   }
+}
+
+function _showTodayStudentDetail() {
+  var data = window._adminTodayStudentsData;
+  if (!data) return;
+  var _thM = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var d = new Date(data.date);
+  var dateLabel = d.getDate() + ' ' + _thM[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+  var rows = '';
+  (data.byClass || []).forEach(function(r) {
+    var pct = r.total > 0 ? Math.round(r.present / r.total * 100) : 0;
+    var color = pct >= 80 ? 'var(--p-success,#22c55e)' : pct >= 60 ? 'var(--p-warning,#f59e0b)' : 'var(--p-danger,#ef4444)';
+    rows += '<div class="d-flex align-items-center justify-content-between py-2 border-bottom">'
+          + '<div class="fw-medium small">' + _escH(r.class) + '</div>'
+          + '<div class="d-flex align-items-center gap-2">'
+          + '<span class="small text-muted">' + r.present + '/' + r.total + '</span>'
+          + '<span class="badge rounded-pill" style="background:' + color + ';min-width:44px;">' + pct + '%</span>'
+          + '</div></div>';
+  });
+  if (!rows) rows = '<div class="text-center text-muted small py-3">ยังไม่มีข้อมูลเช็คชื่อวันนี้</div>';
+  var modal = document.createElement('div');
+  modal.id = 'adminStudentDetailModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:15px;';
+  modal.innerHTML = '<div class="bg-white rounded-3 shadow-lg" style="width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column;">'
+    + '<div class="p-3 d-flex justify-content-between align-items-center border-bottom">'
+    + '<div><div class="fw-bold"><i class="fas fa-flag me-2 text-primary"></i>เข้าแถววันนี้ รายชั้น</div>'
+    + '<div class="small text-muted">' + dateLabel + ' · รวม ' + data.present + '/' + data.total + ' คน</div></div>'
+    + '<button class="btn-close" onclick="document.getElementById(\'adminStudentDetailModal\').remove()"></button>'
+    + '</div>'
+    + '<div class="p-3" style="overflow-y:auto;">' + rows + '</div>'
+    + '</div>';
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
 function _renderAdminPendingLeave(list, total) {
