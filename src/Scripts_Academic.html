@@ -271,7 +271,7 @@ function updateSummary() {
 
   let absentNames = [], lateNames = [], leaveNames = [];
   document.querySelectorAll('#studentRows tr').forEach(tr => {
-      const nameDiv = tr.querySelector('.fw-bold');
+      const nameDiv = tr.querySelector('div.fw-bold');
       if(!nameDiv) return;
       const name = nameDiv.innerText;
       if(tr.querySelector('input[value="ขาด"]:checked')) absentNames.push(name);
