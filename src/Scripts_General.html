@@ -984,9 +984,9 @@ function _renderSubAdminTable() {
       : '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);">⏳ รอจัด</span>';
     var action = '';
     if (r.status === 'รอจัด') {
-      action = '<button class="btn btn-sm btn-accent" onclick="openAssignModal(\''+_escH(r.id)+'\')"><i class="fas fa-user-plus me-1"></i>จัด</button>';
+      action = '<button class="btn btn-sm btn-accent" onclick="openAssignModal(\''+_escH(r.assignmentId)+'\')"><i class="fas fa-user-plus me-1"></i>จัด</button>';
     } else if (r.status === 'จัดแล้ว') {
-      action = '<button class="btn btn-sm btn-outline-danger" onclick="doUnassignSubstitute(\''+_escH(r.id)+'\')"><i class="fas fa-undo me-1"></i>ยกเลิกการจัด</button>';
+      action = '<button class="btn btn-sm btn-outline-danger" onclick="doUnassignSubstitute(\''+_escH(r.assignmentId)+'\')"><i class="fas fa-undo me-1"></i>ยกเลิกการจัด</button>';
     } else {
       action = '<span class="text-muted small">—</span>';
     }
@@ -1005,7 +1005,7 @@ function _renderSubAdminTable() {
 }
 
 function openAssignModal(assignmentId) {
-  var rec = _subAdminData.find(function(r){ return r.id === assignmentId; });
+  var rec = _subAdminData.find(function(r){ return r.assignmentId === assignmentId; });
   if (!rec) return;
   document.getElementById('subAssignId').value = assignmentId;
   document.getElementById('subSelectedTeacherId').value = '';

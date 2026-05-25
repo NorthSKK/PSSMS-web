@@ -52,11 +52,19 @@ async function getLeaveRequestBundle([teacherId, year]) {
   return { stats, history: rows.map(rowToLeave) };
 }
 
-async function getPendingSubstitutes() {
+async function getPendingSubstitutes([from, to] = []) {
+  const params = [];
+  let where = '';
+  if (from && to) {
+    params.push(from, to);
+    where = `WHERE date >= $1 AND date <= $2`;
+  }
   const { rows } = await query(
-    `SELECT * FROM substitute_assignments WHERE status='รอจัด' ORDER BY date`
+    `SELECT * FROM substitute_assignments ${where} ORDER BY date`,
+    params
   );
   return rows.map(r => ({
+    id:                  r.id || '',
     assignmentId:        r.id || '',
     leaveId:             r.leave_id || '',
     date:                r.date ? String(r.date).slice(0, 10) : '',
@@ -68,9 +76,9 @@ async function getPendingSubstitutes() {
     substituteTeacherName: r.sub_teacher_name || '',
     subjectCode: r.subject_code || '',
     subjectName: r.subject_name || '',
-    class:  r.class || '',
-    room:   r.room  || '',
-    status: r.status || '',
+    className: r.class || '',
+    room:      r.room  || '',
+    status:    r.status || '',
   }));
 }
 
