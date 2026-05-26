@@ -284,6 +284,7 @@ router.post('/:fnName', async (req, res) => {
     if (TIMETABLE_WRITE_FNS.has(fnName)) {
       cache.delPrefix('tt_date_');
       cache.delPrefix('tt_own_');
+      cache.delPrefix('tt_status_');
     }
     if (USER_WRITE_FNS.has(fnName)) {
       cache.delPrefix('students_');

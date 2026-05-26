@@ -1,7 +1,8 @@
 const { query } = require('../lib/db');
 
 module.exports = async function getSarabunHistory([userName, role]) {
-  const isAdmin = String(role || '').toUpperCase() === 'ADMIN';
+  const roleUpper = String(role || '').toUpperCase();
+  const isAdmin = roleUpper === 'ADMIN' || roleUpper === 'TEACHER';
   const params = [];
   let sql = `SELECT id, to_char(timestamp, 'YYYY-MM-DD HH24:MI') as timestamp,
                     doc_type, doc_number, subject, requester,

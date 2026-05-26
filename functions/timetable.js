@@ -76,10 +76,14 @@ async function getTeacherTimetable([teacherId]) {
 }
 
 async function getTeacherTimetableWithStatus([teacherId]) {
-  const config = await getSystemConfig();
   const now = new Date();
-  const today = DAYS[now.getDay()];
   const todayStr = now.toISOString().slice(0, 10);
+  const cacheKey = `tt_status_${teacherId}_${todayStr}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  const config = await getSystemConfig();
+  const today = DAYS[now.getDay()];
   const { term, year } = config;
 
   const [ttRes, club] = await Promise.all([
@@ -115,7 +119,7 @@ async function getTeacherTimetableWithStatus([teacherId]) {
     _getTeacherClub(teacherId, term, year),
   ]);
 
-  return ttRes.rows.map(r => {
+  const result = ttRes.rows.map(r => {
     const classId = `${r.level}/${r.room}`;
     const base = _applyClubOverride(
       [r.subject_code, r.subject_name, classId, r.room, r.location || '', r.period, r.day, r.has_record || false],
@@ -123,6 +127,9 @@ async function getTeacherTimetableWithStatus([teacherId]) {
     );
     return { ...base, hasRecord: r.has_record || false, date: todayStr };
   });
+
+  cache.set(cacheKey, result, 60);
+  return result;
 }
 
 module.exports = { getTeacherTimetableByDate, getTeacherTimetable, getTeacherTimetableWithStatus };
