@@ -766,7 +766,15 @@ function submitLeaveReview(status) {
         _leaveAdminInvalidateCache();
         if (status === 'อนุมัติ') {
           sessionStorage.removeItem('pssms_pg_Page_Substitute_Admin');
-          setTimeout(function() { loadPage('Page_Substitute_Admin'); }, 400);
+          var leaveRec = _leaveAdminCurrentRows.find(function(r){ return String(r.leaveId || r.id) === String(id); });
+          if (leaveRec && leaveRec.teacherId && leaveRec.startDate) {
+            google.script.run
+              .withSuccessHandler(function() { loadPage('Page_Substitute_Admin'); })
+              .withFailureHandler(function() { loadPage('Page_Substitute_Admin'); })
+              .manualCreateAffected(leaveRec.teacherId, leaveRec.startDate, leaveRec.endDate || leaveRec.startDate);
+          } else {
+            setTimeout(function() { loadPage('Page_Substitute_Admin'); }, 400);
+          }
         } else {
           leaveAdminLoadPending();
         }
@@ -863,6 +871,13 @@ var _subAvailableTeachers = [];
 var _subAllUsersForManual = [];
 
 var _SUB_THAI_DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+var _SUB_THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function _subThaiDate(dateStr) {
+  if (!dateStr) return '';
+  var d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d)) return dateStr;
+  return d.getDate() + ' ' + _SUB_THAI_MONTHS[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+}
 function _subDayLabel(dateStr) {
   if (!dateStr) return '';
   var d = new Date(dateStr);
@@ -902,9 +917,15 @@ function subUpdateFilterDayLabel() {
 }
 
 function subFilterPreset(preset) {
-  var wk = _subWeekRange(preset === 'nextWeek' ? 1 : 0);
-  document.getElementById('subFilterFrom').value = wk.from;
-  document.getElementById('subFilterTo').value = wk.to;
+  if (preset === 'today') {
+    var today = _subFmtDate(new Date());
+    document.getElementById('subFilterFrom').value = today;
+    document.getElementById('subFilterTo').value = today;
+  } else {
+    var wk = _subWeekRange(preset === 'nextWeek' ? 1 : 0);
+    document.getElementById('subFilterFrom').value = wk.from;
+    document.getElementById('subFilterTo').value = wk.to;
+  }
   subUpdateFilterDayLabel();
   subAdminReload();
 }
@@ -991,7 +1012,7 @@ function _renderSubAdminTable() {
       action = '<span class="text-muted small">—</span>';
     }
     html += '<tr>' +
-      '<td class="small">' + _escH(r.date) + ' <span class="text-muted">(' + _escH(r.dayOfWeek) + ')</span></td>' +
+      '<td class="small">' + _subThaiDate(r.date) + ' <span class="text-muted">(' + _escH(r.dayOfWeek) + ')</span></td>' +
       '<td class="text-center">' + _escH(r.period) + '</td>' +
       '<td class="small"><div class="fw-medium">' + _escH(r.subjectName) + '</div><div class="text-muted" style="font-size:.75rem;">' + _escH(r.className) + '</div></td>' +
       '<td class="text-center small">' + _escH(r.room) + '</td>' +
