@@ -61,11 +61,11 @@
           <div class="d-flex align-items-center gap-2">
             <!-- Mode toggle -->
             <div class="btn-group btn-group-sm" role="group">
-              <input type="radio" class="btn-check" name="savingsMode" id="modeDeposit" value="deposit" checked>
+              <input type="radio" class="btn-check" name="savingsMode" id="modeDeposit" value="deposit" checked onchange="updateSavingsTableColor()">
               <label class="btn btn-outline-success fw-bold" for="modeDeposit">
                 <i class="fas fa-plus-circle me-1"></i>ฝาก
               </label>
-              <input type="radio" class="btn-check" name="savingsMode" id="modeWithdraw" value="withdraw">
+              <input type="radio" class="btn-check" name="savingsMode" id="modeWithdraw" value="withdraw" onchange="updateSavingsTableColor()">
               <label class="btn btn-outline-danger fw-bold" for="modeWithdraw">
                 <i class="fas fa-minus-circle me-1"></i>ถอน
               </label>
