@@ -52,6 +52,10 @@ function initSavingsPage() {
     });
   }).getClassListForSavings();
 
+  document.querySelectorAll('input[name="savingsMode"]').forEach(function(r) {
+    r.addEventListener('change', updateSavingsTableColor);
+  });
+
   switchSavingsTab('record');
 }
 
