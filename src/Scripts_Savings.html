@@ -90,8 +90,8 @@ function loadRecordRoster() {
 
 function updateSavingsTableColor() {
   const mode = document.querySelector('input[name="savingsMode"]:checked')?.value || 'deposit';
-  const bg = mode === 'deposit' ? 'rgba(25,135,84,0.07)' : 'rgba(220,53,69,0.07)';
-  document.querySelectorAll('#recordTableBody tr').forEach(tr => { tr.style.background = bg; });
+  const bg = mode === 'deposit' ? 'rgba(25,135,84,0.12)' : 'rgba(220,53,69,0.12)';
+  document.querySelectorAll('#recordTableBody td').forEach(function(td) { td.style.background = bg; });
 }
 
 function renderRecordTable() {
