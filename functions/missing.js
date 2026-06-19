@@ -306,7 +306,9 @@ async function importCurriculumCSV([rows, clearOld]) {
     for (const r of rows) {
       await client.query(
         `INSERT INTO curriculum(subject_code,subject_type,standard_code,description,eval_type)
-         VALUES($1,$2,$3,$4,$5)`,
+         VALUES($1,$2,$3,$4,$5)
+         ON CONFLICT(subject_code,standard_code) DO UPDATE
+           SET subject_type=$2, description=$4, eval_type=$5`,
         [r.subjectCode||'', r.subjectType||'', r.standardCode||'', r.description||'', r.evalType||'']
       );
       count++;

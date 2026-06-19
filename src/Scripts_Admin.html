@@ -1305,16 +1305,22 @@ function uploadCurriculumCSV() {
   btn.disabled = true;
   const reader = new FileReader();
   reader.onload = function(e) {
-    const base64Data = e.target.result.split(',')[1];
+    const text = e.target.result;
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const rows = lines.map(line => {
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      return { subjectCode: cols[0]||'', subjectType: cols[1]||'', standardCode: cols[2]||'', description: cols[3]||'', evalType: cols[4]||'' };
+    }).filter(r => r.standardCode);
+    if (!rows.length) { btn.innerHTML = oldText; btn.disabled = false; return showToast('⚠️ ไม่พบข้อมูลในไฟล์ CSV', 'warning'); }
     google.script.run
       .withFailureHandler(err => { btn.innerHTML = oldText; btn.disabled = false; showToast('❌ Error: ' + err.message, 'danger'); })
       .withSuccessHandler(res => {
         btn.innerHTML = oldText; btn.disabled = false;
         if(res.status === 'success') { showToast(res.message, 'success'); fileInput.value = ''; loadCurriculumData(); }
         else showToast(res.message, 'danger');
-      }).importCurriculumCSV(base64Data, clearOld);
+      }).importCurriculumCSV(rows, clearOld);
   };
-  reader.readAsDataURL(file);
+  reader.readAsText(file, 'UTF-8');
 }
 
 function initCurriculumDB() {
