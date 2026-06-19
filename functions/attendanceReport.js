@@ -8,6 +8,10 @@ function normalize(s) {
   return String(s || '').replace(/[^a-zA-Z0-9ก-๙]/g, '');
 }
 
+function normID(id) {
+  return String(id || '').replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, '') || '0';
+}
+
 function tallyStatuses(records) {
   let present = 0, late = 0, leave = 0, absent = 0;
   for (const k in records) {
@@ -72,12 +76,13 @@ function buildTeacherClasses(ttRows, attRows, teacherIdLower) {
     if (!cls) continue;
 
     const stdID = String(r.student_id).trim();
+    const stdKey = normID(stdID);
     const stdName = r.student_name;
     const sessionID = String(r.session_id || '').trim() || `${r.date}_${r.period}`;
 
     cls.sessions.add(sessionID);
-    if (!cls.students[stdID]) cls.students[stdID] = { name: stdName, records: {} };
-    cls.students[stdID].records[sessionID] = r.status;
+    if (!cls.students[stdKey]) cls.students[stdKey] = { id: stdID, name: stdName, records: {} };
+    cls.students[stdKey].records[sessionID] = r.status;
   }
 
   return teacherClasses;
@@ -110,6 +115,7 @@ async function getSemesterReport([subjectCode, className, term, year]) {
     if (normalize(r.class) !== cleanClass) continue;
 
     const stdID = String(r.student_id).trim();
+    const stdKey = normID(stdID);
     const sessionID = String(r.session_id || '').trim() || `${r.date}_${r.period}`;
 
     if (!sessionDetails[sessionID]) {
@@ -124,9 +130,9 @@ async function getSemesterReport([subjectCode, className, term, year]) {
         sessionDetails[sessionID] = { id: sessionID, rawDate: 0, month: '-', date: '-', period: String(r.period).trim() };
       }
     }
-    if (!studentInfo[stdID]) studentInfo[stdID] = r.student_name;
-    if (!studentDataMap[stdID]) studentDataMap[stdID] = {};
-    studentDataMap[stdID][sessionID] = r.status;
+    if (!studentInfo[stdKey]) studentInfo[stdKey] = { id: stdID, name: r.student_name };
+    if (!studentDataMap[stdKey]) studentDataMap[stdKey] = {};
+    studentDataMap[stdKey][sessionID] = r.status;
   }
 
   const sessionsList = Object.values(sessionDetails).sort((a, b) => a.rawDate - b.rawDate);
@@ -138,16 +144,16 @@ async function getSemesterReport([subjectCode, className, term, year]) {
   }
   const currentTotalTaught = sessionsList.length;
 
-  const students = Object.keys(studentDataMap).map(stdID => {
-    const t = tallyStatuses(studentDataMap[stdID]);
+  const students = Object.keys(studentDataMap).map(stdKey => {
+    const t = tallyStatuses(studentDataMap[stdKey]);
     const totalMissed = t.absent + t.leave;
     const percent = ((totalCoursePeriods - totalMissed) / totalCoursePeriods) * 100;
     return {
-      id: stdID, name: studentInfo[stdID],
+      id: studentInfo[stdKey].id, name: studentInfo[stdKey].name,
       present: t.present, late: t.late, leave: t.leave, absent: t.absent,
       percent: percent.toFixed(2),
       currentTotalTaught,
-      records: studentDataMap[stdID],
+      records: studentDataMap[stdKey],
     };
   }).sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
@@ -177,14 +183,15 @@ async function getAllSubjectsReport([teacherId, term, year]) {
     const totalCoursePeriods = actualPeriodsPerWeek * WEEKS_PER_TERM;
     const maxAbsenceQuota = Math.floor(totalCoursePeriods * 0.2);
 
-    for (const stdID in cls.students) {
-      const t = tallyStatuses(cls.students[stdID].records);
+    for (const stdKey in cls.students) {
+      const s = cls.students[stdKey];
+      const t = tallyStatuses(s.records);
       const totalMissed = t.absent + t.leave;
       const percent = ((totalCoursePeriods - totalMissed) / totalCoursePeriods) * 100;
       const remainingQuota = maxAbsenceQuota - totalMissed;
 
       out.push({
-        id: stdID, name: cls.students[stdID].name,
+        id: s.id, name: s.name,
         subjectCode: cls.rawCode, subjectName: cls.rawName, className: cls.rawClassID,
         present: t.present, late: t.late, leave: t.leave, absent: t.absent,
         percent: percent.toFixed(2),
@@ -221,14 +228,15 @@ async function getTeacherAtRiskDashboard([teacherId, term, year]) {
     const actualPeriodsPerWeek = cls.periodsPerWeek > 0 ? cls.periodsPerWeek : DEFAULT_PERIODS_PER_WEEK;
     const totalCoursePeriods = actualPeriodsPerWeek * WEEKS_PER_TERM;
 
-    for (const stdID in cls.students) {
-      const t = tallyStatuses(cls.students[stdID].records);
+    for (const stdKey in cls.students) {
+      const s = cls.students[stdKey];
+      const t = tallyStatuses(s.records);
       const totalMissed = t.absent + t.leave;
       const percent = ((totalCoursePeriods - totalMissed) / totalCoursePeriods) * 100;
 
       if (percent <= 85) {
         const item = {
-          id: stdID, name: cls.students[stdID].name,
+          id: s.id, name: s.name,
           subjectCode: cls.rawCode, subjectName: cls.rawName, className: cls.rawClassID,
           present: t.present, late: t.late, leave: t.leave, absent: t.absent,
           percent: percent.toFixed(2), taught: currentTotalTaught,
