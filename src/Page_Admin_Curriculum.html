@@ -6,7 +6,22 @@
     </div>
   </div>
 
-  <div class="row g-3">
+  <!-- Tab nav -->
+  <ul class="nav nav-tabs mb-3" id="curriculumTabs">
+    <li class="nav-item">
+      <button class="nav-link active" id="tab-csv-btn" onclick="switchCurriculumTab('csv')">
+        <i class="fas fa-file-import me-1"></i>นำเข้า CSV
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-manage-btn" onclick="switchCurriculumTab('manage')">
+        <i class="fas fa-edit me-1"></i>จัดการรายการ
+      </button>
+    </li>
+  </ul>
+
+  <!-- Tab: CSV import (เดิม) -->
+  <div id="tab-csv" class="row g-3">
     <div class="col-md-4">
       <div class="pssms-card h-100">
         <div class="pssms-card-header"><span><i class="fas fa-file-import me-2" style="color: var(--p-text-muted);"></i>นำเข้าหลักสูตร (CSV)</span></div>
@@ -46,14 +61,12 @@
           <span><i class="fas fa-list me-2" style="color: var(--p-text-muted);"></i>คลังตัวชี้วัดในระบบ</span>
           <span class="pssms-chip" id="curriculumCountBadge">0 รายการ</span>
         </div>
-
         <div class="p-3" style="border-bottom: 1px solid var(--p-border);">
           <div class="input-group">
             <span class="input-group-text border-0" style="background: transparent;"><i class="fas fa-search text-muted"></i></span>
             <input type="text" id="searchCurriculum" class="form-control border-0" placeholder="ค้นหารหัสวิชา, ตัวชี้วัด..." onkeyup="filterCurriculumTable()" style="box-shadow: none;">
           </div>
         </div>
-
         <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
           <table class="pssms-table mb-0" style="font-size: 0.85rem;">
             <thead class="sticky-top" style="background: var(--p-subtle);">
@@ -69,6 +82,80 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: จัดการรายการ -->
+  <div id="tab-manage" class="d-none">
+    <!-- Form เพิ่มรายการ -->
+    <div class="pssms-card mb-3">
+      <div class="pssms-card-header"><span><i class="fas fa-plus-circle me-2" style="color: var(--p-text-muted);"></i>เพิ่มตัวชี้วัดใหม่</span></div>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-2">
+          <label class="form-label small fw-medium text-muted mb-1">รหัสวิชา</label>
+          <input type="text" id="newSubjectCode" class="form-control form-control-sm" placeholder="เช่น ว21101">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-medium text-muted mb-1">ประเภท</label>
+          <select id="newSubjectType" class="form-select form-select-sm">
+            <option value="พื้นฐาน">พื้นฐาน</option>
+            <option value="เพิ่มเติม">เพิ่มเติม</option>
+            <option value="">ไม่ระบุ</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small fw-medium text-muted mb-1">รหัสตัวชี้วัด *</label>
+          <input type="text" id="newStandardCode" class="form-control form-control-sm" placeholder="เช่น ว1.1">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-medium text-muted mb-1">คำอธิบาย/จุดประสงค์</label>
+          <input type="text" id="newDescription" class="form-control form-control-sm" placeholder="อธิบายตัวชี้วัดนี้...">
+        </div>
+        <div class="col-md-1">
+          <label class="form-label small fw-medium text-muted mb-1">การประเมิน</label>
+          <select id="newEvalType" class="form-select form-select-sm">
+            <option value="ระหว่างทาง">ระหว่างทาง</option>
+            <option value="ปลายทาง">ปลายทาง</option>
+            <option value="">ไม่ระบุ</option>
+          </select>
+        </div>
+        <div class="col-md-1">
+          <button class="btn btn-accent w-100 btn-sm" onclick="submitAddCurriculumItem()">
+            <i class="fas fa-plus me-1"></i>เพิ่ม
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ตาราง CRUD -->
+    <div class="pssms-card p-0">
+      <div class="pssms-card-header mb-0">
+        <span><i class="fas fa-list me-2" style="color: var(--p-text-muted);"></i>รายการทั้งหมด</span>
+        <div class="d-flex gap-2 align-items-center">
+          <span class="pssms-chip" id="manageCountBadge">0 รายการ</span>
+          <div class="input-group input-group-sm" style="width: 220px;">
+            <span class="input-group-text border-0" style="background: transparent;"><i class="fas fa-search text-muted"></i></span>
+            <input type="text" id="searchManage" class="form-control border-0" placeholder="ค้นหา..." onkeyup="filterManageTable()" style="box-shadow: none;">
+          </div>
+        </div>
+      </div>
+      <div class="table-responsive" style="max-height: 520px; overflow-y: auto;">
+        <table class="pssms-table mb-0" style="font-size: 0.85rem;">
+          <thead class="sticky-top" style="background: var(--p-subtle);">
+            <tr>
+              <th style="width: 110px;">รหัสวิชา</th>
+              <th style="width: 80px;">ประเภท</th>
+              <th style="width: 130px;">รหัสตัวชี้วัด</th>
+              <th>คำอธิบาย</th>
+              <th style="width: 110px;">การประเมิน</th>
+              <th style="width: 80px;" class="text-center">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="manageTableBody">
+            <tr><td colspan="6" class="text-center text-muted p-4">กำลังโหลด...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

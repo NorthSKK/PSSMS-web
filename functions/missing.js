@@ -445,6 +445,36 @@ async function getCurriculumBySubject([subjectCode]) {
   return getCurriculumData([subjectCode]);
 }
 
+async function addCurriculumItem([item]) {
+  const { rows } = await query(
+    `INSERT INTO curriculum(subject_code, subject_type, standard_code, description, eval_type)
+     VALUES($1,$2,$3,$4,$5)
+     ON CONFLICT(subject_code, standard_code) DO NOTHING
+     RETURNING id`,
+    [String(item.subjectCode||'').trim(), String(item.subjectType||'').trim(),
+     String(item.standardCode||'').trim(), String(item.description||'').trim(),
+     String(item.evalType||'').trim()]
+  );
+  if (rows.length === 0) return { status: 'error', message: 'รหัสตัวชี้วัดนี้มีอยู่ในระบบแล้ว' };
+  return { status: 'success', message: 'เพิ่มตัวชี้วัดสำเร็จ', id: rows[0].id };
+}
+
+async function updateCurriculumItem([id, item]) {
+  await query(
+    `UPDATE curriculum SET subject_code=$1, subject_type=$2, standard_code=$3,
+     description=$4, eval_type=$5 WHERE id=$6`,
+    [String(item.subjectCode||'').trim(), String(item.subjectType||'').trim(),
+     String(item.standardCode||'').trim(), String(item.description||'').trim(),
+     String(item.evalType||'').trim(), id]
+  );
+  return { status: 'success', message: 'แก้ไขสำเร็จ' };
+}
+
+async function deleteCurriculumItem([id]) {
+  await query(`DELETE FROM curriculum WHERE id=$1`, [id]);
+  return { status: 'success', message: 'ลบสำเร็จ' };
+}
+
 // ============================================================
 // getAvailableSubstitutes — teachers free at given date/period
 // ============================================================
@@ -697,6 +727,9 @@ module.exports = {
   getCurriculumData,
   getCurriculumBySubject,
   importCurriculumCSV,
+  addCurriculumItem,
+  updateCurriculumItem,
+  deleteCurriculumItem,
   setupCalendarDatabase,
   setupClubDatabase,
   setupCurriculumDatabase,

@@ -1103,6 +1103,15 @@ setTimeout(() => {
 // ==========================================
 
 let allCurriculumData = [];
+let curriculumEditingId = null;
+
+function switchCurriculumTab(tab) {
+  document.getElementById('tab-csv').classList.toggle('d-none', tab !== 'csv');
+  document.getElementById('tab-manage').classList.toggle('d-none', tab !== 'manage');
+  document.getElementById('tab-csv-btn').classList.toggle('active', tab === 'csv');
+  document.getElementById('tab-manage-btn').classList.toggle('active', tab === 'manage');
+  if (tab === 'manage') renderManageTable(allCurriculumData);
+}
 
 function loadCurriculumData() {
   google.script.run.withSuccessHandler(data => {
@@ -1110,76 +1119,199 @@ function loadCurriculumData() {
     const badge = document.getElementById('curriculumCountBadge');
     if(badge) badge.innerText = `${data.length} รายการ`;
     renderCurriculumTable(data);
+    const badge2 = document.getElementById('manageCountBadge');
+    if(badge2) badge2.innerText = `${data.length} รายการ`;
   }).getCurriculumData();
 }
 
 function renderCurriculumTable(data) {
   const tbody = document.getElementById('curriculumTableBody');
   if(!tbody) return;
-
   if (data.length === 0) {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-5 text-muted"><i class="fas fa-folder-open fa-2x mb-2 opacity-50"></i><br>ยังไม่มีข้อมูลหลักสูตรในระบบ</td></tr>`;
     return;
   }
-  
   let html = '';
   data.forEach(item => {
     let typeBadge = String(item.subjectType).includes('เพิ่ม') ? 'bg-info text-dark' : 'bg-primary';
     let evalBadge = String(item.evalType).includes('ปลาย') ? 'badge bg-danger' : 'badge bg-warning text-dark';
-    
     html += `<tr>
-      <td class="fw-bold text-dark">
-        ${item.subjectCode}<br>
-        <span class="badge ${typeBadge} mt-1" style="font-size: 0.65rem;">${item.subjectType}</span>
-      </td>
+      <td class="fw-bold text-dark">${item.subjectCode}<br><span class="badge ${typeBadge} mt-1" style="font-size:0.65rem;">${item.subjectType}</span></td>
       <td class="fw-bold text-success">${item.standardCode}</td>
-      <td style="white-space: pre-wrap; line-height: 1.4;">${item.description}</td>
+      <td style="white-space:pre-wrap;line-height:1.4;">${item.description}</td>
       <td class="text-center"><span class="${evalBadge}">${item.evalType}</span></td>
     </tr>`;
   });
   tbody.innerHTML = html;
 }
 
+function renderManageTable(data) {
+  const tbody = document.getElementById('manageTableBody');
+  if (!tbody) return;
+  const badge = document.getElementById('manageCountBadge');
+  if (badge) badge.innerText = `${data.length} รายการ`;
+  if (data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center p-5 text-muted"><i class="fas fa-folder-open fa-2x mb-2 opacity-50"></i><br>ยังไม่มีข้อมูล</td></tr>`;
+    return;
+  }
+  const typeOpts = ['พื้นฐาน','เพิ่มเติม',''].map(v => `<option value="${v}">${v||'ไม่ระบุ'}</option>`).join('');
+  const evalOpts = ['ระหว่างทาง','ปลายทาง',''].map(v => `<option value="${v}">${v||'ไม่ระบุ'}</option>`).join('');
+  let html = '';
+  data.forEach(item => {
+    const id = item.id;
+    html += `<tr id="crow-${id}">
+      <td><span class="cur-view">${item.subjectCode}</span><input class="form-control form-control-sm cur-edit d-none" value="${item.subjectCode}" data-field="subjectCode"></td>
+      <td>
+        <span class="cur-view">${item.subjectType}</span>
+        <select class="form-select form-select-sm cur-edit d-none" data-field="subjectType">${typeOpts}</select>
+      </td>
+      <td><span class="cur-view fw-bold text-success">${item.standardCode}</span><input class="form-control form-control-sm cur-edit d-none" value="${item.standardCode}" data-field="standardCode"></td>
+      <td><span class="cur-view">${item.description}</span><input class="form-control form-control-sm cur-edit d-none" value="${item.description}" data-field="description"></td>
+      <td>
+        <span class="cur-view">${item.evalType}</span>
+        <select class="form-select form-select-sm cur-edit d-none" data-field="evalType">${evalOpts}</select>
+      </td>
+      <td class="text-center">
+        <div class="cur-view d-flex gap-1 justify-content-center">
+          <button class="btn btn-sm btn-outline-primary border-0" onclick="startEditCurriculum(${id})" title="แก้ไข"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-sm btn-outline-danger border-0" onclick="deleteCurriculumRow(${id})" title="ลบ"><i class="fas fa-trash"></i></button>
+        </div>
+        <div class="cur-edit d-none d-flex gap-1 justify-content-center">
+          <button class="btn btn-sm btn-success border-0" onclick="saveCurriculumRow(${id})" title="บันทึก"><i class="fas fa-check"></i></button>
+          <button class="btn btn-sm btn-outline-secondary border-0" onclick="cancelEditCurriculum(${id})" title="ยกเลิก"><i class="fas fa-times"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+  // set select values
+  data.forEach(item => {
+    const row = document.getElementById(`crow-${item.id}`);
+    if (!row) return;
+    row.querySelectorAll('.cur-edit[data-field]').forEach(el => {
+      if (el.tagName === 'SELECT') el.value = item[el.dataset.field] || '';
+    });
+  });
+}
+
+function startEditCurriculum(id) {
+  if (curriculumEditingId !== null) cancelEditCurriculum(curriculumEditingId);
+  curriculumEditingId = id;
+  const row = document.getElementById(`crow-${id}`);
+  row.querySelectorAll('.cur-view').forEach(el => el.classList.add('d-none'));
+  row.querySelectorAll('.cur-edit').forEach(el => el.classList.remove('d-none'));
+}
+
+function cancelEditCurriculum(id) {
+  curriculumEditingId = null;
+  const row = document.getElementById(`crow-${id}`);
+  if (!row) return;
+  row.querySelectorAll('.cur-view').forEach(el => el.classList.remove('d-none'));
+  row.querySelectorAll('.cur-edit').forEach(el => el.classList.add('d-none'));
+  // restore original values
+  const item = allCurriculumData.find(d => d.id === id);
+  if (!item) return;
+  row.querySelectorAll('.cur-edit[data-field]').forEach(el => {
+    el.tagName === 'SELECT' ? (el.value = item[el.dataset.field] || '') : (el.value = item[el.dataset.field] || '');
+  });
+}
+
+function saveCurriculumRow(id) {
+  const row = document.getElementById(`crow-${id}`);
+  const newItem = {};
+  row.querySelectorAll('.cur-edit[data-field]').forEach(el => { newItem[el.dataset.field] = el.value.trim(); });
+  google.script.run
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'danger'))
+    .withSuccessHandler(res => {
+      if (res.status !== 'success') return showToast('❌ ' + res.message, 'danger');
+      curriculumEditingId = null;
+      const idx = allCurriculumData.findIndex(d => d.id === id);
+      if (idx !== -1) allCurriculumData[idx] = { ...allCurriculumData[idx], ...newItem };
+      renderManageTable(filterManageKeyword(document.getElementById('searchManage')?.value));
+      renderCurriculumTable(allCurriculumData);
+      showToast(res.message, 'success');
+    }).updateCurriculumItem(id, newItem);
+}
+
+function deleteCurriculumRow(id) {
+  Swal.fire({ title: 'ลบตัวชี้วัดนี้?', icon: 'warning', showCancelButton: true, confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc3545' }).then(r => {
+    if (!r.isConfirmed) return;
+    google.script.run
+      .withFailureHandler(err => showToast('❌ ' + err.message, 'danger'))
+      .withSuccessHandler(res => {
+        if (res.status !== 'success') return showToast('❌ ' + res.message, 'danger');
+        allCurriculumData = allCurriculumData.filter(d => d.id !== id);
+        renderManageTable(filterManageKeyword(document.getElementById('searchManage')?.value));
+        renderCurriculumTable(allCurriculumData);
+        const badge = document.getElementById('curriculumCountBadge');
+        if (badge) badge.innerText = `${allCurriculumData.length} รายการ`;
+        showToast(res.message, 'success');
+      }).deleteCurriculumItem(id);
+  });
+}
+
+function submitAddCurriculumItem() {
+  const item = {
+    subjectCode: document.getElementById('newSubjectCode').value.trim(),
+    subjectType: document.getElementById('newSubjectType').value,
+    standardCode: document.getElementById('newStandardCode').value.trim(),
+    description: document.getElementById('newDescription').value.trim(),
+    evalType: document.getElementById('newEvalType').value,
+  };
+  if (!item.standardCode) return showToast('⚠️ กรุณาระบุรหัสตัวชี้วัด', 'warning');
+  google.script.run
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'danger'))
+    .withSuccessHandler(res => {
+      if (res.status !== 'success') return showToast('❌ ' + res.message, 'warning');
+      item.id = res.id;
+      allCurriculumData.push(item);
+      renderManageTable(allCurriculumData);
+      renderCurriculumTable(allCurriculumData);
+      const badge = document.getElementById('curriculumCountBadge');
+      if (badge) badge.innerText = `${allCurriculumData.length} รายการ`;
+      ['newSubjectCode','newStandardCode','newDescription'].forEach(id => { document.getElementById(id).value = ''; });
+      showToast(res.message, 'success');
+    }).addCurriculumItem(item);
+}
+
+function filterManageKeyword(keyword) {
+  if (!keyword) return allCurriculumData;
+  const kw = keyword.toLowerCase();
+  return allCurriculumData.filter(item =>
+    String(item.subjectCode).toLowerCase().includes(kw) ||
+    String(item.standardCode).toLowerCase().includes(kw) ||
+    String(item.description).toLowerCase().includes(kw)
+  );
+}
+
 function _filterCurriculumTableImpl() {
   const keyword = document.getElementById('searchCurriculum').value.toLowerCase();
-  const filtered = allCurriculumData.filter(item =>
-    String(item.subjectCode).toLowerCase().includes(keyword) ||
-    String(item.standardCode).toLowerCase().includes(keyword) ||
-    String(item.description).toLowerCase().includes(keyword)
-  );
-  renderCurriculumTable(filtered);
+  renderCurriculumTable(filterManageKeyword(keyword));
 }
 window.filterCurriculumTable = (typeof debounce === 'function') ? debounce(_filterCurriculumTableImpl, 180) : _filterCurriculumTableImpl;
+
+function filterManageTable() {
+  renderManageTable(filterManageKeyword(document.getElementById('searchManage')?.value));
+}
 
 function uploadCurriculumCSV() {
   const fileInput = document.getElementById('csvCurriculumFile');
   if (!fileInput || !fileInput.files.length) return showToast('⚠️ กรุณาเลือกไฟล์ CSV ก่อนครับ', 'warning');
-  
   const clearOld = document.getElementById('clearOldCurriculum').checked;
   const file = fileInput.files[0];
   const btn = document.getElementById('btnImportCurriculum');
   const oldText = btn.innerHTML;
-  
   btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังประมวลผล...';
   btn.disabled = true;
-
   const reader = new FileReader();
   reader.onload = function(e) {
     const base64Data = e.target.result.split(',')[1];
     google.script.run
-      .withFailureHandler(err => {
-        btn.innerHTML = oldText; btn.disabled = false;
-        showToast('❌ Error: ' + err.message, 'danger');
-      })
+      .withFailureHandler(err => { btn.innerHTML = oldText; btn.disabled = false; showToast('❌ Error: ' + err.message, 'danger'); })
       .withSuccessHandler(res => {
         btn.innerHTML = oldText; btn.disabled = false;
-        if(res.status === 'success') {
-           showToast(res.message, 'success');
-           fileInput.value = '';
-           loadCurriculumData();
-        } else {
-           showToast(res.message, 'danger');
-        }
+        if(res.status === 'success') { showToast(res.message, 'success'); fileInput.value = ''; loadCurriculumData(); }
+        else showToast(res.message, 'danger');
       }).importCurriculumCSV(base64Data, clearOld);
   };
   reader.readAsDataURL(file);
