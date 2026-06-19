@@ -264,12 +264,17 @@ async function saveSchoolInfo([schoolName, logoBase64, logoFilename]) {
   return { status: 'success', message: 'บันทึกข้อมูลโรงเรียนสำเร็จ' };
 }
 
-async function savePrintConfigData([term, year, sysData, homeroomData]) {
+async function savePrintConfigData([payload]) {
+  // Frontend sends one object: { term, year, sys, hr }
+  const term = payload?.term;
+  const year = payload?.year;
+  const sysData = payload?.sys || {};
+  const homeroomData = payload?.hr || [];
   await query(
     `INSERT INTO print_config(term,year,sys_data,homeroom_data)
      VALUES($1,$2,$3,$4)
      ON CONFLICT(term,year) DO UPDATE SET sys_data=$3, homeroom_data=$4`,
-    [term, year, JSON.stringify(sysData || {}), JSON.stringify(homeroomData || {})]
+    [term, year, JSON.stringify(sysData), JSON.stringify(homeroomData)]
   );
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
