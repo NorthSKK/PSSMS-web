@@ -54,6 +54,20 @@ async function saveSubjectConfig([configData], user) {
       c.examIndicators ? JSON.stringify(c.examIndicators) : null,
     ]
   );
+
+  // Auto-add new indicators to curriculum library (skip duplicates and empty codes)
+  const newIndicators = (c.indicators || []).filter(ind => String(ind.code || '').trim());
+  if (newIndicators.length > 0) {
+    for (const ind of newIndicators) {
+      await query(
+        `INSERT INTO curriculum(subject_code, subject_type, standard_code, description, eval_type)
+         VALUES($1, '', $2, $3, '')
+         ON CONFLICT(subject_code, standard_code) DO NOTHING`,
+        [c.subjectCode, String(ind.code).trim(), String(ind.description || '').trim()]
+      );
+    }
+  }
+
   return { status: 'success', message: 'บันทึกโครงสร้างวิชาสำเร็จ' };
 }
 
