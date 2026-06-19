@@ -335,7 +335,8 @@ async function uploadSarabunFile([id, base64Data, filename, docNum]) {
   return { status: 'success', message: 'ไม่รองรับอัปโหลดไฟล์ใน web prototype', fileURL: '' };
 }
 async function getTeacherListForDropdown() {
-  return require('./getTeachersForTimetable')();
+  const teachers = await require('./getTeachersForTimetable')();
+  return teachers.map(t => t.name).filter(Boolean);
 }
 
 // ============================================================
