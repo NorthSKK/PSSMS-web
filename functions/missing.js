@@ -369,10 +369,18 @@ async function getPrintConfigData([term, year]) {
   let hr = [];
   try {
     const assignments = await getHomeroomAssignments([t, y]);
+    const allIds = [...new Set(assignments.flatMap(a => a.teacherIds))].filter(Boolean);
+    let nameMap = {};
+    if (allIds.length > 0) {
+      const { rows: urows } = await query(
+        `SELECT username, full_name FROM users WHERE username = ANY($1)`, [allIds]
+      );
+      nameMap = Object.fromEntries(urows.map(u => [u.username, u.full_name || u.username]));
+    }
     hr = assignments.map(a => ({
-      cls: a.className,
-      t1: a.teacherName || a.teacherId || '',
-      t2: '',
+      cls: `${a.level}/${a.room}`,
+      t1: nameMap[a.teacherIds[0]] || a.teacherIds[0] || '',
+      t2: nameMap[a.teacherIds[1]] || a.teacherIds[1] || '',
     }));
   } catch (_) {}
 
