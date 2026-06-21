@@ -542,8 +542,8 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
   document.getElementById('scoreRatioBadge').innerText = `สัดส่วนปัจจุบัน ${config.ratio}`;
 
   let headHtml = `<tr>
-    <th rowspan="2" class="align-middle text-center sticky-head-1 text-secondary border-end py-2" style="width:45px; font-size: 0.85rem; background-color: #f1f3f5;">ที่</th>
-    <th rowspan="2" class="align-middle text-start sticky-head-2 text-secondary border-end px-3 py-2" style="min-width: 180px; font-size: 0.85rem; background-color: #f1f3f5;">รหัส / ชื่อ-สกุล</th>`;
+    <th rowspan="2" class="align-middle text-center sticky-head-1 text-secondary border-end py-1" style="width:45px; font-size: 0.78rem; background-color: #f1f3f5;">ที่</th>
+    <th rowspan="2" class="align-middle text-start sticky-head-2 text-secondary border-end px-2 py-1" style="min-width: 180px; font-size: 0.78rem; background-color: #f1f3f5;">รหัส / ชื่อ-สกุล</th>`;
   
   let subHeadHtml = `<tr>`;
   
@@ -559,17 +559,17 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
     let displayCode = ind.code ? ind.code : '-';
     let displayName = ind.name ? ind.name : 'งาน/สอบ';
 
-    headHtml += `<th class="text-success border-bottom-0 align-middle py-2" style="font-size: 0.9rem; min-width: 100px;">
+    headHtml += `<th class="text-success border-bottom-0 align-middle py-1" style="font-size: 0.78rem; max-width: 120px; min-width: 70px; width: 90px;">
                    <div class="d-flex flex-column justify-content-center align-items-center">
-                     <span class="text-muted" style="font-size: 0.65rem; line-height: 1;">${displayCode}</span>
-                     <div class="d-flex align-items-center mt-1">
-                       <span contenteditable="${isHeaderEditMode}" class="ind-name-edit fw-bold text-truncate" data-idx="${idx}">${displayName}</span>
+                     <span class="text-muted" style="font-size: 0.62rem; line-height: 1;">${displayCode}</span>
+                     <div class="d-flex align-items-center mt-1 w-100 justify-content-center overflow-hidden">
+                       <span contenteditable="${isHeaderEditMode}" class="ind-name-edit fw-bold" data-idx="${idx}" title="${displayName}" style="max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;">${displayName}</span>
                        ${deleteBtn}
                      </div>
                    </div>
                  </th>`;
                  
-    subHeadHtml += `<th class="text-success small fw-normal align-middle border-bottom pb-2" style="background-color: #f8f9fa;">
+    subHeadHtml += `<th class="text-success small fw-normal align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">
                       <div class="d-flex justify-content-center align-items-center gap-1">
                         <span class="text-muted">(<span contenteditable="${isHeaderEditMode}" class="ind-score-edit fw-bold text-success" onblur="reCalcAllRows()">${ind.score}</span>)</span>
                         ${infoBtn}
@@ -593,54 +593,54 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
   let midCode = (config.examIndicators && config.examIndicators.midterm && config.examIndicators.midterm.code) ? config.examIndicators.midterm.code : '-';
   let finCode = (config.examIndicators && config.examIndicators.final && config.examIndicators.final.code) ? config.examIndicators.final.code : '-';
 
-  headHtml += `<th class="text-primary border-bottom-0 border-start col-highlight-f align-middle py-2" style="font-size: 0.9rem; min-width: 70px;">รวมเก็บ</th>
-    
-    <th class="text-warning text-dark border-bottom-0 col-highlight-m align-middle py-2" style="font-size: 0.9rem; min-width: 100px;">
+  headHtml += `<th class="text-primary border-bottom-0 border-start col-highlight-f align-middle py-1" style="font-size: 0.78rem; min-width: 55px;">รวมเก็บ</th>
+
+    <th class="text-warning text-dark border-bottom-0 col-highlight-m align-middle py-1" style="font-size: 0.78rem; min-width: 80px;">
        <div class="d-flex flex-column justify-content-center align-items-center">
-         <span class="text-muted text-truncate" style="font-size: 0.65rem; line-height: 1; max-width: 90px;" title="${midCode}">${midCode}</span>
+         <span class="text-muted text-truncate" style="font-size: 0.62rem; line-height: 1; max-width: 75px;" title="${midCode}">${midCode}</span>
          <div class="d-flex align-items-center mt-1"><span class="fw-bold">กลางภาค</span></div>
        </div>
     </th>
-    
-    <th class="text-danger border-bottom-0 border-start border-white col-highlight-mr align-middle py-2" style="opacity: 0.9; font-size: 0.9rem; min-width: 60px;">ซ่อม</th>
-    
-    <th class="text-danger border-bottom-0 border-start col-highlight-e align-middle py-2" style="font-size: 0.9rem; min-width: 100px;">
+
+    <th class="text-danger border-bottom-0 border-start border-white col-highlight-mr align-middle py-1" style="opacity: 0.9; font-size: 0.78rem; min-width: 50px;">ซ่อม</th>
+
+    <th class="text-danger border-bottom-0 border-start col-highlight-e align-middle py-1" style="font-size: 0.78rem; min-width: 80px;">
        <div class="d-flex flex-column justify-content-center align-items-center">
-         <span class="text-muted text-truncate" style="font-size: 0.65rem; line-height: 1; max-width: 90px;" title="${finCode}">${finCode}</span>
+         <span class="text-muted text-truncate" style="font-size: 0.62rem; line-height: 1; max-width: 75px;" title="${finCode}">${finCode}</span>
          <div class="d-flex align-items-center mt-1"><span class="fw-bold">ปลายภาค</span></div>
        </div>
     </th>
-    
-    <th class="text-dark border-bottom-0 border-start col-highlight-total align-middle py-2" style="font-size: 0.9rem; min-width: 60px;">รวม</th>
-    <th class="text-success border-bottom-0 border-start col-highlight-grade align-middle py-2" style="font-size: 0.9rem; min-width: 60px;">เกรด</th>
-    <th class="text-danger border-bottom-0 border-start col-highlight-mr align-middle py-2" style="font-size: 0.9rem; min-width: 80px;">หมายเหตุ</th>
-    <th colspan="3" class="text-info text-dark border-start ${isQualVisible ? '' : 'd-none'} align-middle py-2" style="font-size: 0.9rem; min-width: 150px;">ประเมิน (0-3)</th></tr>`;
+
+    <th class="text-dark border-bottom-0 border-start col-highlight-total align-middle py-1" style="font-size: 0.78rem; min-width: 50px;">รวม</th>
+    <th class="text-success border-bottom-0 border-start col-highlight-grade align-middle py-1" style="font-size: 0.78rem; min-width: 50px;">เกรด</th>
+    <th class="text-danger border-bottom-0 border-start col-highlight-mr align-middle py-1" style="font-size: 0.78rem; min-width: 70px;">หมายเหตุ</th>
+    <th colspan="3" class="text-info text-dark border-start ${isQualVisible ? '' : 'd-none'} align-middle py-1" style="font-size: 0.78rem; min-width: 130px;">ประเมิน (0-3)</th></tr>`;
   
-  subHeadHtml += `<th class="text-primary small fw-normal border-start col-highlight-f align-middle border-bottom pb-2" style="background-color: #f8f9fa;">(<span id="edit-ratio-f" class="fw-bold">${ratios[0] || 0}</span>)</th>
-    <th class="text-warning text-dark small fw-normal col-highlight-m align-middle border-bottom pb-2" style="background-color: #f8f9fa;">
+  subHeadHtml += `<th class="text-primary small fw-normal border-start col-highlight-f align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">(<span id="edit-ratio-f" class="fw-bold">${ratios[0] || 0}</span>)</th>
+    <th class="text-warning text-dark small fw-normal col-highlight-m align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">
       <div class="d-flex justify-content-center align-items-center gap-1">
         <span class="text-muted">(<span id="edit-ratio-m" class="fw-bold text-warning text-dark" contenteditable="${isHeaderEditMode}" onblur="reCalcAllRows()">${ratios[1] || 0}</span>)</span>
         <div class="ms-1 d-flex align-items-center">${cbM}</div>
       </div>
     </th>
-    <th class="text-danger small fw-normal border-start border-white col-highlight-mr align-middle border-bottom pb-2" style="opacity: 0.9; background-color: #f8f9fa;">
+    <th class="text-danger small fw-normal border-start border-white col-highlight-mr align-middle border-bottom pb-1" style="opacity: 0.9; background-color: #f8f9fa; font-size: 0.72rem;">
       <div class="d-flex justify-content-center align-items-center gap-1">
         <span class="text-muted">-</span>
         <div class="ms-1 d-flex align-items-center">${cbMR}</div>
       </div>
     </th>
-    <th class="text-danger small fw-normal border-start col-highlight-e align-middle border-bottom pb-2" style="background-color: #f8f9fa;">
+    <th class="text-danger small fw-normal border-start col-highlight-e align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">
       <div class="d-flex justify-content-center align-items-center gap-1">
         <span class="text-muted">(<span id="edit-ratio-e" class="fw-bold text-danger" contenteditable="${isHeaderEditMode}" onblur="reCalcAllRows()">${ratios[2] || 0}</span>)</span>
         <div class="ms-1 d-flex align-items-center">${cbE}</div>
       </div>
     </th>
-    <th class="text-dark small fw-normal border-start col-highlight-total align-middle border-bottom pb-2" style="background-color: #f8f9fa;">(<span id="edit-ratio-total" class="fw-bold">100</span>)</th>
-    <th class="text-success small fw-normal border-start col-highlight-grade align-middle border-bottom pb-2 fw-bold" style="background-color: #f8f9fa;">0-4</th>
-    <th class="text-danger small fw-normal border-start col-highlight-mr align-middle border-bottom pb-2" style="background-color: #f8f9fa;">(ร, มส)</th>
-    <th class="text-info small fw-normal border-start ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-2" style="background-color: #f8f9fa;">อ่าน</th>
-    <th class="text-info small fw-normal ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-2" style="background-color: #f8f9fa;">คุณฯ</th>
-    <th class="text-info small fw-normal ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-2" style="background-color: #f8f9fa;">สมรรถนะ</th></tr>`;
+    <th class="text-dark small fw-normal border-start col-highlight-total align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">(<span id="edit-ratio-total" class="fw-bold">100</span>)</th>
+    <th class="text-success small fw-normal border-start col-highlight-grade align-middle border-bottom pb-1 fw-bold" style="background-color: #f8f9fa; font-size: 0.72rem;">0-4</th>
+    <th class="text-danger small fw-normal border-start col-highlight-mr align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">(ร, มส)</th>
+    <th class="text-info small fw-normal border-start ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">อ่าน</th>
+    <th class="text-info small fw-normal ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">คุณฯ</th>
+    <th class="text-info small fw-normal ${isQualVisible ? '' : 'd-none'} align-middle border-bottom pb-1" style="background-color: #f8f9fa; font-size: 0.72rem;">สมรรถนะ</th></tr>`;
   
   thead.innerHTML = headHtml + subHeadHtml;
 
@@ -669,12 +669,12 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
     
     if (remarkVal === '-') remarkVal = '';
     
-    bodyHtml += `<tr>
-      <td class="text-center text-muted fw-bold sticky-col-1 align-middle border-end" style="font-size:0.85rem; background-color: #fff;">${rowIndex + 1}</td>
-      <td class="text-start sticky-col-2 align-middle px-3 border-end" style="background-color: #fff;">
-         <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.9rem; line-height:1.2;">${std[2]}</div>
-         <div class="d-flex align-items-center mt-1">
-            <span class="text-muted font-monospace" style="font-size: 0.78rem;">${stdId}</span>
+    bodyHtml += `<tr style="height:28px;">
+      <td class="text-center text-muted fw-bold sticky-col-1 align-middle border-end" style="font-size:0.75rem; background-color: #fff; padding: 1px 2px;">${rowIndex + 1}</td>
+      <td class="text-start sticky-col-2 align-middle px-2 border-end" style="background-color: #fff; padding-top: 1px; padding-bottom: 1px;">
+         <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.78rem; line-height:1.15;">${std[2]}</div>
+         <div class="d-flex align-items-center">
+            <span class="text-muted font-monospace" style="font-size: 0.68rem;">${stdId}</span>
             ${attText}
          </div>
       </td>`;
@@ -723,8 +723,8 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
         <input type="number" class="score-cell-input nav-input final-std-${safeStdId} sgs-col-final" style="${eBg}" value="${finVal}" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'final', 'ปลายภาค'); return false;" ${eLock}>
       </td>
       
-      <td class="text-center align-middle text-dark fw-bold border-start col-highlight-total" id="sum_total_std_${safeStdId}" style="font-size: 0.95rem;">0</td>
-      <td class="text-center align-middle text-success fw-bold border-start col-highlight-grade" id="grade_std_${safeStdId}" style="font-size: 1rem;">0</td>
+      <td class="text-center align-middle text-dark fw-bold border-start col-highlight-total" id="sum_total_std_${safeStdId}" style="font-size: 0.82rem;">0</td>
+      <td class="text-center align-middle text-success fw-bold border-start col-highlight-grade" id="grade_std_${safeStdId}" style="font-size: 0.85rem;">0</td>
       
       <td class="p-0 align-middle text-center border-start col-highlight-mr position-relative">
         <select class="qual-select remark-select nav-input" data-row="${rowIndex}" data-col="${colIndex++}" data-safeid="${safeStdId}" onchange="calcRow('${stdId}', '${safeStdId}'); updateRemarkInstant('${stdId}', this);" style="width: 100%; height:100%; background: transparent; padding:4px; font-size: 0.85rem; border:none; outline:none; text-align:center;">
@@ -741,7 +741,7 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
     </tr>`;
   });
   tbody.innerHTML = bodyHtml;
-  reCalcAllRows();
+  setTimeout(reCalcAllRows, 0);
 }
 
 window.toggleScoreColumn = function(colKey, isChecked) {
@@ -1664,26 +1664,26 @@ function renderEvalTable(students, existingQuals) {
     const rTot = q.readTotal || 0; const rGrd = q.readGrade || 0;
 
     let colIndex = 0; 
-    bodyHtml += `<tr>
-      <td class="text-center text-muted fw-bold">${rowIndex + 1}</td>
-      <td class="text-start">
-         <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.9rem;">${std[2]}</div>
-         <div class="text-muted font-monospace" style="font-size: 0.78rem;">${stdId}</div>
+    bodyHtml += `<tr style="height:28px;">
+      <td class="text-center text-muted fw-bold sticky-col-1" style="font-size:0.75rem; padding: 1px 2px;">${rowIndex + 1}</td>
+      <td class="text-start px-2 sticky-col-2" style="padding-top: 1px; padding-bottom: 1px;">
+         <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.78rem; line-height:1.15;">${std[2]}</div>
+         <div class="text-muted font-monospace" style="font-size: 0.68rem;">${stdId}</div>
       </td>
       
       <td class="p-0"><input type="number" id="c1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
       <td class="p-0"><input type="number" id="c2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
       <td class="p-0"><input type="number" id="c3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
       <td class="p-0"><input type="number" id="c4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="text-center align-middle fw-bold border-start bg-light text-primary" id="cTot_${safeStdId}">${cTot}</td>
-      <td class="text-center align-middle fw-bold fs-5 text-success" id="cGrd_${safeStdId}">${cGrd}</td>
+      <td class="text-center align-middle fw-bold border-start bg-light text-primary" id="cTot_${safeStdId}" style="font-size:0.78rem;">${cTot}</td>
+      <td class="text-center align-middle fw-bold text-success" id="cGrd_${safeStdId}" style="font-size:0.88rem;">${cGrd}</td>
 
       <td class="p-0 border-start"><input type="number" id="r1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
       <td class="p-0"><input type="number" id="r2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
       <td class="p-0"><input type="number" id="r3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
       <td class="p-0"><input type="number" id="r4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="text-center align-middle fw-bold border-start bg-light text-success" id="rTot_${safeStdId}">${rTot}</td>
-      <td class="text-center align-middle fw-bold fs-5 text-success" id="rGrd_${safeStdId}">${rGrd}</td>
+      <td class="text-center align-middle fw-bold border-start bg-light text-success" id="rTot_${safeStdId}" style="font-size:0.78rem;">${rTot}</td>
+      <td class="text-center align-middle fw-bold text-success" id="rGrd_${safeStdId}" style="font-size:0.88rem;">${rGrd}</td>
     </tr>`;
   });
   tbody.innerHTML = bodyHtml;
@@ -1719,8 +1719,8 @@ function calcEvalRow(safeStdId, type, isInit = false) {
     let grdEl = document.getElementById(`${type}Grd_${safeStdId}`);
     if(grdEl) {
         grdEl.innerText = grade;
-        if(grade === 0) grdEl.className = "text-center align-middle fw-bold fs-5 text-danger bg-danger bg-opacity-10";
-        else grdEl.className = "text-center align-middle fw-bold fs-5 text-success";
+        if(grade === 0) grdEl.className = "text-center align-middle fw-bold text-danger bg-danger bg-opacity-10";
+        else grdEl.className = "text-center align-middle fw-bold text-success";
     }
 
     if (!isInit) {

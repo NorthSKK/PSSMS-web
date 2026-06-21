@@ -13,6 +13,7 @@ router.get('/style', async (req, res) => {
   try {
     const content = await fs.readFile(path.join(SRC_DIR, 'Styles.html'), 'utf8');
     const css = content.replace(/<\/?style[^>]*>/gi, '');
+    res.set('Cache-Control', 'no-store');
     res.type('text/css').send(css);
   } catch (e) {
     res.status(404).type('text/css').send('/* Styles.html not found */');

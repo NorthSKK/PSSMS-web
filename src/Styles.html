@@ -234,7 +234,7 @@ body {
 .wrapper { display: flex; width: 100%; align-items: stretch; }
 
 /* 🚨 CRITICAL FIX: ป้องกันตารางดันขอบจอทะลุ (Flexbox Bug Fix) */
-#page-content, .container-fluid, .tab-content, .tab-pane, .card {
+#content, #page-content, .container-fluid, .tab-content, .tab-pane, .card {
     min-width: 0 !important; /* บังคับให้ Flexbox ยอมหดตัว */
     max-width: 100% !important;
 }
@@ -407,14 +407,16 @@ div.dept-btn { cursor: default; pointer-events: none; }
    📊 4. SCORE TABLE (ตาราง ปพ.5 Notion Style)
 ========================================== */
 .grid-wrapper {
-  position: relative; width: 100%; height: 60vh; 
+  width: 100%;
   border: 1px solid #dee2e6; border-radius: 0 0 12px 12px;
   background: #fff; overflow: hidden;
 }
 
 .grid-scroll-container {
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  overflow: auto; -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-height: calc(100vh - 230px); /* สูงพอ: ห้องสั้นเห็นครบไม่มี scrollbar, ห้องยาว scroll ในกล่อง หัวตารางลอยติดบน */
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .grid-scroll-container table {
@@ -433,39 +435,72 @@ div.dept-btn { cursor: default; pointer-events: none; }
 /* ==========================================
    🌟 5. การตรึงหัวตาราง 2 ชั้น (Multi-row Sticky Header)
 ========================================== */
+/* === ตารางคะแนน (#scoreTableHeader) — หัว 2 ชั้น สูง 60px === */
 /* แถวที่ 1: รหัสตัวชี้วัด / ชื่อชิ้นงาน */
-#scoreTableHeader tr:nth-child(1) th, .eval-header tr:nth-child(1) th { 
-    position: sticky; top: 0; z-index: 10; 
-    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6; 
+#scoreTableHeader tr:nth-child(1) th {
+    position: sticky; top: 0; z-index: 10;
+    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6;
     height: 60px; /* ล็อกความสูงแถวแรกให้คงที่ */
     vertical-align: middle;
 }
-
 /* แถวที่ 2: คะแนนเต็ม */
-#scoreTableHeader tr:nth-child(2) th, .eval-header tr:nth-child(2) th { 
+#scoreTableHeader tr:nth-child(2) th {
     position: sticky; top: 60px; z-index: 10; /* ตรึงต่อจากแถวแรกพอดีเป๊ะ */
-    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6; 
+    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6;
     vertical-align: middle;
 }
+
+/* === ตารางคุณลักษณะ/อ่านคิดวิเคราะห์ (.eval-header) — หัว 2 ชั้น บรรทัดเดียว สูง 38px === */
+/* แถวที่ 1: กลุ่ม — กำหนดสีพื้นทึบเองตรงๆ (BS table-primary/success ไม่ลงสีบน th นี้ → ต้องทึบกัน scroll ทะลุ) */
+.eval-header tr:nth-child(1) th {
+    position: sticky; top: 0; z-index: 10;
+    height: 38px; vertical-align: middle;
+    box-shadow: inset 0 -1px 0 #dee2e6;
+    font-size: 0.78rem; font-weight: 600;
+    background-color: #f1f5f9 !important; /* fallback ทึบ */
+}
+.eval-header tr:nth-child(1) th.table-primary { background-color: #cfe2ff !important; }
+.eval-header tr:nth-child(1) th.table-success { background-color: #d1e7dd !important; }
+/* แถวที่ 2: ช่วง/รวม/ระดับ — สีอ่อนกว่าแถว 1 */
+.eval-header tr:nth-child(2) th {
+    position: sticky; top: 38px; z-index: 10; /* ตรึงต่อจากแถวแรก 38px พอดี */
+    vertical-align: middle;
+    box-shadow: inset 0 -1px 0 #dee2e6;
+    font-size: 0.7rem; font-weight: 400; white-space: nowrap; padding: 3px 6px;
+    background-color: #f8fafc !important; /* fallback ทึบ */
+}
+.eval-header tr:nth-child(2) th.table-primary { background-color: #dbe9ff !important; }
+.eval-header tr:nth-child(2) th.table-success { background-color: #d8efe2 !important; }
+/* ช่องกรอกในตาราง eval — จัดช่องไฟให้โปร่ง อ่านง่าย */
+#evalTableBody td { padding: 1px 5px; }
+#evalTableBody .eval-input { margin: 0 auto; display: block; }
 
 /* ตรึงคอลัมน์ซ้ายสุด (เลขที่ และ ชื่อ-สกุล) */
 .sticky-col-1, .sticky-head-1 { position: sticky !important; left: 0; min-width: 45px; max-width: 45px; z-index: 11; background: #fff !important; box-shadow: inset -1px 0 0 #e2e8f0; }
 .sticky-col-2, .sticky-head-2 { position: sticky !important; left: 45px; min-width: 180px; max-width: 180px; z-index: 11; background: #fff !important; box-shadow: inset -1px 0 0 #e2e8f0, 4px 0 6px -2px rgba(0,0,0,0.05) !important; }
 
-/* มุมบนซ้ายต้องอยู่บนสุดเสมอ (กันการทับซ้อน) */
-.sticky-head-1, .sticky-head-2 { z-index: 15 !important; background: #f8fafc !important; }
+/* มุมบนซ้ายต้องอยู่บนสุดเสมอ (กันการทับซ้อน) + ระบายสีทึบเต็ม cell
+   🩹 Safari bug: cell ที่ sticky 2 แกน (บน+ซ้าย) ไม่ paint background-color → ใช้ inset box-shadow 9999px ระบายแทน (paint ชัวร์ทุก browser) */
+.sticky-head-1, .sticky-head-2 {
+  z-index: 15 !important;
+  background: #eef2f7 !important;
+  box-shadow: inset -1px 0 0 #d1d9e2, inset 0 0 0 9999px #eef2f7 !important;
+}
+.dark-mode .sticky-head-1, .dark-mode .sticky-head-2 {
+  box-shadow: inset -1px 0 0 #333, inset 0 0 0 9999px #1e2024 !important;
+}
 
 /* ==========================================
    ช่องกรอกคะแนน & ไฮไลท์สี
 ========================================== */
 .score-cell-input, .eval-input {
-    width: 50px; height: 32px; border-radius: 6px; background-color: #f8fafc;
-    border: 1px solid transparent; text-align: center; font-size: 0.85rem; font-weight: 600;
+    width: 50px; height: 26px; border-radius: 4px; background-color: #f8fafc;
+    border: 1px solid transparent; text-align: center; font-size: 0.78rem; font-weight: 600;
     color: #334155; transition: all 0.2s ease;
 }
 .score-cell-input:hover, .eval-input:hover { background-color: #e2e8f0; cursor: text; }
 .score-cell-input:focus, .eval-input:focus { background-color: #ffffff; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); outline: none; }
-.eval-input { width: 45px !important; border-color: #ced4da; }
+.eval-input { width: 45px !important; height: 26px !important; border-color: #ced4da; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 .qual-select { width: 60px; text-align: center; border: 1px solid transparent; background: #f8fafc; border-radius: 6px; font-weight: 600; font-size: 0.8rem; color: #475569; transition: all 0.2s; cursor: pointer; }
@@ -521,14 +556,12 @@ body.dark-mode {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: rgba(255,255,255,0.85) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background-color: #eef2f7 !important; /* บังคับทึบทุกช่อง — กัน BS table ตั้ง --bs-table-bg:transparent แล้ว scroll ทะลุ */
   box-shadow: 0 1px 0 var(--p-border);
 }
 .dark-mode #allInOneTable thead th,
 .dark-mode .grid-scroll-container table thead th {
-  background-color: rgba(30,32,36,0.85) !important;
+  background-color: #1e2024 !important;
 }
 
 /* Top navbar — sticky on scroll, token-driven, matches sidebar approach */
@@ -861,7 +894,7 @@ body.dark-mode .pssms-dept-general {
     .score-cell-input { width: 50px !important; padding: 2px !important; font-size: 0.85rem !important; }
     .sticky-col-1, .sticky-head-1 { min-width: 40px !important; max-width: 40px !important; }
     .sticky-col-2, .sticky-head-2 { min-width: 140px !important; max-width: 140px !important; left: 40px !important; }
-    .grid-wrapper { height: 70vh; }
+    .grid-wrapper { overflow: visible; }
 }
 
 /* iOS PWA standalone — safe area for notch / Dynamic Island */
