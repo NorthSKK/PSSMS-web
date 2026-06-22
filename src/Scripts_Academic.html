@@ -782,7 +782,7 @@ function renderMassiveGridModal() {
 
         sessions.forEach(sess => {
             const sessionKey = _massiveSessionKey(sess);
-            const att = massiveGridData.attendance[cleanStdId]?.[sessionKey];
+            const att = massiveGridData.attendance[stdId]?.[sessionKey];
             const status = att ? att.status : '-';
             const rowIdx = att ? att.rowIdx : '';
             const isNew = att ? 'false' : 'true';
@@ -821,8 +821,7 @@ function renderMassiveGridModal() {
         const sessionKey = _massiveSessionKey(sess);
         let count = 0;
         massiveGridData.students.forEach(std => {
-            const cid = String(parseInt(String(std[0]).trim(), 10));
-            const att = massiveGridData.attendance[cid]?.[sessionKey];
+            const att = massiveGridData.attendance[String(std[0]).trim()]?.[sessionKey];
             const neg = isHR
                 ? ['ไม่ปกติ','ไม่ทำหน้าที่','ไม่เข้าแถว'].includes(att?.status)
                 : att && att.status && att.status !== 'มา' && att.status !== '-';

@@ -875,8 +875,8 @@ function calcRow(stdId, safeStdId) {
   const btn = document.getElementById('btnSaveScores');
   if (typeof isHeaderEditMode !== 'undefined' && !isHeaderEditMode && btn) {
       if (typeof autoSaveTimer !== 'undefined') clearTimeout(autoSaveTimer);
-      btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin me-2"></i>รอเซฟ (3 วิ)...';
-      btn.className = "btn btn-outline-warning text-dark shadow-sm px-4 fw-bold"; 
+      btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin me-1"></i>รอเซฟ...';
+      btn.className = "btn btn-soft btn-sm";
       autoSaveTimer = setTimeout(() => { 
           if (typeof saveAllInOneScores === 'function') saveAllInOneScores(true); 
       }, 3000); 
@@ -895,8 +895,8 @@ function saveAllInOneScores(isSilent = false) {
 
   const val = document.getElementById('scoreClassSelect').value;
   const btn = document.getElementById('btnSaveScores');
-  const originalBtnClass = "btn btn-primary rounded-pill shadow-sm px-4 fw-bold";
-  const originalText = '<i class="fas fa-save me-2"></i>บันทึกข้อมูลทั้งหมด';
+  const originalBtnClass = "btn btn-accent btn-sm";
+  const originalText = '<i class="fas fa-save me-1"></i>บันทึก';
 
   if(!val) { isSavingScores = false; return; }
   const item = JSON.parse(val);
@@ -912,8 +912,8 @@ function saveAllInOneScores(isSilent = false) {
      btn.className = originalBtnClass;
      btn.disabled = true;
   } else if (btn) {
-     btn.innerHTML = '<i class="fas fa-sync fa-spin me-2"></i>กำลัง Auto-Save...';
-     btn.className = "btn btn-info text-white shadow-sm px-4 fw-bold";
+     btn.innerHTML = '<i class="fas fa-sync fa-spin me-1"></i>Auto-Save...';
+     btn.className = originalBtnClass;
   }
 
   try {
@@ -1727,8 +1727,8 @@ function calcEvalRow(safeStdId, type, isInit = false) {
         const btn = document.getElementById('btnSaveScores');
         if (typeof isHeaderEditMode !== 'undefined' && !isHeaderEditMode && btn) {
             if (typeof autoSaveTimer !== 'undefined') clearTimeout(autoSaveTimer);
-            btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin me-2"></i>รอเซฟ (3 วิ)...';
-            btn.className = "btn btn-outline-warning text-dark shadow-sm px-4 fw-bold"; 
+            btn.innerHTML = '<i class="fas fa-hourglass-half fa-spin me-1"></i>รอเซฟ...';
+            btn.className = "btn btn-soft btn-sm";
             autoSaveTimer = setTimeout(() => { 
                 if (typeof saveAllInOneScores === 'function') saveAllInOneScores(true); 
             }, 3000); 

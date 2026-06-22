@@ -125,9 +125,10 @@ async function getSemesterReport([subjectCode, className, term, year]) {
           id: sessionID, rawDate: d.getTime(),
           month: MONTHS[d.getMonth()], date: d.getDate(),
           period: String(r.period).trim(),
+          displayDate: d.toISOString().split('T')[0],
         };
       } else {
-        sessionDetails[sessionID] = { id: sessionID, rawDate: 0, month: '-', date: '-', period: String(r.period).trim() };
+        sessionDetails[sessionID] = { id: sessionID, rawDate: 0, month: '-', date: '-', period: String(r.period).trim(), displayDate: '' };
       }
     }
     if (!studentInfo[stdKey]) studentInfo[stdKey] = { id: stdID, name: r.student_name };
@@ -136,11 +137,15 @@ async function getSemesterReport([subjectCode, className, term, year]) {
   }
 
   const sessionsList = Object.values(sessionDetails).sort((a, b) => a.rawDate - b.rawDate);
-  let currentWeek = 1, pCount = 0;
+  // Assign week numbers based on actual calendar week (Monday = start of week)
+  // so sessions in the same calendar week share the same week number
+  const mondayToWeek = new Map();
+  let weekCounter = 0;
   for (const s of sessionsList) {
-    s.week = currentWeek;
-    pCount++;
-    if (pCount >= periodsPerWeek) { pCount = 0; currentWeek++; }
+    const utcDay = new Date(s.rawDate).getUTCDay(); // 0=Sun, 1=Mon..6=Sat
+    const mondayMs = s.rawDate - ((utcDay + 6) % 7) * 86400000;
+    if (!mondayToWeek.has(mondayMs)) mondayToWeek.set(mondayMs, ++weekCounter);
+    s.week = mondayToWeek.get(mondayMs);
   }
   const currentTotalTaught = sessionsList.length;
 

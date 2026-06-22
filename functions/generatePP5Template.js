@@ -3,6 +3,10 @@ const fs = require('fs').promises;
 
 const TEMPLATE_PATH = path.join(__dirname, '../src/Template_PP5.html');
 
+function _normID(id) {
+  return String(id || '').replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, '') || '0';
+}
+
 function _esc(s) {
   if (s == null) return '';
   return String(s)
@@ -53,7 +57,42 @@ async function generatePP5Template([payload]) {
     _cached = compileTemplate(src);
     _cachedMtime = stat.mtimeMs;
   }
-  return _cached(payload, _esc);
+
+  // Fetch fresh attendance data server-side so ปพ.5 always reflects latest saves
+  let finalPayload = payload;
+  try {
+    const { getSemesterReport } = require('./attendanceReport');
+    const subCode = payload.subCode;
+    const className = payload.className;
+    const term = payload.user?.currentTerm;
+    const year = payload.user?.currentYear;
+    if (subCode && className && term && year) {
+      const attReport = await getSemesterReport([subCode, className, term, year]);
+      const freshSessions = (attReport.meta && attReport.meta.sessionsList) || [];
+      const attMap = {};
+      for (const s of attReport.students || []) {
+        attMap[_normID(s.id)] = {
+          percent: s.percent, present: s.present, late: s.late,
+          leave: s.leave, absent: s.absent, records: s.records || {},
+        };
+      }
+      const updatedStudents = (payload.students || []).map(s => {
+        const att = attMap[_normID(s.id)] || {};
+        return {
+          ...s,
+          attPct:     att.percent !== undefined ? att.percent : '-',
+          attPresent: att.present !== undefined ? att.present : '-',
+          attLate:    att.late    !== undefined ? att.late    : '-',
+          attLeave:   att.leave   !== undefined ? att.leave   : '-',
+          attAbsent:  att.absent  !== undefined ? att.absent  : '-',
+          attRecords: att.records || {},
+        };
+      });
+      finalPayload = { ...payload, attSessions: freshSessions, students: updatedStudents };
+    }
+  } catch (_) { /* attendance optional — render with whatever frontend sent */ }
+
+  return _cached(finalPayload, _esc);
 }
 
 module.exports = { generatePP5Template };
