@@ -869,7 +869,7 @@ function renderMassiveGridModal() {
                     </div>
                     <div class="d-flex gap-2">
                         <button class="btn btn-sm rounded-pill px-3" style="color:var(--p-text-muted);" data-bs-dismiss="modal">ยกเลิก</button>
-                        <button class="btn btn-sm fw-bold rounded-pill px-4 text-white"
+                        <button id="btnSaveMassiveGrid" class="btn btn-sm fw-bold rounded-pill px-4 text-white"
                                 style="background:var(--p-accent);" onclick="saveMassiveGrid()">
                             <i class="fas fa-save me-1"></i>บันทึกทั้งหมด
                         </button>
@@ -1176,14 +1176,18 @@ function saveMassiveGrid() {
     Swal.fire({ title: 'ยืนยันการบันทึกข้อมูล?', html: summaryHtml, icon: 'question', showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก' })
     .then(r => {
         if (!r.isConfirmed) return;
-        const btn = document.querySelector('#massiveGridModal .btn-success');
-        const oldText = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังประมวลผล...';
-        btn.disabled = true;
+        // id ตายตัว — เคยหาด้วย .btn-success แล้วพังตอนเปลี่ยนสไตล์ปุ่ม (btn เป็น null → throw เงียบ)
+        const btn = document.getElementById('btnSaveMassiveGrid');
+        const oldText = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังประมวลผล...';
+            btn.disabled = true;
+        }
+        const resetBtn = () => { if (btn) { btn.innerHTML = oldText; btn.disabled = false; } };
 
-        const onError = err => { btn.innerHTML = oldText; btn.disabled = false; showAlert("❌ " + err.message); };
+        const onError = err => { resetBtn(); showAlert("❌ " + err.message); };
         const onDone = () => {
-            btn.innerHTML = oldText; btn.disabled = false;
+            resetBtn();
             showAlert("✅ บันทึกสำเร็จ");
             const modalEl = document.getElementById('massiveGridModal');
             bootstrap.Modal.getInstance(modalEl)?.hide();
