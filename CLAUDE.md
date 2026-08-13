@@ -341,6 +341,29 @@ Buckets:  percent < 60  → critical
 
 **อย่าใช้** `COUNT(*)` ของ attendance เป็นตัวหาร — จะทำให้ percent inflate.
 
+### Massive Grid — auto-generate คาบย้อนหลัง
+
+`getMassiveAttendanceGrid` ไม่ได้คืนแค่ session ที่เคยเช็คแล้ว แต่เติม**ทุกคาบที่
+ควรจะสอน**ให้ด้วย ครูจะได้เช็คย้อนหลังวันที่ลืมโดยไม่ต้องกรอกวัน+คาบเอง
+
+```
+slots  = timetable WHERE subject_code+term+year, filter ด้วย normalize(level/room)==className
+ช่วง   = system_settings TermData[`${term}_${year}`].value1 (เปิดเทอม)
+         → min(value2 ปิดเทอม, วันนี้)   — ไม่ generate อนาคต
+ข้าม   = วันหยุดจาก calendar_events ที่ color='#dc3545'
+merge  = session ที่มี attendance อยู่แล้วมาก่อน, ที่เหลือ generate (sessionId='')
+```
+
+- **วันหยุดกรองเฉพาะตอน generate** — วันที่มี attendance แล้วต้องแสดงเสมอ เพราะ
+  โรงเรียนสอนในวันหยุดบางวันจริง (เช่น พืชมงคล 13 พ.ค. 2569 มีข้อมูลเช็ค)
+- `#dc3545` เป็น**ข้อตกลงเรื่องสี** ไม่ใช่ column ใน schema (`calendar_events`
+  ไม่มีคอลัมน์ is_holiday) — ตรวจแล้ว 12/12 event สีแดงเป็นวันหยุดราชการล้วน
+- ไม่มี timetable หรือไม่มี TermData → คืน `[]` fallback ไปแสดงเฉพาะที่เช็คแล้ว
+- **HR ไม่ auto** (ตั้งใจ) — จันทร์-ศุกร์ × 3 ช่อง/วัน จะกลายเป็น ~200 คอลัมน์
+  ใช้ปุ่ม "เพิ่มวัน" เหมือนเดิม
+- Frontend ทำสีเหลือง + ป้าย "ยังไม่เช็ค" ให้คอลัมน์ที่ `sessionId===''`
+  และนับรวมไว้บนหัว modal
+
 ### Normalize helper
 ```js
 const normalize = (s) => String(s||'').replace(/[^a-zA-Z0-9ก-๙]/g, '');

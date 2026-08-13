@@ -755,9 +755,12 @@ function renderMassiveGridModal() {
             <th class="bg-dark text-white align-middle text-center" style="${stickyBase} left:0; min-width:40px;">ที่</th>
             <th class="bg-dark text-white align-middle" style="${stickyBase} left:40px; min-width:150px;">ชื่อ-สกุล</th>`;
         sessions.forEach(sess => {
-            theadHtml += `<th class="bg-primary text-white text-center border-start border-end" style="min-width:80px;">
+            // คาบที่ระบบดึงมาจากตารางสอนแต่ยังไม่เคยเช็ค — ทำสีต่างให้หาเจอง่ายในตารางยาว ๆ
+            const pending = !sess.sessionId;
+            theadHtml += `<th class="${pending ? 'bg-warning text-dark' : 'bg-primary text-white'} text-center border-start border-end" style="min-width:80px;">
                 <div class="small fw-normal">${sess.displayDate}</div>
-                <div class="badge bg-light text-dark mt-1">คาบ ${sess.period}</div>
+                <div class="badge ${pending ? 'bg-dark text-warning' : 'bg-light text-dark'} mt-1">คาบ ${sess.period}</div>
+                ${pending ? '<div class="fw-bold" style="font-size:0.6rem;line-height:1;margin-top:2px;">ยังไม่เช็ค</div>' : ''}
             </th>`;
         });
         theadHtml += `<th class="bg-success text-white text-center align-middle" style="min-width:120px;cursor:pointer;" onclick="openAddSessionModal()">
@@ -840,7 +843,10 @@ function renderMassiveGridModal() {
                 <div class="modal-header text-white border-0 p-3 shadow-sm" style="background: linear-gradient(135deg, #212529 0%, #343a40 100%);">
                     <div>
                         <h5 class="modal-title fw-bold mb-0 text-warning"><i class="fas fa-table me-2"></i>ตารางบันทึกเช็คชื่อย้อนหลัง (Massive Grid)</h5>
-                        <div class="small mt-1 opacity-75">วิชา: ${massiveGridData.subjectCode} ${massiveGridData.subjectName} | ห้อง ${massiveGridData.className}</div>
+                        <div class="small mt-1 opacity-75">วิชา: ${massiveGridData.subjectCode} ${massiveGridData.subjectName} | ห้อง ${massiveGridData.className}${
+                          (() => { const p = sessions.filter(s => !s.sessionId).length;
+                                   return p ? ` <span class="badge bg-warning text-dark ms-2">ยังไม่เช็ค ${p} คาบ</span>` : ''; })()
+                        }</div>
                     </div>
                     <button type="button" class="btn-close btn-close-white shadow-none" data-bs-dismiss="modal"></button>
                 </div>

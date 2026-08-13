@@ -196,16 +196,92 @@ async function getMassiveAttendanceGrid([, subjectCode, className, term, year], 
     attendance[r.student_id][r.date_str + '_' + r.period] = { status: r.status, rowIdx: r.id };
   }
 
-  return {
-    students: studentsRes,
-    sessions: sessionsRes.rows.map(r => ({
-      sessionId: r.session_id,
-      date: r.date,
-      period: r.period,
-      displayDate: toThaiDate(r.date),
-    })),
-    attendance,
-  };
+  const sessions = sessionsRes.rows.map(r => ({
+    sessionId: r.session_id,
+    date: r.date,
+    period: r.period,
+    displayDate: toThaiDate(r.date),
+  }));
+
+  // Fill in every period the timetable says was taught but that was never checked,
+  // so a teacher can backfill a missed day without hand-entering date+period.
+  const expected = await _expectedSessions(subjectCode, className, term, year);
+  const seen = new Set(sessions.map(s => `${s.date}_${s.period}`));
+  for (const e of expected) {
+    if (seen.has(`${e.date}_${e.period}`)) continue;
+    seen.add(`${e.date}_${e.period}`);
+    sessions.push({ sessionId: '', date: e.date, period: e.period, displayDate: toThaiDate(e.date) });
+  }
+  sessions.sort((a, b) => a.date.localeCompare(b.date) || String(a.period).localeCompare(String(b.period), undefined, { numeric: true }));
+
+  return { students: studentsRes, sessions, attendance };
+}
+
+const THAI_DOW = { 'อาทิตย์': 0, 'จันทร์': 1, 'อังคาร': 2, 'พุธ': 3, 'พฤหัสบดี': 4, 'ศุกร์': 5, 'เสาร์': 6 };
+
+// Every (date, period) this subject+class should have been taught, from the term
+// start date up to today. Returns [] when the timetable or term dates are missing —
+// the grid then falls back to showing only what was actually recorded.
+async function _expectedSessions(subjectCode, className, term, year) {
+  const normalize = (s) => String(s || '').replace(/[^a-zA-Z0-9ก-๙]/g, '');
+  const normClass = normalize(className);
+
+  const ttRes = await query(
+    `SELECT day, period, level, room FROM timetable
+     WHERE subject_code=$1 AND term=$2 AND year=$3`,
+    [subjectCode, String(term), String(year)]
+  );
+  const slots = ttRes.rows
+    .filter(r => normalize(`${r.level}/${r.room}`) === normClass)
+    .map(r => ({ dow: THAI_DOW[String(r.day || '').trim()], period: String(r.period) }))
+    .filter(s => s.dow !== undefined);
+  if (!slots.length) return [];
+
+  const tdRes = await query(
+    `SELECT value1, value2 FROM system_settings WHERE key='TermData' AND subkey=$1`,
+    [`${term}_${year}`]
+  );
+  if (!tdRes.rows.length || !tdRes.rows[0].value1) return [];
+
+  const start = new Date(`${String(tdRes.rows[0].value1).slice(0, 10)}T00:00:00Z`);
+  const termEnd = tdRes.rows[0].value2 ? new Date(`${String(tdRes.rows[0].value2).slice(0, 10)}T00:00:00Z`) : null;
+  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const end = termEnd && termEnd < today ? termEnd : today;
+  if (isNaN(start) || start > end) return [];
+
+  const holidays = await _holidayDates(start, end);
+
+  const out = [];
+  for (const d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const dow = d.getUTCDay();
+    const dateStr = d.toISOString().slice(0, 10);
+    if (holidays.has(dateStr)) continue;
+    for (const s of slots) {
+      if (s.dow === dow) out.push({ date: dateStr, period: s.period });
+    }
+  }
+  return out;
+}
+
+// Public holidays are flagged in calendar_events by the red colour the import uses
+// (#dc3545) — there is no dedicated column. Only used to suppress *generated*
+// sessions; a date that already has attendance is always shown, because the school
+// does sometimes teach on one (e.g. พืชมงคล 2026-05-13).
+const HOLIDAY_COLOR = '#dc3545';
+async function _holidayDates(start, end) {
+  const days = new Set();
+  const { rows } = await query(
+    `SELECT to_char(start_date,'YYYY-MM-DD') as s, to_char(COALESCE(end_date,start_date),'YYYY-MM-DD') as e
+     FROM calendar_events
+     WHERE color=$1 AND start_date <= $3 AND COALESCE(end_date, start_date) >= $2`,
+    [HOLIDAY_COLOR, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
+  );
+  for (const r of rows) {
+    for (const d = new Date(`${r.s}T00:00:00Z`); d <= new Date(`${r.e}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+      days.add(d.toISOString().slice(0, 10));
+    }
+  }
+  return days;
 }
 
 // args: subjectCode, subjectName, className, term, year, updates, newRecords, (ignored teacherId)
