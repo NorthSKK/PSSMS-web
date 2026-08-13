@@ -576,6 +576,16 @@ http.request({hostname:'localhost',port:3000,path:'/api/gas/fnName',
 - เทอม: `"1"` หรือ `"2"` (string)
 - ID เปรียบเทียบด้วย `String(x).trim()` เสมอ
 - `normID(id)` — `String(id).replace(/[^a-zA-Z0-9]/g,'').replace(/^0+/,'') || '0'` (ใช้กับ student IDs)
+
+⚠️ **รหัสนักเรียนมี 0 นำหน้าทุกคน (`01903`) — normID/parseInt ตัดทิ้ง (`1903`)**
+ใช้ id ที่ตัดแล้วได้เฉพาะกับ **DOM element id** เท่านั้น (เลี่ยง selector พัง)
+ส่วน **key ของ data map ที่มาจาก DB ต้องใช้ id ดิบเสมอ** เพราะ backend key ด้วย
+`student_id` ตรง ๆ ผสมกันเมื่อไหร่ = lookup ไม่เจอ แล้ว fail เงียบ ไม่มี error
+
+เคยพลาดมาแล้ว 2 ครั้ง:
+- `saveMassiveGrid` lookup `attendance[cleanStdId]` → `origAtt` undefined ทุกแถว
+  → ไม่ส่ง update เลย ครูกดบันทึกแล้วข้อมูลไม่เปลี่ยน แต่ขึ้น "บันทึกสำเร็จ"
+- attendance report นับนักเรียนซ้ำเพราะ id ดิบกับ id ที่ normalize ปนกัน (commit `d25de40`)
 - `normalize(str)` — keep Thai + alphanumeric only (ใช้กับ class names, subject codes match)
 - ภาษาไทยทั้ง UI + error message
 - Default admin: `admin` / `1234` — เปลี่ยนก่อน production

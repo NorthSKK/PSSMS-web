@@ -1138,7 +1138,9 @@ function saveMassiveGrid() {
             const isNew = select.getAttribute('data-isnew') === 'true';
 
             if (!isNew && rowIdx) {
-                const origAtt = massiveGridData.attendance[cleanStdId]?.[sessionKey];
+                // attendance map ถูก key ด้วย student_id ดิบ (มี 0 นำหน้า) เหมือนตอน render
+                // — ห้ามใช้ cleanStdId ที่นี่ เพราะจะ lookup ไม่เจอ แล้ว update หายเงียบ ๆ
+                const origAtt = massiveGridData.attendance[stdId]?.[sessionKey];
                 if (origAtt && origAtt.status !== status) {
                     updates.push({ rowIdx: parseInt(rowIdx), status, hrType });
                 }
