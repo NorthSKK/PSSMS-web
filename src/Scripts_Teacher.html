@@ -461,13 +461,65 @@ function loadTeacherAtRiskDashboard(teacherId, term, year) {
 
 function renderTeacherAtRiskDashboard(data, container) {
   const { critical, ms, risk } = data;
+  window.currentAtRiskData = data; // ให้ copyAtRiskList หยิบไปใช้
+  const copyBtn = (bucket) => `<button class="btn btn-sm btn-light text-primary rounded-circle shadow-sm ms-2 py-0 px-1" title="คัดลอกรายชื่อส่งไลน์/เฟซบุ๊ก" onclick="copyAtRiskList('${bucket}')" style="line-height:1.4;"><i class="fas fa-copy" style="font-size:0.75rem;"></i></button>`;
   const renderList = (arr, colorClass) => {
     if(arr.length === 0) return `<div class="text-center text-muted small py-4">ยอดเยี่ยม! ไม่มีนักเรียนในกลุ่มนี้ 🎉</div>`;
     return arr.map(s => `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div style="flex-grow:1; padding-right:10px;"><div class="fw-bold text-dark" style="font-size: 0.85rem;">${s.id} ${s.name}</div><div class="text-primary" style="font-size: 0.75rem;"><i class="fas fa-book me-1"></i>${s.subjectCode} (${s.className})</div><div class="text-muted" style="font-size: 0.7rem;">สอนไป ${s.taught} คาบ (ขาด <span class="text-danger fw-bold">${s.absent}</span>, ลา <span class="text-info">${s.leave}</span>)</div></div><div><span class="badge bg-${colorClass} rounded-pill shadow-sm" style="font-size: 0.85rem;">${s.percent}%</span></div></div>`).join('');
   };
   
-  const html = `<h6 class="fw-bold text-danger mb-3 border-bottom pb-2 border-danger border-2 d-inline-block mt-2"><i class="fas fa-exclamation-triangle me-2"></i>กระดานแจ้งเตือนกลุ่มเสี่ยง (รวมทุกวิชาที่สอน)</h6><div class="row g-3"><div class="col-md-4"><div class="card border-danger shadow-sm h-100"><div class="card-header bg-danger text-white fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-ban me-1"></i> หมดสิทธิ์ (< 60%)</span><span class="badge bg-white text-danger">${critical.length}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(critical, 'danger')}</div></div></div><div class="col-md-4"><div class="card border-warning shadow-sm h-100"><div class="card-header bg-warning text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-exclamation-circle me-1"></i> ติด มส. (60-79%)</span><span class="badge bg-white text-dark">${ms.length}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(ms, 'warning text-dark')}</div></div></div><div class="col-md-4"><div class="card border-info shadow-sm h-100"><div class="card-header bg-info text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-search me-1"></i> กลุ่มเสี่ยง (80-85%)</span><span class="badge bg-white text-dark">${risk.length}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(risk, 'info text-dark')}</div></div></div></div>`;
+  const html = `<h6 class="fw-bold text-danger mb-3 border-bottom pb-2 border-danger border-2 d-inline-block mt-2"><i class="fas fa-exclamation-triangle me-2"></i>กระดานแจ้งเตือนกลุ่มเสี่ยง (รวมทุกวิชาที่สอน)</h6><div class="row g-3"><div class="col-md-4"><div class="card border-danger shadow-sm h-100"><div class="card-header bg-danger text-white fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-ban me-1"></i> หมดสิทธิ์ (< 60%)</span><span class="d-flex align-items-center"><span class="badge bg-white text-danger">${critical.length}</span>${copyBtn('critical')}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(critical, 'danger')}</div></div></div><div class="col-md-4"><div class="card border-warning shadow-sm h-100"><div class="card-header bg-warning text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-exclamation-circle me-1"></i> ติด มส. (60-79%)</span><span class="d-flex align-items-center"><span class="badge bg-white text-dark">${ms.length}</span>${copyBtn('ms')}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(ms, 'warning text-dark')}</div></div></div><div class="col-md-4"><div class="card border-info shadow-sm h-100"><div class="card-header bg-info text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-search me-1"></i> กลุ่มเสี่ยง (80-85%)</span><span class="d-flex align-items-center"><span class="badge bg-white text-dark">${risk.length}</span>${copyBtn('risk')}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(risk, 'info text-dark')}</div></div></div></div>`;
   container.innerHTML = html;
+}
+
+// ==========================================
+// 📋 คัดลอกรายชื่อกลุ่มเสี่ยงเวลาเรียน ส่ง LINE / Facebook
+// ==========================================
+window.copyAtRiskList = function(bucket) {
+    const data = window.currentAtRiskData;
+    if (!data) return;
+
+    const labels = {
+      critical: 'หมดสิทธิ์สอบ (เวลาเรียน < 60%)',
+      ms: 'ติด มส. (เวลาเรียน 60-79%)',
+      risk: 'กลุ่มเสี่ยง (เวลาเรียน 80-85%)',
+    };
+    const arr = data[bucket] || [];
+    if (arr.length === 0) {
+        if (typeof showToast === 'function') showToast('ไม่มีนักเรียนในกลุ่มนี้', 'info');
+        else showAlert('ไม่มีนักเรียนในกลุ่มนี้');
+        return;
+    }
+
+    // จัดกลุ่มตามวิชา+ห้อง — ครูส่งเข้ากลุ่มแชทของห้องนั้น ๆ
+    let grouped = {};
+    arr.forEach(s => {
+        const key = `${s.subjectName || s.subjectCode}|||${s.subjectCode}|||${s.className || 'ไม่ระบุห้อง'}`;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(s);
+    });
+
+    let textToCopy = `🚨 แจ้งเตือนเวลาเรียน — ${labels[bucket] || bucket} 🚨\n`;
+    textToCopy += `----------------------------------\n`;
+
+    Object.keys(grouped).sort().forEach(key => {
+        const [subName, subCode, cls] = key.split('|||');
+        textToCopy += `📚 ${subName} (${subCode}) — ห้อง ${cls}\n`;
+        grouped[key].forEach(s => {
+            textToCopy += `   - ${s.id} ${s.name} — ${s.percent}% (ขาด ${s.absent}, ลา ${s.leave})\n`;
+        });
+        textToCopy += `\n`;
+    });
+
+    textToCopy += `----------------------------------\n`;
+    textToCopy += `⚠️ รบกวนนักเรียนที่มีรายชื่อ ติดต่อครูผู้สอนด่วนครับ!`;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        if (typeof showToast === 'function') showToast(`✅ คัดลอกรายชื่อ ${arr.length} คน สำเร็จ!`, 'success');
+        else showAlert(`คัดลอกรายชื่อ ${arr.length} คน สำเร็จ!`);
+    }).catch(err => {
+        showAlert('❌ เบราว์เซอร์ไม่รองรับการคัดลอก กรุณาเปลี่ยนเบราว์เซอร์ครับ: ' + err);
+    });
 }
 
 // ==========================================

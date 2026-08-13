@@ -354,6 +354,20 @@ Return:
 - `riskDashboard` — grade-based (0, ร, มส.) จาก `grade_summary` table — แสดงในการ์ด "นักเรียนกลุ่มเสี่ยง"
 - `atRiskDashboard` — attendance-based จาก `attendanceReport.getTeacherAtRiskDashboard` — แสดงใน "กระดานแจ้งเตือนกลุ่มเสี่ยง"
 
+### ปุ่มคัดลอกรายชื่อส่ง LINE / Facebook
+
+ทั้ง 2 การ์ดมีปุ่ม copy รายชื่อเป็น plain text ให้ครูส่งเข้าแชทนักเรียน:
+
+| การ์ด | ฟังก์ชัน | จัดกลุ่มตาม | ปุ่มอยู่ที่ |
+|---|---|---|---|
+| นักเรียนกลุ่มเสี่ยง (เกรด) | `copyRiskListByClass(cls)` | ห้อง → วิชา → ประเภท (0/ร/มส) | header ของการ์ดแต่ละห้อง |
+| กระดานแจ้งเตือน (เวลาเรียน) | `copyAtRiskList(bucket)` | วิชา+ห้อง | header ของ bucket ทั้ง 3 (`critical`/`ms`/`risk`) |
+
+`copyAtRiskList` อ่านจาก `window.currentAtRiskData` ที่
+`renderTeacherAtRiskDashboard()` เก็บไว้ตอน render (แบบเดียวกับ
+`window.currentRiskDetails` ของการ์ดเกรด) ใช้ `navigator.clipboard.writeText`
++ `showToast` — ถ้า bucket ว่างจะ toast แจ้งแทนการ copy ค่าว่าง
+
 แต่ละ section wrap ด้วย:
 ```js
 function section(fn) {
