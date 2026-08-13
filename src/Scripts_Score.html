@@ -798,9 +798,38 @@ function reCalcAllRows() {
   currentScoreStudents.forEach(std => {
       calcRow(String(std[0]).trim(), normID(std[0]));
   });
+
+  fitGridHeight();
 }
 
-let autoSaveTimer = null; 
+// ห้องที่นักเรียนเยอะเคยมี scrollbar 2 อัน (ตารางเลื่อนในตัวเอง + หน้าเว็บล้นอีก)
+// เพราะ max-height เป็นเลขตายตัว calc(100vh - 230px) ไม่ตรงกับตำแหน่งจริงของตาราง
+// คำนวณจากขอบบนจริงแทน ตารางจะจบพอดีขอบจอ → เหลือ scrollbar อันเดียว
+function fitGridHeight() {
+  document.querySelectorAll('.grid-scroll-container').forEach(c => {
+    const r = c.getBoundingClientRect();
+    if (r.height === 0) return;                    // ตารางในแท็บที่ซ่อนอยู่ — ข้าม
+    const docTop = r.top + window.scrollY;         // ระยะจากหัวเอกสาร (ไม่ขึ้นกับ scroll ปัจจุบัน)
+    c.style.maxHeight = Math.max(260, window.innerHeight - docTop - 18) + 'px';
+
+    // padding/margin ของ layout รอบนอกทำให้หน้ายังล้นได้อีกนิด — วัดส่วนเกินจริงแล้วหักออก
+    // ดีกว่าเดาเป็นตัวเลขตายตัวเพราะแต่ละหน้า/ขนาดจอไม่เท่ากัน
+    const overflow = document.documentElement.scrollHeight - window.innerHeight;
+    if (overflow > 0) {
+      c.style.maxHeight = Math.max(260, c.clientHeight - overflow) + 'px';
+    }
+  });
+}
+
+let _fitGridTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_fitGridTimer);
+  _fitGridTimer = setTimeout(fitGridHeight, 120);
+});
+// ตารางในแท็บที่ซ่อนอยู่วัดความสูงไม่ได้ — วัดใหม่ตอนสลับมาแสดง
+document.addEventListener('shown.bs.tab', () => setTimeout(fitGridHeight, 60));
+
+let autoSaveTimer = null;
 let retrySaveTimer = null;
 
 function calcRow(stdId, safeStdId) {
@@ -1693,6 +1722,8 @@ function renderEvalTable(students, existingQuals) {
       calcEvalRow(normID(std[0]), 'c', true);
       calcEvalRow(normID(std[0]), 'r', true);
   });
+
+  fitGridHeight();
 }
 
 function calcEvalRow(safeStdId, type, isInit = false) {
