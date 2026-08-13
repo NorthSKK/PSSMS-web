@@ -190,6 +190,58 @@ async function _writeScoreRows(scoreRows, subjectCode, term, year, auditTeacherI
   }
 }
 
+// True if a student's assessment is done: explicit remark ('ร'/'มส') always counts
+// (means "work missing" by definition), otherwise every formative indicator plus
+// midterm/final (only when the ratio actually uses them) must have a real score.
+// Without this gate, autosave (3s after any single-cell edit) would persist
+// grade=0 for every ungraded student the instant a teacher touches one cell.
+function _isGradeRowComplete(studentId, scoreRecords, formativeCount, midtermRatio, finalRatio) {
+  const rows = (scoreRecords || []).filter(r => String(r.studentId).trim() === String(studentId).trim());
+  const has = (id) => rows.some(r => r.indicatorId === id && r.score !== '' && r.score !== null && r.score !== undefined);
+  const remarkRow = rows.find(r => r.indicatorId === 'remark');
+  const remarkVal = remarkRow ? String(remarkRow.score || '').trim() : '';
+  if (remarkVal === 'ร' || remarkVal === 'มส') return true;
+  for (let i = 0; i < formativeCount; i++) {
+    if (!has(`formative_${i}`)) return false;
+  }
+  if (midtermRatio > 0 && !has('midterm')) return false;
+  if (finalRatio > 0 && !has('final')) return false;
+  return true;
+}
+
+// Persists the per-student grade roll-up that the ปพ.5 grid already computed
+// client-side (calcRow / calculateGrade in Scripts_Score.html).
+// `grade` already carries the remark ('ร' / 'มส') when one is set — see calcRow.
+// Caller must pre-filter to complete rows only — see _isGradeRowComplete.
+async function _writeGradeRows(gradeRows, subjectCode, term, year) {
+  const filtered = (gradeRows || []).filter(r => r && r.studentId !== undefined && r.studentId !== null && String(r.studentId).trim() !== '');
+  if (!filtered.length) return 0;
+
+  const n = filtered.length;
+  const toNum = (v) => { const x = parseFloat(v); return isNaN(x) ? null : x; };
+  const toStr = (v) => String(v === undefined || v === null ? '' : v).trim();
+
+  await query(
+    `INSERT INTO grade_summary(student_id,subject_code,total_score,grade,remedial_status,term,year)
+     SELECT * FROM unnest($1::text[],$2::text[],$3::numeric[],$4::text[],$5::text[],$6::text[],$7::text[])
+       AS v(student_id,subject_code,total_score,grade,remedial_status,term,year)
+     ON CONFLICT(student_id,subject_code,term,year) DO UPDATE
+       SET total_score=EXCLUDED.total_score,
+           grade=EXCLUDED.grade,
+           remedial_status=EXCLUDED.remedial_status`,
+    [
+      filtered.map(r => toStr(r.studentId)),
+      Array(n).fill(subjectCode),
+      filtered.map(r => toNum(r.totalScore)),
+      filtered.map(r => toStr(r.grade)),
+      filtered.map(r => toStr(r.remark)),
+      Array(n).fill(term),
+      Array(n).fill(year),
+    ]
+  );
+  return n;
+}
+
 async function saveAllInOneScores([scoreRows, subjectCode, term, year], user) {
   if (!Array.isArray(scoreRows) || scoreRows.length === 0) return { status: 'success', message: 'ไม่มีคะแนนที่ต้องบันทึก' };
   await verifyTeacherOwnsSubject(user, subjectCode, null, term, year);
@@ -204,7 +256,7 @@ async function saveAllInOneScores([scoreRows, subjectCode, term, year], user) {
 //   gradeRecords: [...] }
 async function saveAllInOneWithConfig([payload], user) {
   const p = payload || {};
-  const { subjectCode, className, term, year, newConfig, scoreRecords, qualRecords } = p;
+  const { subjectCode, className, term, year, newConfig, scoreRecords, qualRecords, gradeRecords } = p;
 
   await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
   const effectiveTeacherId = resolveTeacherId(user, p.teacherId);
@@ -262,6 +314,18 @@ async function saveAllInOneWithConfig([payload], user) {
       throw e;
     } finally {
       client.release();
+    }
+  }
+
+  if (Array.isArray(gradeRecords) && gradeRecords.length > 0) {
+    const formativeCount = (newConfig && Array.isArray(newConfig.indicators)) ? newConfig.indicators.length : 0;
+    const midtermRatio = newConfig ? (parseFloat(newConfig.midterm) || 0) : 0;
+    const finalRatio = newConfig ? (parseFloat(newConfig.final) || 0) : 0;
+    const completeRecords = gradeRecords.filter(r =>
+      _isGradeRowComplete(r.studentId, scoreRecords, formativeCount, midtermRatio, finalRatio)
+    );
+    if (completeRecords.length > 0) {
+      await _writeGradeRows(completeRecords, subjectCode, term, year);
     }
   }
 

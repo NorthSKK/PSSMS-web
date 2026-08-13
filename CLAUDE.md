@@ -253,6 +253,59 @@ const pickDept = (u) => String(u.department || u.dept || '').trim();
 ```
 ห้ามใช้ `readingWriting/charJson/compJson` (ชื่อเก่า ผิด)
 
+### `gradeRecords` payload (frontend → backend)
+```js
+{ studentId, subjectCode, totalScore, grade, remark }
+```
+`saveAllInOneWithConfig` เขียนลง `grade_summary` ผ่าน `_writeGradeRows()`.
+`grade` มีค่า remark (`ร`/`มส`) อยู่แล้วเมื่อครูเลือก remark — `calcRow()` ใน
+`src/Scripts_Score.html` เขียนทับช่องเกรดให้ ไม่ต้องแปลงซ้ำใน backend.
+
+**ต้อง destructure `gradeRecords` ใน `saveAllInOneWithConfig`** — เคยตกหล่นทำให้
+`grade_summary` ว่างและการ์ด "นักเรียนกลุ่มเสี่ยง (0, ร, มส.)" ไม่ขึ้น
+โดยที่ frontend ยังได้ `{status:'success'}` ทุกครั้ง (silent drop)
+
+### สูตรรวมคะแนน (`calcRow` — ต้องตรงกันทั้ง frontend / backfill)
+```
+sumFormative     = Σ formative_i
+effectiveMidterm = midterm_re ถ้ามีค่า มิฉะนั้น midterm
+total            = sumFormative + effectiveMidterm + final
+grade            = remark ถ้าเป็น 'ร'/'มส' มิฉะนั้น calculateGrade(total)
+
+calculateGrade: ≥80→4  ≥75→3.5  ≥70→3  ≥65→2.5  ≥60→2  ≥55→1.5  ≥50→1  else 0
+```
+
+### Completeness gate — ก่อนเขียน `grade_summary`
+
+`calcRow()` คำนวณ total บนหน้าจอโดยถือว่าช่องว่าง = 0 เสมอ (สำหรับ preview
+สด) — แต่ frontend autosave ทุก 3 วินาทีหลังแก้ 1 ช่อง แล้วส่ง `gradeRecords`
+ของนักเรียน**ทั้งห้อง**ทุกครั้ง ถ้าเขียนตรง ๆ ลง `grade_summary` จะได้ grade=0
+ปลอมสำหรับนักเรียนที่ยังกรอกคะแนนไม่ครบ (พบจริง: 90/91 false positive ตอน
+เทอมยังไม่จบ)
+
+ทั้ง `_writeGradeRows()` (`functions/scores.js`) และ backfill script ต้องกรอง
+ผ่าน `_isGradeRowComplete()` ก่อนเขียนเสมอ — เขียนได้เมื่อ:
+- นักเรียนถูกตั้ง remark `ร`/`มส` โดยครูชัดเจน (ถือว่า complete เสมอ — remark
+  แปลว่า "ไม่มีคะแนนให้" อยู่แล้วโดยนิยาม), **หรือ**
+- ทุก `formative_0..N-1` (N = จำนวน indicator ใน config ตอนนั้น) มีคะแนนจริง
+  (`score !== ''`) และ `midterm`/`final` มีคะแนนด้วย **เฉพาะกรณี** ratio
+  ส่วนนั้น > 0 (`midterm_re` ไม่บังคับ — เป็นแค่ตัวทับ)
+
+นักเรียนที่กรอกไม่ครบจะ**ไม่เขียน**แถวใหม่ลง `grade_summary` เลย (ไม่ error,
+ไม่ log) — แถวเก่า (ถ้ามี) จะค้างเป็นค่าเดิมจนกว่าจะกรอกครบ/ตั้ง remark
+
+### Backfill `grade_summary`
+```bash
+node db/backfill-grade-summary.js                  # dry-run
+node db/backfill-grade-summary.js --term=1 --year=2568
+node db/backfill-grade-summary.js --apply          # เขียนจริง
+```
+คำนวณใหม่จาก `score_database` ด้วยสูตรข้างบน ใช้กับข้อมูลที่บันทึกช่วงที่ `gradeRecords` ตกหล่น
+กรองผ่าน completeness gate เดียวกัน (proxy ด้วย `subject_config` ล่าสุดต่อ
+`subject_code+term+year` — score_database ไม่เก็บ class ผูกกับ config ตรง ๆ
+ยอมรับความคลาดเคลื่อนนี้ที่ data scale ปัจจุบัน) — คน/วิชาที่ไม่มี
+`subject_config` เลยจะถูกข้ามเช่นกัน (นับแยกเป็น `ไม่มี subject_config`)
+
 ---
 
 ## Attendance & Report Logic (Shared)

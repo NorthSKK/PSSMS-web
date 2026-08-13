@@ -480,7 +480,7 @@ function loadTeacherRiskDashboard(teacherId, term, year) {
   const container = document.getElementById('riskCardsContainer');
   if (!el0 || !elR || !elMS || !container) return;
 
-  const cacheKey = `grade_risk_v2_${teacherId}_${term}_${year}`;
+  const cacheKey = `grade_risk_v3_${teacherId}_${term}_${year}`;
   if (sessionStorage.getItem(cacheKey)) {
     const cached = JSON.parse(sessionStorage.getItem(cacheKey));
     el0.innerHTML = `<span class="fs-1">${cached.summary.zero}</span> <span class="fs-6 fw-normal">รายการ</span>`;
