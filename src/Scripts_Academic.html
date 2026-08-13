@@ -707,11 +707,11 @@ function openMassiveGrid() {
 }
 
 function getSelectColor(status) {
-    if(['มา','ปกติ','ทำหน้าที่','เข้าแถว'].includes(status)) return 'text-success border-success fw-bold';
-    if(status === 'สาย') return 'text-dark border-warning bg-warning bg-opacity-25 fw-bold';
-    if(status === 'ลา') return 'text-dark border-info bg-info bg-opacity-25 fw-bold';
-    if(['ขาด','ไม่ปกติ','ไม่ทำหน้าที่','ไม่เข้าแถว'].includes(status)) return 'text-white border-danger bg-danger fw-bold';
-    if(status === '-') return 'text-muted border-secondary bg-light';
+    if(['มา','ปกติ','ทำหน้าที่','เข้าแถว'].includes(status)) return 'mg-ok';
+    if(status === 'สาย') return 'mg-late';
+    if(status === 'ลา') return 'mg-leave';
+    if(['ขาด','ไม่ปกติ','ไม่ทำหน้าที่','ไม่เข้าแถว'].includes(status)) return 'mg-absent';
+    if(status === '-') return 'mg-empty';
     return '';
 }
 
@@ -724,48 +724,43 @@ function renderMassiveGridModal() {
     const sessions = massiveGridData.sessions;
 
     // ── Header ──────────────────────────────────────────────
-    const stickyBase = 'position: sticky; z-index: 20;';
     let theadHtml = '';
+    const addBtn = (rowspan) => `<th class="text-center align-middle" ${rowspan ? `rowspan="${rowspan}"` : ''}
+        style="min-width:72px;cursor:pointer;background:var(--p-accent-hover);" onclick="openAddSessionModal()"
+        title="${isHR ? 'เพิ่มวันกิจกรรมโฮมรูม' : 'ดึงคาบเรียนเพิ่มเอง'}">
+        <i class="fas fa-plus"></i><div class="mg-period mt-1">${isHR ? 'เพิ่มวัน' : 'เพิ่มคาบ'}</div>
+      </th>`;
 
     if (isHR) {
-        // Row 1: ที่ | ชื่อ-สกุล | [date colspan=3] × N | (no add-session btn for HR)
         theadHtml += `<tr>
-            <th class="bg-dark text-white align-middle text-center" style="${stickyBase} left:0; min-width:40px;" rowspan="2">ที่</th>
-            <th class="bg-dark text-white align-middle" style="${stickyBase} left:40px; min-width:150px;" rowspan="2">ชื่อ-สกุล</th>`;
+            <th class="mg-col-no align-middle" rowspan="2">ที่</th>
+            <th class="mg-col-name align-middle text-start" rowspan="2">ชื่อ-สกุล</th>`;
         const dates = [...new Set(sessions.map(s => s.date))];
         dates.forEach(d => {
             const label = sessions.find(s => s.date === d && s.type === 'area')?.displayDate || d;
-            theadHtml += `<th class="bg-primary text-white text-center border-start" colspan="3" style="min-width:210px;font-size:0.8rem;">${label}</th>`;
+            theadHtml += `<th colspan="3"><div class="mg-date">${label}</div></th>`;
         });
-        theadHtml += `<th class="bg-success text-white text-center align-middle" rowspan="2" style="min-width:80px;cursor:pointer;" onclick="openAddSessionModal()">
-            <i class="fas fa-plus-circle fa-lg mb-1"></i><br><small>เพิ่มวัน</small>
-        </th></tr>`;
-
-        // Row 2: เขตพื้นที่ | เวรห้องเรียน | เข้าแถวเช้า (per date)
-        theadHtml += `<tr>`;
+        theadHtml += addBtn(2) + `</tr><tr>`;
         dates.forEach(() => {
-            theadHtml += `
-                <th class="bg-primary bg-opacity-75 text-white text-center border-start" style="min-width:70px;font-size:0.72rem;padding:2px 1px;">เขตพื้นที่</th>
-                <th class="bg-primary bg-opacity-75 text-white text-center" style="min-width:70px;font-size:0.72rem;padding:2px 1px;">เวรห้องเรียน</th>
-                <th class="bg-primary bg-opacity-75 text-white text-center border-end" style="min-width:70px;font-size:0.72rem;padding:2px 1px;">เข้าแถวเช้า</th>`;
+            theadHtml += `<th><div class="mg-period">เขต</div></th>
+                          <th><div class="mg-period">เวร</div></th>
+                          <th><div class="mg-period">แถว</div></th>`;
         });
         theadHtml += `</tr>`;
     } else {
         theadHtml += `<tr>
-            <th class="bg-dark text-white align-middle text-center" style="${stickyBase} left:0; min-width:40px;">ที่</th>
-            <th class="bg-dark text-white align-middle" style="${stickyBase} left:40px; min-width:150px;">ชื่อ-สกุล</th>`;
+            <th class="mg-col-no align-middle">ที่</th>
+            <th class="mg-col-name align-middle text-start">ชื่อ-สกุล</th>`;
         sessions.forEach(sess => {
             // คาบที่ระบบดึงมาจากตารางสอนแต่ยังไม่เคยเช็ค — ทำสีต่างให้หาเจอง่ายในตารางยาว ๆ
             const pending = !sess.sessionId;
-            theadHtml += `<th class="${pending ? 'bg-warning text-dark' : 'bg-primary text-white'} text-center border-start border-end" style="min-width:80px;">
-                <div class="small fw-normal">${sess.displayDate}</div>
-                <div class="badge ${pending ? 'bg-dark text-warning' : 'bg-light text-dark'} mt-1">คาบ ${sess.period}</div>
-                ${pending ? '<div class="fw-bold" style="font-size:0.6rem;line-height:1;margin-top:2px;">ยังไม่เช็ค</div>' : ''}
+            theadHtml += `<th class="${pending ? 'mg-pending' : ''}" title="${sess.displayDate} คาบ ${sess.period}${pending ? ' — ยังไม่ได้เช็คชื่อ' : ''}">
+                <div class="mg-date">${sess.displayDate}</div>
+                <div class="mg-period">คาบ ${sess.period}</div>
+                ${pending ? '<span class="mg-flag">ยังไม่เช็ค</span>' : ''}
             </th>`;
         });
-        theadHtml += `<th class="bg-success text-white text-center align-middle" style="min-width:120px;cursor:pointer;" onclick="openAddSessionModal()">
-            <i class="fas fa-plus-circle fa-lg mb-1"></i><br>ดึงคาบเรียนเพิ่ม
-        </th></tr>`;
+        theadHtml += addBtn(0) + `</tr>`;
     }
 
     // ── Body ─────────────────────────────────────────────────
@@ -777,10 +772,10 @@ function renderMassiveGridModal() {
         const cleanStdId = String(parseInt(stdId, 10));
 
         tbodyHtml += `<tr>
-            <td class="text-center fw-bold text-muted align-middle bg-white border-bottom" style="position:sticky;left:0;z-index:10;">${sIdx+1}</td>
-            <td class="bg-white border-bottom align-middle px-2" style="position:sticky;left:40px;z-index:10;">
-                <div class="fw-bold text-dark" style="font-size:0.85rem;">${std[2]}</div>
-                <div class="small text-muted font-monospace">${stdId}</div>
+            <td class="mg-col-no mg-no align-middle">${sIdx+1}</td>
+            <td class="mg-col-name align-middle px-2 text-start">
+                <div class="mg-name text-truncate" style="max-width:158px;">${std[2]}</div>
+                <div class="mg-sid">${stdId}</div>
             </td>`;
 
         sessions.forEach(sess => {
@@ -789,13 +784,10 @@ function renderMassiveGridModal() {
             const status = att ? att.status : '-';
             const rowIdx = att ? att.rowIdx : '';
             const isNew = att ? 'false' : 'true';
-            const borderClass = sess.type === 'flag' ? 'border-end' : (sess.type === 'area' ? 'border-start' : '');
-            const cellPad = isHR ? 'p-0' : 'p-1';
-            const selStyle = isHR ? 'cursor:pointer;font-size:0.72rem;padding:2px 1px;min-width:70px;width:100%;' : 'cursor:pointer;';
             const hrOpts = {
                 area: [['ปกติ','ปกติ'],['ไม่ปกติ','ไม่ปกติ']],
-                duty: [['ทำหน้าที่','ทำหน้าที่'],['ไม่ทำหน้าที่','ไม่ทำหน้าที่']],
-                flag: [['เข้าแถว','เข้าแถว'],['ไม่เข้าแถว','ไม่เข้าแถว']],
+                duty: [['ทำหน้าที่','ทำ'],['ไม่ทำหน้าที่','ไม่ทำ']],
+                flag: [['เข้าแถว','เข้า'],['ไม่เข้าแถว','ไม่เข้า']],
             };
             const opts = isHR
                 ? hrOpts[sess.type].map(([v,l]) => `<option value="${v}" ${status===v?'selected':''}>${l}</option>`).join('')
@@ -804,22 +796,22 @@ function renderMassiveGridModal() {
                    <option value="สาย" ${status==='สาย'?'selected':''}>สาย</option>
                    <option value="ลา"  ${status==='ลา' ?'selected':''}>ลา</option>
                    <option value="ขาด" ${status==='ขาด'?'selected':''}>ขาด</option>`;
-            tbodyHtml += `<td class="text-center ${cellPad} align-middle ${borderClass}">
+            tbodyHtml += `<td class="align-middle">
                 <select id="mass_${cleanStdId}_${sessionKey}" data-rowidx="${rowIdx}" data-isnew="${isNew}" data-hrtype="${sess.type||''}"
-                    class="form-select form-select-sm text-center shadow-sm ${getSelectColor(status)}" style="${selStyle}"
-                    onchange="this.className='form-select form-select-sm text-center shadow-sm '+getSelectColor(this.value)">
+                    class="mg-cell ${getSelectColor(status)}"
+                    onchange="this.className='mg-cell '+getSelectColor(this.value)">
                     ${opts}
                 </select>
             </td>`;
         });
 
-        if (!isHR) tbodyHtml += `<td class="bg-light border-bottom"></td>`;
-        tbodyHtml += `</tr>`;
+        tbodyHtml += `<td></td></tr>`;
     });
 
     // ── Summary row ──────────────────────────────────────────
-    tbodyHtml += `<tr class="table-secondary fw-bold">
-        <td colspan="2" class="text-center align-middle px-2" style="position:sticky;left:0;z-index:10;background:#e9ecef;">รวมไม่มา</td>`;
+    let tfootHtml = `<tr>
+        <td class="mg-col-no"></td>
+        <td class="mg-col-name">รวมไม่มา</td>`;
     sessions.forEach(sess => {
         const sessionKey = _massiveSessionKey(sess);
         let count = 0;
@@ -830,47 +822,56 @@ function renderMassiveGridModal() {
                 : att && att.status && att.status !== 'มา' && att.status !== '-';
             if (neg) count++;
         });
-        const borderClass = sess.type === 'flag' ? 'border-end' : (sess.type === 'area' ? 'border-start' : '');
-        tbodyHtml += `<td class="text-center align-middle ${borderClass} ${count>0?'text-danger':'text-success'}">${count>0?count:'✓'}</td>`;
+        tfootHtml += `<td class="${count>0?'mg-sum-bad':'mg-sum-none'}">${count>0?count:'✓'}</td>`;
     });
-    if (!isHR) tbodyHtml += `<td class="bg-light"></td>`;
-    tbodyHtml += `</tr>`;
+    tfootHtml += `<td></td></tr>`;
+
+    const pendingCount = isHR ? 0 : sessions.filter(s => !s.sessionId).length;
+    const legend = isHR
+        ? `<span class="mg-key mg-ok">ปกติ</span><span class="mg-key mg-absent">ไม่ปกติ</span>`
+        : `<span class="mg-key mg-ok">มา</span><span class="mg-key mg-late">สาย</span><span class="mg-key mg-leave">ลา</span><span class="mg-key mg-absent">ขาด</span><span class="mg-key mg-empty">ยังไม่เช็ค</span>`;
 
     const modalHtml = `
     <div class="modal fade" id="massiveGridModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-fullscreen">
-            <div class="modal-content bg-light">
-                <div class="modal-header text-white border-0 p-3 shadow-sm" style="background: linear-gradient(135deg, #212529 0%, #343a40 100%);">
-                    <div>
-                        <h5 class="modal-title fw-bold mb-0 text-warning"><i class="fas fa-table me-2"></i>ตารางบันทึกเช็คชื่อย้อนหลัง (Massive Grid)</h5>
-                        <div class="small mt-1 opacity-75">วิชา: ${massiveGridData.subjectCode} ${massiveGridData.subjectName} | ห้อง ${massiveGridData.className}${
-                          (() => { const p = sessions.filter(s => !s.sessionId).length;
-                                   return p ? ` <span class="badge bg-warning text-dark ms-2">ยังไม่เช็ค ${p} คาบ</span>` : ''; })()
-                        }</div>
+        <div class="modal-dialog mg-dialog">
+            <div class="modal-content mg-wrap border-0">
+                <div class="modal-header border-0 py-2 px-3" style="background:var(--p-accent);color:#fff;">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <h6 class="modal-title fw-bold mb-0"><i class="fas fa-table me-2"></i>เช็คชื่อย้อนหลัง</h6>
+                        <span class="opacity-75" style="font-size:.8rem;">
+                            ${massiveGridData.subjectCode} ${massiveGridData.subjectName} · ห้อง ${massiveGridData.className}
+                            · ${isHR ? [...new Set(sessions.map(s=>s.date))].length + ' วัน' : sessions.length + ' คาบ'}
+                        </span>
+                        ${pendingCount ? `<span class="badge rounded-pill" style="background:var(--p-warning);">ยังไม่เช็ค ${pendingCount} คาบ</span>` : ''}
                     </div>
                     <button type="button" class="btn-close btn-close-white shadow-none" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body p-0 bg-white">
-                    <div class="table-responsive h-100 w-100" style="overflow: auto;">
-                        <table class="table table-hover align-middle text-nowrap mb-0" style="font-size: 0.85rem;">
-                            <thead class="sticky-top shadow-sm">${theadHtml}</thead>
+
+                <div class="modal-body p-0 mg-wrap">
+                    <div class="mg-scroll">
+                        <table class="mg-table">
+                            <thead>${theadHtml}</thead>
                             <tbody>${tbodyHtml}</tbody>
+                            <tfoot>${tfootHtml}</tfoot>
                         </table>
                     </div>
                 </div>
-                <div class="modal-footer bg-white border-top p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div class="d-flex align-items-center">
-                        <button class="btn btn-outline-success fw-bold px-4 rounded-pill shadow-sm" onclick="markAllAsPresent()">
-                            <i class="fas fa-check-double me-2"></i>${isHR ? "เช็ค 'ปกติ' ทั้งหมด (ช่องที่ยังไม่บันทึก)" : "เช็ค 'มา' ทั้งหมด (เฉพาะช่องว่าง)"}
+
+                <div class="modal-footer border-0 py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2"
+                     style="background:var(--p-surface);box-shadow:0 -1px 0 var(--p-border);">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <button class="btn btn-sm fw-semibold rounded-pill px-3"
+                                style="border:1px solid var(--p-accent);color:var(--p-accent);"
+                                onclick="markAllAsPresent()" title="${isHR ? 'ช่องที่ไม่ปกติจะไม่ถูกเปลี่ยน' : 'ช่องที่เลือก สาย/ลา/ขาด ไว้แล้ว จะไม่ถูกเปลี่ยน'}">
+                            <i class="fas fa-check-double me-1"></i>${isHR ? "เช็ค 'ปกติ' ช่องที่ว่าง" : "เช็ค 'มา' ช่องที่ว่าง"}
                         </button>
-                        <span class="text-muted small ms-3 d-none d-lg-block">
-                            <i class="fas fa-info-circle me-1"></i>${isHR ? 'ช่องที่ไม่ปกติจะไม่ถูกเปลี่ยน' : 'ช่องที่เลือก สาย/ลา/ขาด ไว้แล้ว จะไม่ถูกเปลี่ยน'}
-                        </span>
+                        <div class="d-none d-md-flex align-items-center gap-1">${legend}</div>
                     </div>
-                    <div>
-                        <button class="btn btn-secondary px-4 me-2 rounded-pill shadow-sm" data-bs-dismiss="modal">ยกเลิก</button>
-                        <button class="btn btn-success fw-bold px-5 rounded-pill shadow-sm" onclick="saveMassiveGrid()">
-                            <i class="fas fa-save me-2"></i>บันทึกข้อมูลทั้งหมด
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm rounded-pill px-3" style="color:var(--p-text-muted);" data-bs-dismiss="modal">ยกเลิก</button>
+                        <button class="btn btn-sm fw-bold rounded-pill px-4 text-white"
+                                style="background:var(--p-accent);" onclick="saveMassiveGrid()">
+                            <i class="fas fa-save me-1"></i>บันทึกทั้งหมด
                         </button>
                     </div>
                 </div>
@@ -907,13 +908,13 @@ function markAllAsPresent() {
                     // เปลี่ยนเฉพาะช่องใหม่ (ยังไม่บันทึก) ไม่แตะช่องที่เป็น negative
                     if (isNew && select.value !== negVal) {
                         select.value = posVal;
-                        select.className = 'form-select form-select-sm text-center shadow-sm ' + getSelectColor(posVal);
+                        select.className = 'mg-cell ' + getSelectColor(posVal);
                         count++;
                     }
                 } else {
                     if (select.value === '-') {
                         select.value = 'มา';
-                        select.className = 'form-select form-select-sm text-center shadow-sm ' + getSelectColor('มา');
+                        select.className = 'mg-cell ' + getSelectColor('มา');
                         count++;
                     }
                 }

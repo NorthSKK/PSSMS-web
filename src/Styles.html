@@ -1022,4 +1022,125 @@ body.dark-mode .pssms-dept-general {
   border-radius: 50% !important;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   Massive Grid — ตารางบันทึกเช็คชื่อย้อนหลัง
+   ตารางกว้างมาก (1 คอลัมน์ = 1 คาบ ทั้งเทอม) ช่องส่วนใหญ่เป็น "มา"
+   จึงทำให้ "มา" เงียบที่สุด แล้วให้ ขาด/ลา/สาย เด่นออกมาแทน
+   ══════════════════════════════════════════════════════════════ */
+.mg-wrap { background: var(--p-dom); }
+
+/* กว้างเกือบเต็มจอ (คอลัมน์เยอะ) แต่สูงตามเนื้อหา — ห้องเล็กจะได้ไม่เหลือที่ว่างครึ่งจอ */
+.mg-dialog {
+  max-width: 98vw; margin: 1.2rem auto;
+}
+.mg-dialog .modal-content {
+  max-height: calc(100vh - 2.4rem);
+  border-radius: var(--p-radius);
+  overflow: hidden;
+  box-shadow: 0 18px 48px rgba(7,104,116,.22);
+}
+
+.mg-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 170px);
+  -webkit-overflow-scrolling: touch;
+}
+.mg-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+.mg-scroll::-webkit-scrollbar-track { background: var(--p-dom); }
+.mg-scroll::-webkit-scrollbar-thumb {
+  background: var(--p-border-strong); border-radius: 10px; border: 3px solid var(--p-dom);
+}
+.mg-scroll::-webkit-scrollbar-thumb:hover { background: var(--p-accent); }
+
+.mg-table {
+  width: max-content !important; min-width: 100%;
+  border-collapse: separate !important; border-spacing: 0;
+  margin: 0; font-size: .8rem;
+}
+.mg-table th, .mg-table td { border: 0; }
+
+/* ── หัวตาราง ── */
+.mg-table thead th {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--p-accent); color: #fff;
+  padding: 5px 4px; text-align: center; font-weight: 600;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,.12);
+}
+.mg-table thead th.mg-pending { background: var(--p-warning); }
+.mg-date { font-size: .72rem; line-height: 1.2; white-space: nowrap; }
+.mg-period {
+  font-size: .6rem; opacity: .82; font-weight: 500;
+  letter-spacing: .02em; line-height: 1.1;
+}
+.mg-flag {
+  display: block; font-size: .55rem; font-weight: 700;
+  line-height: 1; margin-top: 2px;
+}
+
+/* ── คอลัมน์ตรึงซ้าย ── */
+.mg-col-no, .mg-col-name { position: sticky; z-index: 25; }
+.mg-col-no   { left: 0;    min-width: 34px; width: 34px; }
+.mg-col-name { left: 34px; min-width: 168px; }
+.mg-table thead .mg-col-no, .mg-table thead .mg-col-name { z-index: 30; }
+.mg-table tbody .mg-col-no, .mg-table tbody .mg-col-name {
+  background: var(--p-surface);
+  box-shadow: inset -1px 0 0 var(--p-border);
+}
+.mg-table tbody tr:hover .mg-col-no,
+.mg-table tbody tr:hover .mg-col-name { background: var(--p-accent-soft); }
+.mg-no   { color: var(--p-text-muted); font-size: .72rem; text-align: center; }
+.mg-name { font-weight: 600; color: var(--p-text); line-height: 1.2; font-size: .78rem; }
+.mg-sid  { font-size: .64rem; color: var(--p-text-muted); font-variant-numeric: tabular-nums; }
+
+/* ── ช่องสถานะ ── */
+.mg-table tbody td { padding: 2px; text-align: center; }
+.mg-table tbody tr { transition: background .12s; }
+.mg-table tbody tr:hover { background: var(--p-accent-soft); }
+.mg-table tbody tr + tr td { box-shadow: inset 0 1px 0 var(--p-border); }
+
+.mg-cell {
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  width: 100%; min-width: 46px; height: 26px;
+  border: 1px solid transparent; border-radius: 6px;
+  text-align: center; text-align-last: center;
+  font-size: .74rem; font-weight: 600; line-height: 1;
+  padding: 0 2px; cursor: pointer;
+  background-color: transparent; color: var(--p-text-muted);
+  transition: border-color .12s, background-color .12s;
+}
+.mg-cell:hover  { border-color: var(--p-border-strong); }
+.mg-cell:focus  { outline: 0; border-color: var(--p-accent); box-shadow: 0 0 0 2px var(--p-accent-soft); }
+
+/* มา/ปกติ = ค่าปกติ ทำให้จางที่สุดเพื่อให้ข้อยกเว้นเด่น */
+.mg-ok      { color: #94a3b8; font-weight: 500; }
+.mg-late    { background-color: #fef3c7; color: #92400e; border-color: #fcd9a4; }
+.mg-leave   { background-color: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+.mg-absent  { background-color: var(--p-danger); color: #fff; border-color: var(--p-danger); }
+.mg-empty   { color: #cbd5e1; border-style: dashed; border-color: #dbe3ea; font-weight: 400; }
+
+/* ── แถวสรุป ── */
+.mg-table tfoot td {
+  position: sticky; bottom: 0; z-index: 22;
+  background: var(--p-sec); color: var(--p-text);
+  font-weight: 700; font-size: .74rem; text-align: center;
+  padding: 5px 3px; box-shadow: inset 0 1px 0 var(--p-border-strong);
+}
+.mg-table tfoot td.mg-col-no, .mg-table tfoot td.mg-col-name {
+  z-index: 27; background: var(--p-sec); text-align: right; padding-right: 8px;
+}
+.mg-sum-none { color: var(--p-success); }
+.mg-sum-bad  { color: var(--p-danger); }
+
+/* ── คำอธิบายสีท้าย modal ── */
+.mg-key {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  font-size: .66rem; font-weight: 600; border: 1px solid transparent;
+}
+.mg-key.mg-ok { background: var(--p-dom); border-color: var(--p-border); }
+
+@media (max-width: 768px) {
+  .mg-col-name { min-width: 128px; }
+  .mg-cell { min-width: 40px; }
+}
+
 </style>
