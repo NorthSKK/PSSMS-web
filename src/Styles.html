@@ -408,9 +408,15 @@ div.dept-btn { cursor: default; pointer-events: none; }
 ========================================== */
 .grid-wrapper {
   width: 100%;
-  border: 1px solid #dee2e6; border-radius: 0 0 12px 12px;
-  background: #fff; overflow: hidden;
+  border: 1px solid var(--p-border); border-radius: 0 0 var(--p-radius) var(--p-radius);
+  background: var(--p-surface); overflow: hidden;
 }
+/* scrollbar ให้เข้าชุดกับ Massive Grid */
+.grid-scroll-container::-webkit-scrollbar-track { background: var(--p-dom) !important; }
+.grid-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--p-border-strong) !important; border: 3px solid var(--p-dom) !important;
+}
+.grid-scroll-container::-webkit-scrollbar-thumb:hover { background: var(--p-accent) !important; }
 
 .grid-scroll-container {
   width: 100%;
@@ -429,26 +435,40 @@ div.dept-btn { cursor: default; pointer-events: none; }
 .grid-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 3px solid #f8f9fa; }
 .grid-scroll-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-#allInOneTable th { border-bottom: 2px solid #e2e8f0; font-weight: 600; color: #475569; padding: 8px; }
-#allInOneTable td { border-bottom: 1px solid #f1f5f9; vertical-align: middle; padding: 4px; }
+#allInOneTable th { border-bottom: 0; font-weight: 600; padding: 4px 3px; }
+#allInOneTable td { border-bottom: 1px solid var(--p-border); vertical-align: middle; padding: 2px 3px; }
+#allInOneTable tbody tr { transition: background .12s; }
+#allInOneTable tbody tr:hover > td { background-color: var(--p-accent-soft); }
+#allInOneTable tbody tr:hover .sticky-col-1,
+#allInOneTable tbody tr:hover .sticky-col-2 { background: var(--p-accent-soft) !important; }
 
 /* ==========================================
    🌟 5. การตรึงหัวตาราง 2 ชั้น (Multi-row Sticky Header)
 ========================================== */
 /* === ตารางคะแนน (#scoreTableHeader) — หัว 2 ชั้น สูง 60px === */
 /* แถวที่ 1: รหัสตัวชี้วัด / ชื่อชิ้นงาน */
+/* ⚠️ ต้องใส่ !important — `#page-content .table thead th` (ด้านบน) บังคับ
+   background:transparent + color:text-muted ไว้ ถ้าไม่ทับจะได้หัวตารางขาวโพลน */
 #scoreTableHeader tr:nth-child(1) th {
     position: sticky; top: 0; z-index: 10;
-    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6;
-    height: 60px; /* ล็อกความสูงแถวแรกให้คงที่ */
+    background-color: var(--p-accent) !important;
+    box-shadow: inset 0 -1px 0 rgba(255,255,255,.18);
+    height: 52px; /* ล็อกความสูงแถวแรกให้คงที่ */
     vertical-align: middle;
 }
 /* แถวที่ 2: คะแนนเต็ม */
 #scoreTableHeader tr:nth-child(2) th {
-    position: sticky; top: 60px; z-index: 10; /* ตรึงต่อจากแถวแรกพอดีเป๊ะ */
-    background: #f8fafc; box-shadow: inset 0 -1px 0 #dee2e6;
+    position: sticky; top: 52px; z-index: 10; /* ตรึงต่อจากแถวแรกพอดีเป๊ะ */
+    background-color: var(--p-accent-hover) !important;
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,.12);
     vertical-align: middle;
 }
+/* ตัวอักษรในหัวตารางที่เดิมตั้งสีเข้มไว้ — บนพื้น accent ต้องเป็นสีขาว */
+#scoreTableHeader th,
+#scoreTableHeader th * { color: #fff !important; opacity: 1 !important; }
+#scoreTableHeader th .text-muted,
+#scoreTableHeader th small { color: rgba(255,255,255,.78) !important; }
+#scoreTableHeader th .badge { background-color: rgba(255,255,255,.18) !important; }
 
 /* === ตารางคุณลักษณะ/อ่านคิดวิเคราะห์ (.eval-header) — หัว 2 ชั้น บรรทัดเดียว สูง 38px === */
 /* แถวที่ 1: กลุ่ม — กำหนดสีพื้นทึบเองตรงๆ (BS table-primary/success ไม่ลงสีบน th นี้ → ต้องทึบกัน scroll ทะลุ) */
@@ -483,23 +503,31 @@ div.dept-btn { cursor: default; pointer-events: none; }
    🩹 Safari bug: cell ที่ sticky 2 แกน (บน+ซ้าย) ไม่ paint background-color → ใช้ inset box-shadow 9999px ระบายแทน (paint ชัวร์ทุก browser) */
 .sticky-head-1, .sticky-head-2 {
   z-index: 15 !important;
-  background: #eef2f7 !important;
-  box-shadow: inset -1px 0 0 #d1d9e2, inset 0 0 0 9999px #eef2f7 !important;
+  background: var(--p-accent) !important; color: #fff;
+  box-shadow: inset -1px 0 0 rgba(255,255,255,.22), inset 0 0 0 9999px var(--p-accent) !important;
 }
 .dark-mode .sticky-head-1, .dark-mode .sticky-head-2 {
-  box-shadow: inset -1px 0 0 #333, inset 0 0 0 9999px #1e2024 !important;
+  box-shadow: inset -1px 0 0 #333, inset 0 0 0 9999px var(--p-accent) !important;
 }
 
 /* ==========================================
    ช่องกรอกคะแนน & ไฮไลท์สี
 ========================================== */
+/* ช่องว่างต้องเงียบ (โปร่งใส) ช่องที่กรอกแล้วถึงจะเด่น — แบบเดียวกับ Massive Grid */
 .score-cell-input, .eval-input {
-    width: 50px; height: 26px; border-radius: 4px; background-color: #f8fafc;
+    width: 46px; height: 25px; border-radius: 6px; background-color: transparent;
     border: 1px solid transparent; text-align: center; font-size: 0.78rem; font-weight: 600;
-    color: #334155; transition: all 0.2s ease;
+    color: var(--p-text); transition: border-color .12s, background-color .12s;
 }
-.score-cell-input:hover, .eval-input:hover { background-color: #e2e8f0; cursor: text; }
-.score-cell-input:focus, .eval-input:focus { background-color: #ffffff; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); outline: none; }
+.score-cell-input:placeholder-shown { color: var(--p-text-muted); }
+.score-cell-input:hover, .eval-input:hover { border-color: var(--p-border-strong); cursor: text; }
+.score-cell-input:focus, .eval-input:focus {
+    background-color: var(--p-surface); border-color: var(--p-accent);
+    box-shadow: 0 0 0 2px var(--p-accent-soft); outline: none;
+}
+/* คอลัมน์ที่ถูกล็อก (readonly) — จางลงแต่ยังอ่านออก ไม่ใช่กล่องเทาทึบ */
+.score-cell-input[readonly] { background-color: transparent !important; color: var(--p-text-muted); opacity: .75; }
+.score-cell-input[readonly]:hover { border-color: transparent; cursor: default; }
 .eval-input { width: 45px !important; height: 26px !important; border-color: #ced4da; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
@@ -507,12 +535,13 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .qual-select:hover { background: #e2e8f0; }
 .qual-select:focus { background: #ffffff; box-shadow: 0 0 0 3px rgba(13,202,240,0.15); outline: none; }
 
-.col-highlight-f { background-color: #f0f9ff !important; } 
-.col-highlight-m { background-color: #fffbeb !important; } 
-.col-highlight-mr { background-color: #fef2f2 !important; } 
-.col-highlight-e { background-color: #fff1f2 !important; } 
-.col-highlight-total { background-color: #f8fafc !important; } 
-.col-highlight-grade { background-color: #f0fdf4 !important; } 
+/* แถบสีแยกกลุ่มคอลัมน์ — จางพอให้แยกกลุ่มออก แต่ไม่แย่งสายตาจากตัวเลข */
+.col-highlight-f { background-color: #f2fafc !important; }
+.col-highlight-m { background-color: #fffcf2 !important; }
+.col-highlight-mr { background-color: #fdf5f5 !important; }
+.col-highlight-e { background-color: #fdf4f5 !important; }
+.col-highlight-total { background-color: var(--p-dom) !important; }
+.col-highlight-grade { background-color: #f4fbf6 !important; }
 
 /* ==========================================
    🌙 6. DARK MODE
@@ -551,16 +580,20 @@ body.dark-mode {
 
 /* Sticky thead — frosted glass, floats over scrolling rows
    Applies to score grid + any table inside .grid-scroll-container */
-#allInOneTable thead th,
-.grid-scroll-container table thead th {
+#page-content #allInOneTable thead th,
+#page-content .grid-scroll-container table thead th {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: #eef2f7 !important; /* บังคับทึบทุกช่อง — กัน BS table ตั้ง --bs-table-bg:transparent แล้ว scroll ทะลุ */
-  box-shadow: 0 1px 0 var(--p-border);
+  background-color: var(--p-accent) !important; /* บังคับทึบทุกช่อง — กัน BS table ตั้ง --bs-table-bg:transparent แล้ว scroll ทะลุ */
+  color: #fff !important;
+  opacity: 1 !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,.08);
 }
-.dark-mode #allInOneTable thead th,
-.dark-mode .grid-scroll-container table thead th {
+#page-content #allInOneTable thead th *,
+#page-content .grid-scroll-container table thead th * { color: #fff !important; }
+.dark-mode #page-content #allInOneTable thead th,
+.dark-mode #page-content .grid-scroll-container table thead th {
   background-color: #1e2024 !important;
 }
 

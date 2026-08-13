@@ -559,11 +559,12 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
     let displayCode = ind.code ? ind.code : '-';
     let displayName = ind.name ? ind.name : 'งาน/สอบ';
 
-    headHtml += `<th class="text-success border-bottom-0 align-middle py-1" style="font-size: 0.78rem; max-width: 120px; min-width: 70px; width: 90px;">
+    // แคบลงเพื่อให้เห็นตัวชี้วัดพร้อมกันมากขึ้น — ชื่อเต็มดูได้จาก tooltip
+    headHtml += `<th class="text-success border-bottom-0 align-middle py-1" style="font-size: 0.74rem; max-width: 78px; min-width: 62px; width: 68px;" title="${displayName}">
                    <div class="d-flex flex-column justify-content-center align-items-center">
                      <span class="text-muted" style="font-size: 0.62rem; line-height: 1;">${displayCode}</span>
                      <div class="d-flex align-items-center mt-1 w-100 justify-content-center overflow-hidden">
-                       <span contenteditable="${isHeaderEditMode}" class="ind-name-edit fw-bold" data-idx="${idx}" title="${displayName}" style="max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;">${displayName}</span>
+                       <span contenteditable="${isHeaderEditMode}" class="ind-name-edit fw-bold" data-idx="${idx}" title="${displayName}" style="max-width:${isHeaderEditMode ? '110px' : '58px'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;">${displayName}</span>
                        ${deleteBtn}
                      </div>
                    </div>
