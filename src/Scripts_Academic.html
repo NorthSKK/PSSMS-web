@@ -1169,8 +1169,10 @@ function saveMassiveGrid() {
     if (totalChanges === 0) return showAlert("ยังไม่มีการเปลี่ยนแปลงข้อมูล");
 
     const isHR = !!massiveGridData.isHR;
+    // hrNewRows คือ 1 แถวต่อ (นักเรียน × วัน) — จำนวนวันต้องนับ date ที่ไม่ซ้ำ
+    const hrNewDates = new Set(hrNewRows.map(r => r.date)).size;
     const summaryHtml = isHR
-        ? `อัปเดตข้อมูลเดิม: <b>${updates.length}</b> รายการ<br>เพิ่มวันใหม่: <b>${hrNewRows.length}</b> วัน (${hrNewRows.length / (massiveGridData.students.length || 1) | 0} นักเรียน)`
+        ? `อัปเดตข้อมูลเดิม: <b>${updates.length}</b> รายการ<br>เพิ่มวันใหม่: <b>${hrNewDates}</b> วัน (นักเรียน ${hrNewRows.length} รายการ)`
         : `อัปเดตข้อมูลเดิม: <b>${updates.length}</b> รายการ<br>เพิ่มเช็คชื่อคาบใหม่: <b>${newRecords.length}</b> รายการ`;
 
     Swal.fire({ title: 'ยืนยันการบันทึกข้อมูล?', html: summaryHtml, icon: 'question', showCancelButton: true, confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก' })
