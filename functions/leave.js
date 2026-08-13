@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const { isAdmin } = require('../lib/permissions');
 
 async function saveLeaveRequest([requestData], user) {
   const r = requestData || {};
@@ -36,8 +37,10 @@ async function rejectLeave([leaveId, /* reviewedByName — ignored, JWT user.id 
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
-async function saveSubstituteAssignment([assignData]) {
+async function saveSubstituteAssignment([assignData], user) {
   const a = assignData || {};
+  // assigned_by is an audit field — take it from the JWT, not the payload
+  const assignedBy = isAdmin(user) ? (a.assignedBy || String(user?.id || '')) : String(user?.id || '');
   const { rows } = await query(
     `INSERT INTO substitute_assignments(leave_id,date,period,day_of_week,original_teacher_id,original_teacher_name,sub_teacher_id,sub_teacher_name,subject_code,subject_name,class,room,status,assigned_by,note)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'รอยืนยัน',$13,$14)
@@ -49,17 +52,21 @@ async function saveSubstituteAssignment([assignData]) {
       a.subTeacherId || '', a.subTeacherName || '',
       a.subjectCode || '', a.subjectName || '',
       a.class || '', a.room || '',
-      a.assignedBy || '', a.note || '',
+      assignedBy, a.note || '',
     ]
   );
   return { status: 'success', message: 'บันทึกการจัดสอนแทนสำเร็จ', id: rows[0].id };
 }
 
-async function confirmSubstitute([subId]) {
-  await query(
-    `UPDATE substitute_assignments SET status='ยืนยันแล้ว' WHERE id=$1`,
-    [subId]
+// Only the teacher actually assigned to cover the slot may confirm it.
+async function confirmSubstitute([subId], user) {
+  const { rowCount } = await query(
+    isAdmin(user)
+      ? `UPDATE substitute_assignments SET status='ยืนยันแล้ว' WHERE id=$1`
+      : `UPDATE substitute_assignments SET status='ยืนยันแล้ว' WHERE id=$1 AND LOWER(sub_teacher_id)=LOWER($2)`,
+    isAdmin(user) ? [subId] : [subId, String(user?.id || '')]
   );
+  if (rowCount === 0) throw new Error('ไม่มีสิทธิ์ยืนยันการสอนแทนนี้');
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
@@ -96,7 +103,18 @@ async function unassignSubstitute([assignmentId]) {
   return { status: 'success', message: 'ยกเลิกการจัดแล้ว' };
 }
 
-async function updateLeave([leaveId, data]) {
+// Throws unless the JWT user owns this leave record (admin bypasses).
+async function _assertOwnsLeave(user, leaveId) {
+  if (isAdmin(user)) return;
+  const { rows } = await query(
+    `SELECT 1 FROM leave_records WHERE id=$1 AND LOWER(teacher_id)=LOWER($2)`,
+    [leaveId, String(user?.id || '')]
+  );
+  if (rows.length === 0) throw new Error('ไม่มีสิทธิ์แก้ไขใบลานี้');
+}
+
+async function updateLeave([leaveId, data], user) {
+  await _assertOwnsLeave(user, leaveId);
   const d = data || {};
   await query(
     `UPDATE leave_records SET type=$1, start_date=$2, end_date=$3, days=$4, reason=$5 WHERE id=$6`,
@@ -105,7 +123,8 @@ async function updateLeave([leaveId, data]) {
   return { status: 'success', message: 'แก้ไขสำเร็จ' };
 }
 
-async function deleteLeave([leaveId]) {
+async function deleteLeave([leaveId], user) {
+  await _assertOwnsLeave(user, leaveId);
   await query(`DELETE FROM leave_records WHERE id=$1`, [leaveId]);
   return { status: 'success', message: 'ลบสำเร็จ' };
 }

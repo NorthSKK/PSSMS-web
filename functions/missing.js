@@ -335,8 +335,30 @@ async function setupClubDatabase() {
 async function setupCurriculumDatabase() {
   return { status: 'success', message: 'ฐานข้อมูลหลักสูตรพร้อมใช้งานแล้ว' };
 }
-async function saveStudentRemarkDirectly([studentId, remark, term, year]) {
-  return { status: 'success', message: 'บันทึกหมายเหตุสำเร็จ' };
+// Instant-save for the ร/มส dropdown in the ปพ.5 grid (updateRemarkInstant in
+// Scripts_Score.html) — writes the same score_database row the full save uses.
+// Frontend order: (studentId, subjectCode, term, year, remark) — must stay in sync.
+// Returns {success, val} because that is what updateRemarkInstant checks.
+async function saveStudentRemarkDirectly([studentId, subjectCode, term, year, remark], user) {
+  const { verifyTeacherOwnsSubject } = require('../lib/permissions');
+  await verifyTeacherOwnsSubject(user, subjectCode, null, term, year);
+
+  const val = String(remark ?? '').trim();
+  const stored = val === '' ? '-' : val;
+  const uid = `${studentId}_${subjectCode}_remark_${term}_${year}`;
+  await query(
+    `INSERT INTO score_database(uid,student_id,subject_code,indicator_id,score,term,year)
+     VALUES($1,$2,$3,'remark',$4,$5,$6)
+     ON CONFLICT(student_id,subject_code,indicator_id,term,year) DO UPDATE
+       SET score=EXCLUDED.score, uid=EXCLUDED.uid`,
+    [uid, String(studentId), subjectCode, stored, String(term), String(year)]
+  );
+  await query(
+    `INSERT INTO score_history(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)
+     VALUES($1,$2,$3,'remark',$4,$5,$6)`,
+    [String(user?.id || ''), String(studentId), subjectCode, stored, String(term), String(year)]
+  );
+  return { success: true, val, status: 'success', message: 'บันทึกหมายเหตุสำเร็จ' };
 }
 async function uploadSarabunFile([id, base64Data, filename, docNum]) {
   return { status: 'success', message: 'ไม่รองรับอัปโหลดไฟล์ใน web prototype', fileURL: '' };

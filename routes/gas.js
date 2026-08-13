@@ -170,7 +170,7 @@ const handlers = {
   getClubList:                     require('../functions/getClubList'),
   // Clubs — writes
   createClub:                      (args) => clubsWrite.createClub(args),
-  updateClub:                      (args) => clubsWrite.updateClub(args),
+  updateClub:                      (args, user) => clubsWrite.updateClub(args, user),
   registerClub:                    (args) => clubsWrite.registerClub(args),
   unregisterClub:                  (args) => clubsWrite.unregisterClub(args),
 
@@ -183,13 +183,13 @@ const handlers = {
   approveLeave:                    (args, user) => leaveWrite.approveLeave(args, user),
   rejectLeave:                     (args, user) => leaveWrite.rejectLeave(args, user),
   reviewLeave:                     (args, user) => leaveWrite.reviewLeave(args, user),
-  updateLeave:                     (args) => leaveWrite.updateLeave(args),
-  deleteLeave:                     (args) => leaveWrite.deleteLeave(args),
+  updateLeave:                     (args, user) => leaveWrite.updateLeave(args, user),
+  deleteLeave:                     (args, user) => leaveWrite.deleteLeave(args, user),
   assignSubstitute:                (args, user) => leaveWrite.assignSubstitute(args, user),
   unassignSubstitute:              (args) => leaveWrite.unassignSubstitute(args),
   manualCreateAffected:            (args) => leaveWrite.manualCreateAffected(args),
-  saveSubstituteAssignment:        (args) => leaveWrite.saveSubstituteAssignment(args),
-  confirmSubstitute:               (args) => leaveWrite.confirmSubstitute(args),
+  saveSubstituteAssignment:        (args, user) => leaveWrite.saveSubstituteAssignment(args, user),
+  confirmSubstitute:               (args, user) => leaveWrite.confirmSubstitute(args, user),
 
   // Sarabun
   getSarabunHistory:               require('../functions/getSarabunHistory'),
@@ -223,7 +223,7 @@ const handlers = {
   setupCalendarDatabase:           () => missing.setupCalendarDatabase(),
   setupClubDatabase:               () => missing.setupClubDatabase(),
   setupCurriculumDatabase:         () => missing.setupCurriculumDatabase(),
-  saveStudentRemarkDirectly:       (args) => missing.saveStudentRemarkDirectly(args),
+  saveStudentRemarkDirectly:       (args, user) => missing.saveStudentRemarkDirectly(args, user),
   uploadSarabunFile:               (args) => missing.uploadSarabunFile(args),
   getTeacherListForDropdown:       () => missing.getTeacherListForDropdown(),
   getPrintConfigData:              (args) => missing.getPrintConfigData(args),

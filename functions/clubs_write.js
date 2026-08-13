@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
+const { verifyTeacherOwnsSubject } = require('../lib/permissions');
 
 function invalidateClubs(term, year) {
   cache.del(`clubs_${term}_${year}`);
@@ -31,10 +32,14 @@ async function createClub([payload]) {
 }
 
 // Frontend: updateClub(payload) → 1 object, clubId inside payload (matches GAS).
-async function updateClub([payload]) {
+async function updateClub([payload], user) {
   const u = payload || {};
   const clubId = String(u.clubId || '').trim();
   if (!clubId) return { status: 'error', message: 'ไม่พบรหัสชุมนุม' };
+
+  // Advisors of this club only — otherwise any teacher could rename a colleague's
+  // club or replace its advisor list (the advisors array below is a full replace).
+  await verifyTeacherOwnsSubject(user, `CLUB_${clubId}`, null, u.term, u.year);
 
   // Resolve term/year from clubs row (immutable in GAS — keep DB row authoritative)
   const cur = await query(`SELECT term, year FROM clubs WHERE club_id=$1`, [clubId]);

@@ -207,6 +207,11 @@ async function fnName([arg1, arg2, arg3]) { ... }
 - `getAllInOneScoreGridData(subjectCode, className, term, year)` — 4 args, **ไม่มี** teacherId
 - `getSemesterReport(subjectCode, className, term, year)` — 4 args (ไม่ใช่ `(teacherId, term, year)`)
 - `createClub(payload)` / `updateClub(payload)` — 1 object, clubId อยู่ใน payload สำหรับ update. createClub generate clubId เสมอ (`CLUB${Date.now()}`)
+- `saveStudentRemarkDirectly(studentId, subjectCode, term, year, remark)` — **5 args**
+  ลำดับตาม `updateRemarkInstant()` ใน `src/Scripts_Score.html` เคยประกาศ backend เป็น
+  `[studentId, remark, term, year]` (4 ตัว) → `remark` รับค่า subjectCode ไป
+  ส่วนค่าจริงหล่นหาย. คืน `{success, val}` เพราะ frontend เช็ค `res.success`
+  ไม่ใช่ `res.status` (ต่างจาก write function อื่น)
 
 ### Field naming priority
 
@@ -483,6 +488,25 @@ Enforcement ก่อน handler ทุก request (ยกเว้น `PUBLIC_F
 **Handler ที่ต้องเช็ค identity ต้องรับ `user`** — `routes/gas.js` ส่ง
 `(args, user)` ให้ handler แต่ handler ที่เขียนเป็น `(args) => fn(args)` จะทิ้ง
 `user` ไปเงียบ ๆ แล้ว fallback ไปใช้ `payload.teacherId` แทน
+
+### Ownership ต่อ resource (`TEACHER_OR_ADMIN` ทุกตัวต้องมี)
+
+| Function | เจ้าของคือ | เช็คด้วย |
+|---|---|---|
+| `updateLeave` / `deleteLeave` | `leave_records.teacher_id` | `_assertOwnsLeave()` |
+| `confirmSubstitute` | `substitute_assignments.sub_teacher_id` | UPDATE ... AND sub_teacher_id (rowCount=0 → throw) |
+| `saveSubstituteAssignment` | — (INSERT) | `assigned_by` มาจาก JWT ไม่ใช่ payload |
+| `updateClub` | `club_advisors` | `verifyTeacherOwnsSubject(user, 'CLUB_'+clubId, ...)` |
+| `saveStudentRemarkDirectly` | `timetable` | `verifyTeacherOwnsSubject()` |
+
+`createClub` ไม่เช็ค (ยังไม่มีเจ้าของ) — ครูคนไหนก็สร้างชุมนุมได้ตามออกแบบ
+
+**ไม่มี ownership model โดยตั้งใจ:** `sarabun` (ครูเห็น/แก้ทั้งหมด เทียบเท่า Admin
+ตามตาราง Roles), `budgets` (งานระดับฝ่าย) — ทั้ง 2 ตารางไม่มีคอลัมน์เจ้าของ
+
+**Stub ที่ยัง no-op โดยตั้งใจ:** `updateTaskStatus` (Notion hook เฉพาะ
+`teacher12` — todo จริง sync ผ่าน `getTodoList.save`), `uploadSarabunFile`
+(ไม่รองรับ upload ใน web)
 
 ---
 
