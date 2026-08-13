@@ -456,6 +456,34 @@ Enforcement ก่อน handler ทุก request (ยกเว้น `PUBLIC_F
 
 ทุก write function ที่ teacher เรียกต้องผ่านฟังก์ชันนี้ก่อน. Identity ใช้ `user.id` จาก JWT เท่านั้น — ห้ามใช้ teacherId จาก payload.
 
+### Row-level ownership — ต้องเช็คแยกจาก subject-level
+
+`verifyTeacherOwnsSubject` เช็คแค่ว่าครู "สอนวิชานี้ไหม" ไม่ได้เช็คว่า
+"แถวนี้เป็นของครูคนนี้ไหม" write ที่รับ row id จาก client ต้องเช็คเพิ่ม:
+
+| Helper | ตาราง | ใช้ที่ |
+|---|---|---|
+| `verifyAttendanceBatchOwner(user, rowIds)` | `attendance` | `updateAttendanceBatch`, `saveMassiveAttendanceGrid` (non-HR) |
+| `verifyMorningBatchOwner(user, rowIds)` | `morning_activity` | `saveMassiveAttendanceGrid` (HR) |
+| `verifySessionOwner(user, sessionId)` | `attendance` | `updateAttendanceStatus` |
+| `verifyLessonRecordOwner(user, recordId)` | `detailed_lesson_records` | lesson record writes |
+
+⚠️ **`subjectCode='HR'` ผ่าน `verifyTeacherOwnsSubject` ทันทีทุกครู** — HR path
+จึงต้องพึ่ง row-level check 100% เคยพลาดมาแล้ว: `saveMassiveAttendanceGrid`
+ข้าม ownership check ตอน `isHR` ทำให้ครูคนไหนก็แก้ homeroom ของครูคนอื่นได้
+
+⚠️ **`DELETE ... WHERE session_id=$1` ต้อง scope ด้วย teacher_id เสมอ** —
+`session_id` คำนวณจาก client input ล้วน (`date|morning|className`) ถ้าไม่ scope
+ครูคนหนึ่งลบข้อมูลของอีกคนได้ ดู `saveMorningActivityBatch`
+
+⚠️ **ห้ามเทียบ payload กับ payload** — `teacherUpdateTimetableRow` เคยเทียบ
+`row.teacher_id` กับ `teacherId` ที่มาจาก payload (attacker คุมทั้งคู่) ต้องเทียบ
+กับ `user.id` จาก JWT
+
+**Handler ที่ต้องเช็ค identity ต้องรับ `user`** — `routes/gas.js` ส่ง
+`(args, user)` ให้ handler แต่ handler ที่เขียนเป็น `(args) => fn(args)` จะทิ้ง
+`user` ไปเงียบ ๆ แล้ว fallback ไปใช้ `payload.teacherId` แทน
+
 ---
 
 ## Auth & Session

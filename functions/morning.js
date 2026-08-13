@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const { resolveTeacherId } = require('../lib/permissions');
 
 async function getMorningActivityData([date, className]) {
   const { rows } = await query(
@@ -21,7 +22,7 @@ async function getMorningActivityData([date, className]) {
   return result;
 }
 
-async function saveMorningActivityBatch([payload]) {
+async function saveMorningActivityBatch([payload], user) {
   // payload can be { date, term, year, className, teacherId, records: [...] } or a raw array
   let list;
   if (Array.isArray(payload)) {
@@ -41,11 +42,19 @@ async function saveMorningActivityBatch([payload]) {
   if (list.length === 0) return { status: 'success', message: 'ไม่มีรายการ', saved: 0 };
   const first = list[0];
   const sessionId = `${first.date}|morning|${first.className}`;
+  // Identity comes from the JWT, never the payload — otherwise a teacher could write
+  // rows attributed to a colleague. Admin may still act on a specific teacher's behalf.
+  const effectiveTeacherId = resolveTeacherId(user, first.teacherId);
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(`DELETE FROM morning_activity WHERE session_id=$1`, [sessionId]);
+    // Scoped to the acting teacher: re-saving replaces only their own rows for this
+    // session, so a batch can't wipe another teacher's homeroom record for the same class.
+    await client.query(
+      `DELETE FROM morning_activity WHERE session_id=$1 AND LOWER(teacher_id)=LOWER($2)`,
+      [sessionId, effectiveTeacherId]
+    );
     for (const item of list) {
       await client.query(
         `INSERT INTO morning_activity(date,term,year,class,student_id,student_name,area_status,duty_status,flag_status,teacher_id,session_id)
@@ -53,7 +62,7 @@ async function saveMorningActivityBatch([payload]) {
         [item.date, item.term, item.year, item.className,
          item.studentId, item.studentName,
          item.areaStatus || '', item.dutyStatus || '', item.flagStatus || '',
-         item.teacherId || '', sessionId]
+         effectiveTeacherId, sessionId]
       );
     }
     await client.query('COMMIT');

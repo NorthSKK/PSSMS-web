@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const { isAdmin } = require('../lib/permissions');
 
 // Data array format: [subject_code, subject_name, level, room, location, teacher_id, day, period, term, year]
 function rowToArray(r) {
@@ -86,12 +87,14 @@ async function swapTimetableTeacher([rowId1, rowId2]) {
   return { status: 'success', message: 'แลกตารางสอนสำเร็จ' };
 }
 
-async function teacherUpdateTimetableRow([teacherId, rowIndex, newData]) {
+async function teacherUpdateTimetableRow([teacherId, rowIndex, newData], user) {
   const { rows } = await query(
     `SELECT teacher_id FROM timetable WHERE id=$1`, [rowIndex]
   );
   if (!rows.length) throw new Error('ไม่พบรายการ');
-  if (String(rows[0].teacher_id).trim() !== String(teacherId).trim())
+  // Compare against the JWT identity, not the payload — a payload-vs-payload check
+  // lets any teacher edit any row by sending that row's owner id.
+  if (!isAdmin(user) && String(rows[0].teacher_id).trim().toLowerCase() !== String(user?.id || '').trim().toLowerCase())
     throw new Error('ไม่มีสิทธิ์แก้ไขรายการนี้');
   // Only allow editing display fields — subject_code/teacher_id/term/year are locked in DB
   await query(

@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { isAdmin, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner } = require('../lib/permissions');
+const { isAdmin, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner, verifyMorningBatchOwner } = require('../lib/permissions');
 
 async function saveAttendanceBatch([list], user) {
   if (!Array.isArray(list) || list.length === 0) return { status: 'success', saved: 0 };
@@ -216,8 +216,11 @@ async function saveMassiveAttendanceGrid([subjectCode, subjectName, className, t
 
   const hrColMap = { area: 'area_status', duty: 'duty_status', flag: 'flag_status' };
   if (Array.isArray(updates) && updates.length > 0) {
-    if (!isHR) {
-      await verifyAttendanceBatchOwner(user, updates.map(u => u.rowIdx));
+    const rowIds = updates.map(u => u.rowIdx);
+    if (isHR) {
+      await verifyMorningBatchOwner(user, rowIds);
+    } else {
+      await verifyAttendanceBatchOwner(user, rowIds);
     }
     for (const u of updates) {
       if (isHR) {

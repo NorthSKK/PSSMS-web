@@ -120,7 +120,7 @@ const handlers = {
   deleteTimetableRow:              (args) => timetableAdmin.deleteTimetableRow(args),
   importTimetableCSV:              (args) => timetableAdmin.importTimetableCSV(args),
   swapTimetableTeacher:            (args) => timetableAdmin.swapTimetableTeacher(args),
-  teacherUpdateTimetableRow:       (args) => timetableAdmin.teacherUpdateTimetableRow(args),
+  teacherUpdateTimetableRow:       (args, user) => timetableAdmin.teacherUpdateTimetableRow(args, user),
   getHomeroomAssignments:          (args) => timetableAdmin.getHomeroomAssignments(args),
   setHomeroomTeacher:              (args) => timetableAdmin.setHomeroomTeacher(args),
   setAllHomeroomTeachers:          (args) => timetableAdmin.setAllHomeroomTeachers(args),
@@ -163,7 +163,7 @@ const handlers = {
 
   // Morning activity
   getMorningActivityData:          (args) => morning.getMorningActivityData(args),
-  saveMorningActivityBatch:        (args) => morning.saveMorningActivityBatch(args),
+  saveMorningActivityBatch:        (args, user) => morning.saveMorningActivityBatch(args, user),
   getTodayMorningSummary:          (args) => morning.getTodayMorningSummary(args),
 
   // Clubs — reads
