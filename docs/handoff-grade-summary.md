@@ -139,6 +139,7 @@ Railway auto-deploy จาก `main` → https://pssms-web-production.up.railway
 
 | # | จุด | ผล | แนะนำ |
 |---|---|---|---|
+| 0 | ~~แถว `grade_summary` ค้างหลังยกเลิก remark~~ | ~~ครูปลด มส แล้วการ์ดยังโชว์~~ | **แก้แล้ว** — gate ที่ไม่ผ่านจะ DELETE แถวเก่าทิ้ง |
 | 1 | `missing.js:19` `JOIN users u` เป็น INNER | นักเรียนที่ถูก promote / ลบ หายจากการ์ดเงียบ ๆ | เปิด issue รอดูข้อมูลหลัง backfill ก่อน |
 | 2 | `missing.js:21` `u.department as class_name` | ได้ห้อง **ปัจจุบัน** ไม่ใช่ห้องตอนเทอมนั้น — ดูย้อนหลังจะผิดห้อง | เปิด issue ต้องใช้ historical fallback แบบ `getStudentsByClass` |
 

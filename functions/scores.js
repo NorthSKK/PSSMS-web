@@ -321,11 +321,23 @@ async function saveAllInOneWithConfig([payload], user) {
     const formativeCount = (newConfig && Array.isArray(newConfig.indicators)) ? newConfig.indicators.length : 0;
     const midtermRatio = newConfig ? (parseFloat(newConfig.midterm) || 0) : 0;
     const finalRatio = newConfig ? (parseFloat(newConfig.final) || 0) : 0;
-    const completeRecords = gradeRecords.filter(r =>
-      _isGradeRowComplete(r.studentId, scoreRecords, formativeCount, midtermRatio, finalRatio)
-    );
+    const completeRecords = [], incompleteIds = [];
+    for (const r of gradeRecords) {
+      if (_isGradeRowComplete(r.studentId, scoreRecords, formativeCount, midtermRatio, finalRatio)) completeRecords.push(r);
+      else incompleteIds.push(String(r.studentId).trim());
+    }
     if (completeRecords.length > 0) {
       await _writeGradeRows(completeRecords, subjectCode, term, year);
+    }
+    // A student whose grade is no longer determinable must not keep an old row:
+    // clearing a ร/มส remark used to leave the stale grade behind forever, so the
+    // risk card kept reporting a student the teacher had already un-flagged.
+    if (incompleteIds.length > 0) {
+      await query(
+        `DELETE FROM grade_summary
+          WHERE subject_code=$1 AND term=$2 AND year=$3 AND student_id = ANY($4)`,
+        [subjectCode, String(term), String(year), incompleteIds]
+      );
     }
   }
 
