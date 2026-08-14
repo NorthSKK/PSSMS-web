@@ -484,6 +484,18 @@ div.dept-btn { cursor: default; pointer-events: none; }
 }
 .eval-header tr:nth-child(1) th.table-primary { background-color: #cfe2ff !important; }
 .eval-header tr:nth-child(1) th.table-success { background-color: #d1e7dd !important; }
+/* ให้เหมือนตารางคะแนนรายวิชา: หัว accent + ตัวอักษรขาว
+   ต้อง !important สู้ `#page-content .table thead th` ที่บังคับ text-muted + opacity .75 */
+#page-content .eval-header th,
+#page-content .eval-header th * { color: #fff !important; opacity: 1 !important; }
+#page-content .eval-header tr:nth-child(1) th,
+#page-content .eval-header tr:nth-child(1) th.table-primary,
+#page-content .eval-header tr:nth-child(1) th.table-success { background-color: var(--p-accent) !important; }
+#page-content .eval-header tr:nth-child(2) th,
+#page-content .eval-header tr:nth-child(2) th.table-primary,
+#page-content .eval-header tr:nth-child(2) th.table-success { background-color: var(--p-accent-hover) !important; }
+/* แบ่งกลุ่ม "คุณลักษณะ" กับ "อ่านคิดวิเคราะห์" ด้วยเส้นจาง แทนการใช้สีพื้นคนละสี */
+#page-content .eval-header th.border-start { box-shadow: inset 1px 0 0 rgba(255,255,255,.3); }
 /* แถวที่ 2: ช่วง/รวม/ระดับ — สีอ่อนกว่าแถว 1 */
 #page-content .eval-header tr:nth-child(2) th {
     position: sticky; top: 38px !important; z-index: 10; /* ตรึงต่อจากแถวแรก 38px พอดี */
@@ -494,9 +506,16 @@ div.dept-btn { cursor: default; pointer-events: none; }
 }
 .eval-header tr:nth-child(2) th.table-primary { background-color: #dbe9ff !important; }
 .eval-header tr:nth-child(2) th.table-success { background-color: #d8efe2 !important; }
-/* ช่องกรอกในตาราง eval — จัดช่องไฟให้โปร่ง อ่านง่าย */
-#evalTableBody td { padding: 1px 5px; }
+/* ช่องกรอกในตาราง eval — ให้เหมือนตารางคะแนน: ไม่มีกรอบ ช่องว่างเงียบ */
+#evalTableBody td { padding: 2px 4px; border-bottom: 1px solid var(--p-border); }
 #evalTableBody .eval-input { margin: 0 auto; display: block; }
+#evalTable tbody tr { transition: background .12s; }
+#evalTable tbody tr:hover > td { background-color: var(--p-accent-soft); }
+#evalTable tbody tr:hover .sticky-col-1,
+#evalTable tbody tr:hover .sticky-col-2 { background: var(--p-accent-soft) !important; }
+/* แถบสีแยก 2 กลุ่มแบบจาง ๆ เหมือน col-highlight-* ของตารางคะแนน */
+#evalTable tbody td.eval-grp-char { background-color: #f2fafc; }
+#evalTable tbody td.eval-grp-read { background-color: #f4fbf6; }
 
 /* ตรึงคอลัมน์ซ้ายสุด (เลขที่ และ ชื่อ-สกุล) */
 .sticky-col-1, .sticky-head-1 { position: sticky !important; left: 0; min-width: 45px; max-width: 45px; z-index: 11; background: #fff !important; box-shadow: inset -1px 0 0 #e2e8f0; }
@@ -531,7 +550,7 @@ div.dept-btn { cursor: default; pointer-events: none; }
 /* คอลัมน์ที่ถูกล็อก (readonly) — จางลงแต่ยังอ่านออก ไม่ใช่กล่องเทาทึบ */
 .score-cell-input[readonly] { background-color: transparent !important; color: var(--p-text-muted); opacity: .75; }
 .score-cell-input[readonly]:hover { border-color: transparent; cursor: default; }
-.eval-input { width: 45px !important; height: 26px !important; border-color: #ced4da; }
+.eval-input { width: 45px !important; height: 25px !important; border-color: transparent; }
 input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 .qual-select { width: 60px; text-align: center; border: 1px solid transparent; background: #f8fafc; border-radius: 6px; font-weight: 600; font-size: 0.8rem; color: #475569; transition: all 0.2s; cursor: pointer; }

@@ -1701,19 +1701,19 @@ function renderEvalTable(students, existingQuals) {
          <div class="text-muted font-monospace" style="font-size: 0.68rem;">${stdId}</div>
       </td>
       
-      <td class="p-0"><input type="number" id="c1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="p-0"><input type="number" id="c2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="p-0"><input type="number" id="c3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="p-0"><input type="number" id="c4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="text-center align-middle fw-bold border-start bg-light text-primary" id="cTot_${safeStdId}" style="font-size:0.78rem;">${cTot}</td>
-      <td class="text-center align-middle fw-bold text-success" id="cGrd_${safeStdId}" style="font-size:0.88rem;">${cGrd}</td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="text-center align-middle fw-bold border-start eval-grp-char text-primary" id="cTot_${safeStdId}" style="font-size:0.78rem;">${cTot}</td>
+      <td class="text-center align-middle fw-bold eval-grp-char text-success" id="cGrd_${safeStdId}" style="font-size:0.88rem;">${cGrd}</td>
 
-      <td class="p-0 border-start"><input type="number" id="r1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="p-0"><input type="number" id="r2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="p-0"><input type="number" id="r3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="p-0"><input type="number" id="r4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="text-center align-middle fw-bold border-start bg-light text-success" id="rTot_${safeStdId}" style="font-size:0.78rem;">${rTot}</td>
-      <td class="text-center align-middle fw-bold text-success" id="rGrd_${safeStdId}" style="font-size:0.88rem;">${rGrd}</td>
+      <td class="p-0 border-start eval-grp-read"><input type="number" id="r1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0 eval-grp-read"><input type="number" id="r2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0 eval-grp-read"><input type="number" id="r3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0 eval-grp-read"><input type="number" id="r4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="text-center align-middle fw-bold border-start eval-grp-read text-success" id="rTot_${safeStdId}" style="font-size:0.78rem;">${rTot}</td>
+      <td class="text-center align-middle fw-bold eval-grp-read text-success" id="rGrd_${safeStdId}" style="font-size:0.88rem;">${rGrd}</td>
     </tr>`;
   });
   tbody.innerHTML = bodyHtml;
