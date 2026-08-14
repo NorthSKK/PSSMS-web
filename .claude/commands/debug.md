@@ -1,19 +1,20 @@
 Diagnose the PSSMS web server end-to-end. Run every check below in order, collect pass/fail, then print a summary table and fix suggestions.
 
-Project root: /Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS
-GAS src dir:  /Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/Wap app PSSMS/src
+Project root: /Users/sik/Documents/[01] Project/Coding/web_PSSMS
+GAS src dir:  /Users/sik/Documents/[01] Project/Coding/web_PSSMS/src
 
 ---
 
 ## 1. node_modules
 ```
-ls "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS/node_modules/.bin/node" 2>/dev/null || echo "MISSING"
+ls -d "/Users/sik/Documents/[01] Project/Coding/web_PSSMS/node_modules/pg" 2>/dev/null || echo "MISSING"
 ```
 - Missing → `npm install` needed
+- (เช็ค `node_modules/pg` ไม่ใช่ `.bin/node` — node ติดตั้งระดับเครื่อง ไม่ได้อยู่ใน node_modules)
 
 ## 2. .env variables
 ```
-cd "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS"
+cd "/Users/sik/Documents/[01] Project/Coding/web_PSSMS"
 node -e "
 require('dotenv').config();
 const required = ['DATABASE_URL','JWT_SECRET'];
@@ -24,7 +25,7 @@ console.log('PORT:', process.env.PORT || '3000 (default)');
 
 ## 3. GAS src directory
 ```
-ls "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/Wap app PSSMS/src/Index.html" 2>/dev/null && echo "SRC OK" || echo "SRC MISSING — pages will 404"
+ls "/Users/sik/Documents/[01] Project/Coding/web_PSSMS/src/Index.html" 2>/dev/null && echo "SRC OK" || echo "SRC MISSING — pages will 404"
 ```
 
 ## 4. Server process on port 3000
@@ -42,7 +43,7 @@ curl -s -m 5 http://localhost:3000/api/gas/getSystemConfig \
 
 ## 6. DB connection
 ```
-cd "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS"
+cd "/Users/sik/Documents/[01] Project/Coding/web_PSSMS"
 node -e "
 require('dotenv').config();
 require('./lib/db').query('SELECT NOW() as ts, current_database() as db, pg_size_pretty(pg_database_size(current_database())) as size')
@@ -53,7 +54,7 @@ require('./lib/db').query('SELECT NOW() as ts, current_database() as db, pg_size
 
 ## 7. Critical tables exist
 ```
-cd "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS"
+cd "/Users/sik/Documents/[01] Project/Coding/web_PSSMS"
 node -e "
 require('dotenv').config();
 const {query} = require('./lib/db');
@@ -71,7 +72,7 @@ query(\`SELECT tablename FROM pg_tables WHERE schemaname='public'\`)
 
 ## 8. JWT_SECRET round-trip
 ```
-cd "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS"
+cd "/Users/sik/Documents/[01] Project/Coding/web_PSSMS"
 node -e "
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
@@ -85,7 +86,7 @@ try {
 
 ## 9. Protected endpoint (with JWT)
 ```
-cd "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS"
+cd "/Users/sik/Documents/[01] Project/Coding/web_PSSMS"
 node -e "
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
@@ -111,7 +112,7 @@ req.end(body);
 
 ## 10. Admin login end-to-end
 ```
-cd "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS"
+cd "/Users/sik/Documents/[01] Project/Coding/web_PSSMS"
 node -e "
 require('dotenv').config();
 const http = require('http');
@@ -141,7 +142,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/gas-shim.js && echo
 
 ## 12. GAS page load test
 ```
-cd "/Users/north/Documents/[01] Project/โรงเรียนภูพระบาทวิทยา/โครงการ/web PSSMS"
+cd "/Users/sik/Documents/[01] Project/Coding/web_PSSMS"
 node -e "
 require('dotenv').config();
 const http = require('http');

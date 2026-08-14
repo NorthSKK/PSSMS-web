@@ -55,13 +55,45 @@ npm run dev
 ### .env ที่ต้องใส่
 
 ```env
-DATABASE_URL=postgresql://user:password@autorack.proxy.rlwy.net:47000/dbname
+DATABASE_URL=postgresql://localhost:5432/pssms_dev
 JWT_SECRET=สตริงสุ่มยาวๆ_อย่างน้อย_32_ตัวอักษร
 PORT=3000
 ```
 
-> **DATABASE_URL** — ดูจาก Railway Dashboard → project → PostgreSQL → Connect  
 > **JWT_SECRET** — generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+### ตั้ง DB สำหรับ dev
+
+`.env` **ชี้ Postgres ในเครื่องเสมอ ไม่ใช่ production** — เดิมชี้ Railway ตรง ๆ
+ทำให้เทสทุกครั้งโดนข้อมูลครูจริง
+
+```bash
+brew install postgresql@18          # ต้องตรง major ของ prod
+brew services start postgresql@18
+export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"   # keg-only
+createdb pssms_dev
+
+# schema จาก prod (ใช้ pg_dump สด ไม่ใช่ไฟล์ใน db/ ที่ค้างเก่า)
+PROD=$(node -e "require('dotenv').config({path:'.env.prod'});process.stdout.write(process.env.DATABASE_URL)")
+pg_dump --schema-only --no-owner --no-privileges "$PROD" | psql -q pssms_dev
+pg_dump --data-only --no-owner --table=system_settings --table=curriculum --table=print_config "$PROD" | psql -q pssms_dev
+
+node db/seed-dev.js                 # ข้อมูลปลอม — ปฏิเสธรันถ้าไม่ได้ชี้ localhost
+```
+login dev: `admin/1234`, `teacher1/1234`, `teacher2/1234`
+
+**ห้ามก๊อปข้อมูลนักเรียนจริงลงเครื่อง** — `system_settings` ก๊อปได้เพราะไม่มี PII
+และ massive grid auto-generate ตายถ้าไม่มี TermData
+
+### ต่อ production (opt-in ต่อคำสั่ง)
+
+URL จริงอยู่ใน `.env.prod` (gitignored) ไม่ใช่ `.env`
+
+```bash
+DATABASE_URL=$(node -e "require('dotenv').config({path:'.env.prod'});process.stdout.write(process.env.DATABASE_URL)") node db/backfill-grade-summary.js
+```
+
+เทสบน dev ไม่ต้องคืนค่าเดิม — แต่ถ้ารันด้วย `.env.prod` ต้องคืนทุกครั้ง
 
 ---
 
@@ -447,6 +479,13 @@ ssl: { rejectUnauthorized: false }
 | PostgreSQL ambiguous column | JOIN หลายตารางมี column ชื่อเดียวกัน | qualify ด้วยชื่อตาราง `t.year` |
 | Cache stale | ลืม invalidate หลัง write | เรียก `cache.del()` / `cache.delPrefix()` ทุก write path |
 | `__error` in response | handler throw / return error | ดู console server + ข้อความใน `__error` |
+| **บันทึกแล้วข้อมูลไม่เปลี่ยน แต่ขึ้น "สำเร็จ"** | lookup data map ด้วย id ที่ตัด 0 นำหน้า (`parseInt`/`normID`) ขณะที่ map key ด้วย id ดิบ | id ที่ตัดแล้วใช้ได้เฉพาะ **DOM element id** — key ของ data map ต้องใช้ id ดิบเสมอ |
+| **ล้างค่าแล้วค่าเก่ากลับมา** | write function กรองค่าว่างทิ้งก่อนเขียน | ค่าว่างต้อง `DELETE` แถว ไม่ใช่ข้าม (ดู `_writeScoreRows`) |
+| **หัวตารางขาวโพลน / ตัวหนังสือหาย** | `#page-content .table thead th` บังคับ `background:transparent !important` + `color:text-muted` specificity สูง | ใส่ `!important` + specificity ให้ชนะ (ดู `#scoreTableHeader`) |
+| **แถว sticky ที่ 2 เลื่อนไปทับแถวแรก** | rule ที่ตั้ง `top:0` มี specificity สูงกว่า rule ที่ตั้ง offset | prefix ให้ specificity เท่ากันแล้วใส่ `!important` ที่ `top` |
+| ปุ่มกดแล้วเงียบ ไม่มี error | `querySelector` หาปุ่มด้วย class ที่เปลี่ยนไปตอน restyle → `null` → throw ใน callback | อ้างปุ่มด้วย `id` ตายตัว ไม่ใช่ class ที่เป็นสไตล์ |
+| Handler ไม่รู้ว่าใครเรียก | ลงทะเบียนเป็น `(args) => fn(args)` ทิ้ง `user` | ต้องเป็น `(args, user) => fn(args, user)` ทุก write ที่ต้องเช็คสิทธิ์ |
+| `subjectCode='HR'` ผ่าน permission ทุกครู | `verifyTeacherOwnsSubject` ปล่อย HR ผ่านโดยตั้งใจ | HR ต้องเช็ค ownership ระดับแถวเอง (`verifyMorningBatchOwner`) |
 
 ---
 
