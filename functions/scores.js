@@ -146,8 +146,12 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year], us
 }
 
 async function _writeScoreRows(scoreRows, subjectCode, term, year, auditTeacherId) {
-  const filtered = scoreRows.filter(r => r.score !== null && r.score !== undefined && r.score !== '');
-  if (!filtered.length) return;
+  const isBlank = (v) => v === null || v === undefined || String(v).trim() === '';
+  const filtered = scoreRows.filter(r => !isBlank(r.score));
+  // ช่องที่ครูล้างค่าต้อง "ลบแถว" ไม่ใช่ข้าม — เดิมกรองทิ้งเฉย ๆ ทำให้ค่าเก่าค้างใน DB
+  // ครูเห็นช่องว่างบนจอ แต่ refresh แล้วคะแนนเดิมกลับมา
+  const cleared = scoreRows.filter(r => isBlank(r.score));
+  if (!filtered.length && !cleared.length) return;
 
   const uids          = filtered.map(r => `${r.studentId}_${subjectCode}_${r.indicatorId}_${term}_${year}`);
   const studentIds    = filtered.map(r => r.studentId);
@@ -158,29 +162,59 @@ async function _writeScoreRows(scoreRows, subjectCode, term, year, auditTeacherI
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO score_database(uid,student_id,subject_code,indicator_id,score,term,year)
-       SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::text[],$6::text[],$7::text[])
-         AS v(uid,student_id,subject_code,indicator_id,score,term,year)
-       ON CONFLICT(student_id,subject_code,indicator_id,term,year) DO UPDATE
-         SET score=EXCLUDED.score, uid=EXCLUDED.uid`,
-      [uids, studentIds,
-       Array(filtered.length).fill(subjectCode),
-       indicatorIds, scores,
-       Array(filtered.length).fill(term),
-       Array(filtered.length).fill(year)]
-    );
-    await client.query(
-      `INSERT INTO score_history(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)
-       SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::text[],$6::text[],$7::text[])
-         AS v(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)`,
-      [Array(filtered.length).fill(auditTeacherId),
-       studentIds,
-       Array(filtered.length).fill(subjectCode),
-       indicatorIds, scores,
-       Array(filtered.length).fill(term),
-       Array(filtered.length).fill(year)]
-    );
+    if (filtered.length) {
+      await client.query(
+        `INSERT INTO score_database(uid,student_id,subject_code,indicator_id,score,term,year)
+         SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::text[],$6::text[],$7::text[])
+           AS v(uid,student_id,subject_code,indicator_id,score,term,year)
+         ON CONFLICT(student_id,subject_code,indicator_id,term,year) DO UPDATE
+           SET score=EXCLUDED.score, uid=EXCLUDED.uid`,
+        [uids, studentIds,
+         Array(filtered.length).fill(subjectCode),
+         indicatorIds, scores,
+         Array(filtered.length).fill(term),
+         Array(filtered.length).fill(year)]
+      );
+      await client.query(
+        `INSERT INTO score_history(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)
+         SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::text[],$6::text[],$7::text[])
+           AS v(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)`,
+        [Array(filtered.length).fill(auditTeacherId),
+         studentIds,
+         Array(filtered.length).fill(subjectCode),
+         indicatorIds, scores,
+         Array(filtered.length).fill(term),
+         Array(filtered.length).fill(year)]
+      );
+    }
+
+    if (cleared.length) {
+      const { rowCount } = await client.query(
+        `DELETE FROM score_database
+          WHERE subject_code=$1 AND term=$2 AND year=$3
+            AND (student_id, indicator_id) IN (
+              SELECT * FROM unnest($4::text[], $5::text[])
+            )`,
+        [subjectCode, String(term), String(year),
+         cleared.map(r => String(r.studentId)),
+         cleared.map(r => String(r.indicatorId))]
+      );
+      // บันทึกการล้างค่าไว้ใน audit log เฉพาะเมื่อมีแถวถูกลบจริง
+      if (rowCount > 0) {
+        await client.query(
+          `INSERT INTO score_history(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)
+           SELECT * FROM unnest($1::text[],$2::text[],$3::text[],$4::text[],$5::text[],$6::text[],$7::text[])
+             AS v(teacher_id,student_id,subject_code,indicator_id,new_score,term,year)`,
+          [Array(cleared.length).fill(auditTeacherId),
+           cleared.map(r => String(r.studentId)),
+           Array(cleared.length).fill(subjectCode),
+           cleared.map(r => String(r.indicatorId)),
+           Array(cleared.length).fill(''),
+           Array(cleared.length).fill(String(term)),
+           Array(cleared.length).fill(String(year))]
+        );
+      }
+    }
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');

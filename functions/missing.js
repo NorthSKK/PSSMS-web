@@ -10,13 +10,33 @@ const cache = require('../lib/cache');
 // returns { status, summary: {zero,r,ms}, details: [{className,subjectCode,subjectName,stdName,type}] }
 // ============================================================
 async function getTeacherRiskDashboard([teacherId, term, year]) {
+  // LEFT JOIN users — เดิมเป็น INNER ทำให้นักเรียนที่ถูก promote/ลบออกจาก users
+  // หายจากการ์ดเงียบ ๆ ทั้งที่เกรดยังค้างอยู่
+  // class_name ต้องเป็นห้อง "ตอนเทอมนั้น" ไม่ใช่ห้องปัจจุบัน (users.department ถูกทับตอน promote)
+  //   1. attendance.class ของเทอม/ปีนั้น — ห้องจริงตอนเรียน
+  //   2. snapshot ก่อน promote ใน user_history
+  //   3. users.department (ปีปัจจุบันเท่านั้นที่ยังถูก)
   const { rows } = await query(
-    `SELECT gs.student_id, u.full_name as std_name,
+    `SELECT gs.student_id,
+            COALESCE(NULLIF(u.full_name,''), att.student_name, gs.student_id) AS std_name,
             gs.subject_code, sc.subject_name,
-            u.department as class_name,
+            COALESCE(NULLIF(att.class,''), NULLIF(hist.old_class,''), u.department, '') AS class_name,
             gs.grade
      FROM grade_summary gs
-     JOIN users u ON u.username = gs.student_id
+     LEFT JOIN users u ON u.username = gs.student_id
+     LEFT JOIN LATERAL (
+       SELECT a.class, a.student_name
+       FROM attendance a
+       WHERE a.student_id = gs.student_id AND a.term = gs.term AND a.year = gs.year
+       ORDER BY a.date DESC LIMIT 1
+     ) att ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT uh.old_data->>'department' AS old_class
+       FROM user_history uh
+       WHERE uh.username = gs.student_id AND uh.action = 'promote'
+         AND uh.old_data->>'year' = gs.year
+       ORDER BY uh.timestamp DESC LIMIT 1
+     ) hist ON TRUE
      LEFT JOIN (
        SELECT DISTINCT subject_code, subject_name
        FROM timetable WHERE teacher_id=$1 AND term=$2 AND year=$3
@@ -27,7 +47,7 @@ async function getTeacherRiskDashboard([teacherId, term, year]) {
          SELECT DISTINCT subject_code FROM timetable
          WHERE teacher_id=$1 AND term=$2 AND year=$3
        )
-     ORDER BY gs.subject_code, u.department, gs.student_id`,
+     ORDER BY gs.subject_code, class_name, gs.student_id`,
     [teacherId, term, year]
   );
 

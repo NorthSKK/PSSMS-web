@@ -250,6 +250,11 @@ const pickDept = (u) => String(u.department || u.dept || '').trim();
 - `final` = สอบปลาย
 - `remark` = `ร` / `มส` / `-`
 
+**ค่าว่าง = ลบแถว** — `_writeScoreRows` แยก payload เป็น 2 กอง: ช่องที่มีค่า → upsert,
+ช่องว่าง (`''`/`null`) → `DELETE` แถวนั้นทิ้ง ทั้งคู่อยู่ใน transaction เดียวกัน
+เดิมกรองช่องว่างทิ้งเฉย ๆ ทำให้ครูลบคะแนนแล้วค่าเก่าค้างใน DB (refresh กลับมา)
+⚠️ `remark` ใช้ `'-'` แทน "ไม่มี" ไม่ใช่ `''` เลยไม่โดนลบ
+
 ### `qualRecords` payload (frontend → backend)
 ```js
 { studentId, subjectCode, term, year,
@@ -384,6 +389,9 @@ Return:
 - `timetable` — today schedule (จาก `getTeacherTimetableWithStatus`)
 - `calendarEvents` — 14-day strip
 - `riskDashboard` — grade-based (0, ร, มส.) จาก `grade_summary` table — แสดงในการ์ด "นักเรียนกลุ่มเสี่ยง"
+  - `LEFT JOIN users` (ไม่ใช่ INNER) — นักเรียนที่ promote/ลบไปแล้วต้องยังขึ้นการ์ด
+  - ห้องเรียนเอาจาก `attendance.class` ของเทอมนั้น → snapshot ใน `user_history` → `users.department`
+    (department ถูกทับตอน promote ใช้ได้เฉพาะปีปัจจุบัน)
 - `atRiskDashboard` — attendance-based จาก `attendanceReport.getTeacherAtRiskDashboard` — แสดงใน "กระดานแจ้งเตือนกลุ่มเสี่ยง"
 
 ### ปุ่มคัดลอกรายชื่อส่ง LINE / Facebook
