@@ -1,0 +1,164 @@
+/**
+ * seed-dev.js — ข้อมูลจำลองสำหรับ DB dev
+ *
+ * ห้ามใช้กับ production — สคริปต์ปฏิเสธถ้า DATABASE_URL ไม่ได้ชี้ localhost
+ *
+ * ข้อมูลทั้งหมดเป็นของปลอม แต่จงใจให้มีรูปร่างเหมือนของจริง เพราะบั๊กหลายตัว
+ * โผล่เฉพาะกับข้อมูลรูปแบบนี้:
+ *   - รหัสนักเรียนมี 0 นำหน้า ('01903') — normID/parseInt ตัดทิ้ง เคยทำ Massive Grid
+ *     บันทึกไม่ลง เพราะ lookup ด้วย id ที่ตัดแล้ว
+ *   - ห้องเป็น 'ม.X/Y' — ต้องผ่าน normalize() ตอน match กับ timetable (level + room)
+ *   - HR ลงตาราง จันทร์-ศุกร์ period '0' ครบ 5 วัน ไม่งั้น HR หายไปบางวัน
+ *   - calendar_events สีแดง #dc3545 = วันหยุด ใช้ทดสอบตัวกรองของ massive grid
+ *
+ * Usage:
+ *   node db/seed-dev.js           # ล้างข้อมูลเดิม (ยกเว้น config) แล้วใส่ใหม่
+ */
+require('dotenv').config();
+const { query } = require('../lib/db');
+
+// parse hostname จริง อย่าใช้ regex — URL ของ dev ไม่มี user:pass เลยไม่มี '@'
+const url = String(process.env.DATABASE_URL || '');
+let host = '';
+try { host = new URL(url).hostname; } catch (_) { /* ปล่อยว่างไว้ ให้ตกไปที่ error ด้านล่าง */ }
+if (host !== 'localhost' && host !== '127.0.0.1') {
+  console.error('❌ DATABASE_URL ไม่ได้ชี้ localhost — ปฏิเสธการรัน กัน seed ทับ production');
+  console.error('   ตอนนี้ชี้ไปที่:', host || '(อ่าน DATABASE_URL ไม่ได้)');
+  process.exit(1);
+}
+
+const TERM = '1', YEAR = '2569';
+
+// ครู 2 คน — ใช้ทดสอบเคส "ครูคนอื่นแก้ข้อมูลเราไม่ได้"
+const TEACHERS = [
+  { username: 'admin',    name: 'ผู้ดูแลระบบ',        role: 'Admin',   dept: 'บริหาร' },
+  { username: 'teacher1', name: 'ครูสมชาย ใจดี',      role: 'Teacher', dept: 'วิทยาศาสตร์และเทคโนโลยี' },
+  { username: 'teacher2', name: 'ครูสมหญิง ตั้งใจสอน', role: 'Teacher', dept: 'สุขศึกษาและพลศึกษา' },
+];
+
+// 0 นำหน้าเจตนา — อย่าแก้เป็นเลขล้วน
+const STUDENTS = [
+  { id: '01901', name: 'เด็กหญิงกานดา ทดสอบ',   cls: 'ม.6/1' },
+  { id: '01902', name: 'เด็กหญิงขวัญ ทดลอง',     cls: 'ม.6/1' },
+  { id: '01903', name: 'เด็กชายคมสัน จำลอง',     cls: 'ม.6/1' },
+  { id: '01904', name: 'เด็กหญิงงามพิศ ตัวอย่าง', cls: 'ม.6/1' },
+  { id: '02001', name: 'เด็กชายจตุพร ทดสอบ',    cls: 'ม.2/1' },
+  { id: '02002', name: 'เด็กหญิงฉวี ทดลอง',      cls: 'ม.2/1' },
+];
+
+// subject_code, ชื่อ, ครู, level, room, [ [วัน, คาบ], ... ]
+const SUBJECTS = [
+  { code: 'ว30205', name: 'ฟิสิกส์',   teacher: 'teacher1', level: 'ม.6', room: '1',
+    slots: [['พุธ', '2'], ['พฤหัสบดี', '1'], ['ศุกร์', '1']] },
+  { code: 'พ22101', name: 'สุขศึกษา', teacher: 'teacher2', level: 'ม.2', room: '1',
+    slots: [['อังคาร', '3']] },
+];
+
+const HOLIDAYS = [
+  { id: 'EVTDEV_1', title: 'วันแม่แห่งชาติ', date: '2026-08-12' },
+  { id: 'EVTDEV_2', title: 'วันเข้าพรรษา',   date: '2026-07-30' },
+];
+
+async function main() {
+  // ล้างเฉพาะตารางข้อมูล — system_settings / curriculum / print_config ก๊อปมาจาก prod ไว้แล้ว
+  const wipe = [
+    'score_history', 'score_database', 'qualitative_assess', 'grade_summary', 'subject_config',
+    'attendance', 'academic_records', 'detailed_lesson_records', 'morning_activity',
+    'club_members', 'club_advisors', 'clubs',
+    'substitute_assignments', 'leave_records', 'sarabun', 'budgets',
+    'calendar_events', 'timetable', 'user_history', 'users',
+  ];
+  for (const t of wipe) {
+    await query(`DELETE FROM ${t}`).catch(e => console.warn(`  ข้าม ${t}: ${e.message}`));
+  }
+
+  // users ต้องมาก่อน timetable — timetable_teacher_id_fkey อ้าง users.username
+  for (const t of TEACHERS) {
+    await query(
+      `INSERT INTO users(username,password,full_name,role,department,email,year,status)
+       VALUES($1,'1234',$2,$3,$4,$5,$6,'ปกติ')`,
+      [t.username, t.name, t.role, t.dept, `${t.username}@dev.local`, YEAR]
+    );
+  }
+  for (const s of STUDENTS) {
+    await query(
+      `INSERT INTO users(username,password,full_name,role,department,email,year,status)
+       VALUES($1,'1234',$2,'Student',$3,$4,$5,'ปกติ')`,
+      [s.id, s.name, s.cls, `${s.id}@dev.local`, YEAR]
+    );
+  }
+
+  for (const sub of SUBJECTS) {
+    for (const [day, period] of sub.slots) {
+      await query(
+        `INSERT INTO timetable(subject_code,subject_name,level,room,location,teacher_id,day,period,term,year)
+         VALUES($1,$2,$3,$4,'',$5,$6,$7,$8,$9)`,
+        [sub.code, sub.name, sub.level, sub.room, sub.teacher, day, period, TERM, YEAR]
+      );
+    }
+    await query(
+      `INSERT INTO subject_config(subject_id,subject_code,class_name,term,year,score_ratio,indicators_json,teacher_id)
+       VALUES($1,$2,$3,$4,$5,'50:20:30',$6,$7)`,
+      [`${sub.code}_${sub.level}/${sub.room}_${TERM}_${YEAR}`, sub.code, `${sub.level}/${sub.room}`,
+       TERM, YEAR,
+       JSON.stringify([
+         { code: '', name: 'ชิ้นงานที่ 1', score: 25, description: '' },
+         { code: '', name: 'ชิ้นงานที่ 2', score: 25, description: '' },
+       ]),
+       sub.teacher]
+    );
+  }
+
+  // HR ต้องครบ จันทร์-ศุกร์ period '0' ไม่งั้น HR หายไปบางวัน (ดู CLAUDE.md)
+  for (const day of ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์']) {
+    await query(
+      `INSERT INTO timetable(subject_code,subject_name,level,room,location,teacher_id,day,period,term,year)
+       VALUES('HR','กิจกรรมโฮมรูมหน้าเสาธง','ม.2','1','','teacher2',$1,'0',$2,$3)`,
+      [day, TERM, YEAR]
+    );
+  }
+
+  // เช็คชื่อไว้บางคาบ ให้มีทั้งช่องที่เช็คแล้วและช่องว่างใน massive grid
+  const sub = SUBJECTS[0];
+  const cls = `${sub.level}/${sub.room}`;
+  for (const date of ['2026-05-13', '2026-05-14']) {
+    const sessionId = `${date}|${sub.code}|${cls}|${date === '2026-05-13' ? '2' : '1'}`;
+    for (const s of STUDENTS.filter(x => x.cls === cls)) {
+      await query(
+        `INSERT INTO attendance(date,term,year,subject_code,subject_name,class,period,student_id,student_name,status,session_id,teacher_id)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [date, TERM, YEAR, sub.code, sub.name, cls, date === '2026-05-13' ? '2' : '1',
+         s.id, s.name, s.id === '01903' ? 'ขาด' : 'มา', sessionId, sub.teacher]
+      );
+    }
+  }
+
+  // คะแนนบางส่วน — จงใจกรอกไม่ครบ เพื่อให้ completeness gate ของ grade_summary ทำงาน
+  for (const s of STUDENTS.filter(x => x.cls === cls)) {
+    for (const [ind, score] of [['formative_0', '20'], ['remark', '-']]) {
+      await query(
+        `INSERT INTO score_database(uid,student_id,subject_code,indicator_id,score,term,year)
+         VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [`${s.id}_${sub.code}_${ind}_${TERM}_${YEAR}`, s.id, sub.code, ind, score, TERM, YEAR]
+      );
+    }
+  }
+
+  // สีแดง = วันหยุด (ข้อตกลงเรื่องสี ไม่ใช่คอลัมน์ใน schema)
+  for (const h of HOLIDAYS) {
+    await query(
+      `INSERT INTO calendar_events(id,title,start_date,color,created_by)
+       VALUES($1,$2,$3,'#dc3545','seed')`,
+      [h.id, h.title, h.date]
+    );
+  }
+
+  const counts = {};
+  for (const t of ['users', 'timetable', 'subject_config', 'attendance', 'score_database', 'calendar_events']) {
+    counts[t] = (await query(`SELECT COUNT(*) c FROM ${t}`)).rows[0].c;
+  }
+  console.log('✅ seed เสร็จ:', JSON.stringify(counts));
+  console.log('   login: admin/1234, teacher1/1234, teacher2/1234');
+}
+
+main().then(() => process.exit(0)).catch(e => { console.error('❌', e.message); process.exit(1); });

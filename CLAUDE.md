@@ -37,11 +37,52 @@ kill $(lsof -ti :3000) 2>/dev/null
 
 ### Environment (`.env`)
 ```
-DATABASE_URL=postgresql://user:pwd@host:port/dbname
+DATABASE_URL=postgresql://localhost:5432/pssms_dev
 JWT_SECRET=long_random_string
 PORT=3000
 SPREADSHEET_ID=... (legacy — sheets.js ยังใช้สำหรับ migration ไม่ใช่ runtime)
 ```
+ดู `.env.example` (commit ไว้) เป็นแม่แบบ. `.gitignore` คลุม `.env.*` ทั้งหมดยกเว้น `.env.example`
+
+---
+
+## Dev DB แยกจาก Production
+
+**`.env` ชี้ Postgres ในเครื่องเสมอ** — เดิมชี้ Railway ตรง ๆ ทำให้เทสทุกครั้งโดนข้อมูลครูจริง
+
+| | dev | production |
+|---|---|---|
+| host | `localhost:5432/pssms_dev` | `autorack.proxy.rlwy.net:47000/railway` |
+| อยู่ที่ | `.env` (default) | `.env.prod` (gitignored, chmod 600) |
+| ข้อมูล | seed ปลอม 6 นักเรียน 2 ครู | ของจริง |
+| SSL | ปิด (local ไม่รองรับ) | เปิด |
+
+`lib/db.js` เลือก SSL อัตโนมัติจาก hostname — localhost → ปิด, ที่เหลือ → เปิด
+
+### ตั้งครั้งแรก
+```bash
+brew install postgresql@18        # ต้องตรง major ของ prod (เช็คด้วย SELECT version())
+brew services start postgresql@18
+export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"   # keg-only ต้องใส่ PATH เอง
+createdb pssms_dev
+pg_dump --schema-only --no-owner --no-privileges "$PROD_URL" | psql -q pssms_dev
+pg_dump --data-only --no-owner --table=system_settings --table=curriculum --table=print_config "$PROD_URL" | psql -q pssms_dev
+node db/seed-dev.js
+```
+ก๊อป `system_settings` มาด้วยเพราะไม่มี PII และ **massive grid auto-generate ตายถ้าไม่มี TermData**
+
+### ต่อ production (opt-in ต่อคำสั่ง)
+```bash
+DATABASE_URL=$(node -e "require('dotenv').config({path:'.env.prod'});process.stdout.write(process.env.DATABASE_URL)") node db/backfill-grade-summary.js
+```
+
+### กติกา
+- **ห้ามก๊อปข้อมูลนักเรียนจริงลง dev** — seed เป็นของปลอมทั้งหมด
+- `db/seed-dev.js` ปฏิเสธรันถ้า `DATABASE_URL` ไม่ได้ชี้ localhost (parse hostname ไม่ใช่ regex)
+- **seed ต้องคงรูปทรงข้อมูลจริง** — รหัสนักเรียนมี 0 นำหน้า (`'01903'`), ห้อง `ม.X/Y`,
+  HR ครบ จันทร์-ศุกร์ period `'0'`, calendar event สีแดง `#dc3545` 1 อัน
+  ถ้า seed ใช้ id เลขล้วน บั๊กตระกูล normID/cleanStdId จะไม่โผล่ตอนเทส
+- **เทสบน dev ไม่ต้องคืนค่าเดิม** — แต่ถ้ารันด้วย `.env.prod` ยังต้องคืนเหมือนเดิม
 
 ---
 
