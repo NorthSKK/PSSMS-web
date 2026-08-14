@@ -186,7 +186,7 @@ web/
 |---|---|
 | `leave_records` | การลา (request_date, status, admin_comment) |
 | `sarabun` | ทะเบียนสารบรรณ |
-| `budgets` | งบประมาณ |
+| `budgets` | งบประมาณ — PK `project_id`, มี `created_by` (JWT id ของคนสร้าง) |
 | `calendar_events` | ปฏิทินกิจกรรม |
 | `maintenance` | บำรุงรักษา |
 
@@ -536,8 +536,12 @@ Enforcement ก่อน handler ทุก request (ยกเว้น `PUBLIC_F
 
 `createClub` ไม่เช็ค (ยังไม่มีเจ้าของ) — ครูคนไหนก็สร้างชุมนุมได้ตามออกแบบ
 
-**ไม่มี ownership model โดยตั้งใจ:** `sarabun` (ครูเห็น/แก้ทั้งหมด เทียบเท่า Admin
-ตามตาราง Roles), `budgets` (งานระดับฝ่าย) — ทั้ง 2 ตารางไม่มีคอลัมน์เจ้าของ
+**`sarabun`** — ไม่มีคอลัมน์เจ้าของ ครูสร้าง/แก้/เห็นได้ทั้งหมด (เทียบเท่า Admin
+ตามตาราง Roles) แต่ **`deleteSarabun` เป็น `ADMIN_ONLY`** เพราะตรวจสิทธิ์รายแถวไม่ได้
+
+**`budgets`** — มี `created_by` แล้ว `saveBudget` เป็น upsert ตาม `project_id` จึงต้อง
+เช็คก่อนทับ: เจ้าของหรือ Admin เท่านั้น แถวที่ `created_by` ว่าง (ข้อมูลก่อนเพิ่มคอลัมน์)
+สงวนให้ Admin แก้
 
 **Stub ที่ยัง no-op โดยตั้งใจ:** `updateTaskStatus` (Notion hook เฉพาะ
 `teacher12` — todo จริง sync ผ่าน `getTodoList.save`), `uploadSarabunFile`

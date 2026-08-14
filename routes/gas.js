@@ -31,6 +31,8 @@ const ADMIN_ONLY = new Set([
   'promoteStudentsToNextYear', 'deleteClub', 'adminAddMember', 'adminRemoveMember',
   'getAllUsers',
   'deleteSavingsTransaction', 'importSavingsCSV',
+  // ครูสร้าง/แก้สารบรรณได้ แต่ลบเป็นของ Admin — sarabun ไม่มีคอลัมน์เจ้าของให้ตรวจสิทธิ์รายแถว
+  'deleteSarabun',
 ]);
 
 const TEACHER_OR_ADMIN = new Set([
@@ -39,7 +41,7 @@ const TEACHER_OR_ADMIN = new Set([
   'saveDetailedLessonRecord', 'updateDetailedLessonRecord', 'deleteDetailedLessonRecord',
   'saveMorningActivityBatch', 'createClub', 'updateClub', 'teacherUpdateTimetableRow',
   'saveStudentRemarkDirectly', 'saveLeaveRequest', 'updateLeave', 'deleteLeave', 'reviewLeave',
-  'saveSubstituteAssignment', 'confirmSubstitute', 'saveBudget', 'saveSarabun', 'deleteSarabun',
+  'saveSubstituteAssignment', 'confirmSubstitute', 'saveBudget', 'saveSarabun',
   'requestSarabunNumber', 'updateTaskStatus', 'uploadSarabunFile',
   'saveSavingsTransaction',
 ]);
@@ -199,7 +201,7 @@ const handlers = {
 
   // Budget
   getBudgets:                      (args) => budget.getBudgets(args),
-  saveBudget:                      (args) => budget.saveBudget(args),
+  saveBudget:                      (args, user) => budget.saveBudget(args, user),
 
   // Missing functions (Phase 3 supplement)
   getTeacherRiskDashboard:         (args) => missing.getTeacherRiskDashboard(args),
