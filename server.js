@@ -6,7 +6,7 @@ const path = require('path');
 
 const app = express();
 app.use(cors());
-app.use(morgan('combined'));
+if (process.env.NODE_ENV !== 'test') app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -18,7 +18,13 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`PSSMS web running → http://localhost:${PORT}`);
-});
+// Only listen when started directly — tests require this file and bind their own
+// ephemeral port instead of racing the dev server on 3000.
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`PSSMS web running → http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

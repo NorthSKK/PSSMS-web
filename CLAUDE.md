@@ -658,19 +658,37 @@ require('./lib/db').query(\`
 
 ---
 
-## Testing Endpoints
+## Testing
 
-ไม่มี test framework — ทดสอบด้วย Node script ตรง:
-```js
-const jwt = require('jsonwebtoken');
-const token = jwt.sign({id:'admin',role:'ADMIN'}, process.env.JWT_SECRET, {expiresIn:'1d'});
-const http = require('http');
-const body = JSON.stringify({args:[...]});
-http.request({hostname:'localhost',port:3000,path:'/api/gas/fnName',
-  method:'POST',headers:{'Content-Type':'application/json',
-  'Content-Length':Buffer.byteLength(body),
-  'Authorization':'Bearer '+token}}, res=>{...}).end(body);
+`node:test` (built-in, ไม่มี dependency เพิ่ม) — เทสยิงผ่าน HTTP layer จริง
+ทั้ง JWT verify, role check, ownership check เลยครอบด้วย
+
+```bash
+npm test                          # pretest reseed dev DB → รันทุกไฟล์ใน test/
+npm run test:only test/scores.test.js
 ```
+
+```
+test/
+├── helpers/api.js       boot app in-process (port 0) + call/ok/denied + tokens
+├── helpers/fixtures.js  ค่าคงที่ที่ต้องตรงกับ db/seed-dev.js
+├── permissions.test.js  auth, ADMIN_ONLY, ownership, admin bypass
+├── scores.test.js       ล้างคะแนน=ลบแถว, completeness gate, remark, leading zero
+└── attendance.test.js   session overwrite, teacher_id จาก JWT, getSemesterReport
+```
+
+### กติกา
+
+- **`npm test` reseed dev DB ทุกครั้ง** (`pretest` → `db/seed-dev.js`) — ข้อมูลที่กดเทสมือไว้บนหน้าเว็บหายหมด
+- `test/helpers/api.js` ปฏิเสธรันถ้า `DATABASE_URL` ไม่ได้ชี้ localhost (parse hostname เหมือน seed) — เทสเขียน DB จริง
+- `--test-concurrency=1` เพราะทุกไฟล์ใช้ DB เดียวกัน รันขนานแล้วชนกัน
+- `server.js` export `app` และ listen เฉพาะตอน `require.main === module` — เทสจึงไม่ชนกับ dev server บน :3000
+- ทุกไฟล์ต้อง `after(stop)` ไม่งั้น process ค้างเพราะ pg pool ยังเปิด
+- แก้ `db/seed-dev.js` → แก้ `test/helpers/fixtures.js` ตาม
+
+### เทส endpoint เดี่ยว ๆ แบบเร็ว (ไม่ต้องเขียนไฟล์เทส)
+
+`/test-fn <fnName> [args...]` — ยิง admin JWT ไปที่ dev server บน :3000
 
 ---
 
