@@ -1236,6 +1236,17 @@ body.dark-mode .pssms-dept-general {
 .ar-chip.ar-out   b { color: var(--p-danger); }
 .ar-chip.ar-on b  { color: #fff; }
 
+/* ปุ่มคัดลอกรายชื่อ — บนแถบสรุป และบนหัวกลุ่มวิชาแต่ละกลุ่ม */
+.ar-copy {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; margin-left: .25rem;
+  border-radius: 999px; cursor: pointer; font-size: .68rem;
+  border: 1px solid var(--p-border); background: var(--p-dom); color: var(--p-accent);
+  transition: background .12s, border-color .12s;
+}
+.ar-copy:hover { background: var(--p-accent); border-color: var(--p-accent); color: #fff; }
+.ar-table tbody tr.ar-group .ar-copy { vertical-align: middle; }
+
 /* ── ตาราง ── */
 .ar-scroll {
   overflow: auto; max-height: calc(100vh - 300px);

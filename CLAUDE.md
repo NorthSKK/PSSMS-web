@@ -406,6 +406,13 @@ Buckets:  percent < 60  → critical
 - คอลัมน์ มา/สาย และ ลา/ขาด ใส่ค่าใน `.ar-slot` (กว้างคงที่ 44px) **ทั้งใน `<th>` และ `<td>`**
   และ padding ซ้าย-ขวาของ `th.ar-w` กับ `td.ar-num` ต้องเท่ากัน — ไม่งั้น label หัวตาราง
   เหลื่อมจากเม็ดสีที่อยู่ใต้มัน เพราะเม็ดสีกว้างไม่เท่ากันตามจำนวนหลัก
+- `copyReportList(groupIdx)` — `''` = ทุกวิชาที่แสดงอยู่, ตัวเลข = เฉพาะกลุ่มนั้น (index ใน `_arGroupKeys`)
+  ทั้งคู่เคารพชิปกรองที่ active อยู่ อ่านจาก `_arRows` ที่ render ล่าสุด
+  ข้อความมี `%` + ขาด/ลา + โควตา (`⚠️` เมื่อเหลือ ≤ `AR_QUOTA_LOW`, `⛔` เมื่อติดลบ)
+  ⚠️ `renderReportTable` (วิชาเดียว) ต้องแนบ `subjectCode/subjectName/className` **และ
+  `remainingQuota`** ให้ทุกแถวเอง — `getSemesterReport` ไม่ส่งมาต่างจาก `getAllSubjectsReport`
+  (โควตาคำนวณจาก `meta.maxAbsenceQuota - (leave + absent)`) ถ้าลืม ข้อความที่คัดลอกจะขึ้น `undefined`
+  และต้องสร้าง `_arRows` **หลัง** `data.sort()` ไม่งั้นลำดับในข้อความไม่ตรงกับตาราง
 - การ์ดรายชื่อ 3 ใบเดิมถูกแทนด้วยชิปนับจำนวนบน `.ar-bar` — กดแล้ว `filterReportByBucket()`
   กรองตาราง (กดซ้ำ = ยกเลิก) และซ่อนหัวกลุ่มวิชาที่ไม่เหลือนักเรียน
 - Bucket ของแถวคำนวณจาก `_arBucket()` — `>85` ปกติ, `≥80` เฝ้าระวัง, `≥60` มส., ต่ำกว่านั้นหมดสิทธิ์
@@ -469,6 +476,7 @@ Return:
 |---|---|---|---|
 | นักเรียนกลุ่มเสี่ยง (เกรด) | `copyRiskListByClass(cls)` | ห้อง → วิชา → ประเภท (0/ร/มส) | header ของการ์ดแต่ละห้อง |
 | กระดานแจ้งเตือน (เวลาเรียน) | `copyAtRiskList(bucket)` | วิชา+ห้อง | header ของ bucket ทั้ง 3 (`critical`/`ms`/`risk`) |
+| รายงานสถิติเวลาเรียน | `copyReportList(groupIdx)` | วิชา+ห้อง | แถบสรุป (ทุกวิชา) + หัวกลุ่มวิชาแต่ละกลุ่ม |
 
 `copyAtRiskList` อ่านจาก `window.currentAtRiskData` ที่
 `renderTeacherAtRiskDashboard()` เก็บไว้ตอน render (แบบเดียวกับ

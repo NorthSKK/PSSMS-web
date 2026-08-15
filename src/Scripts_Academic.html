@@ -1604,6 +1604,64 @@ function _arChips(counts) {
 
 let _arActiveFilter = '';
 
+// ── คัดลอกรายชื่อส่ง LINE / Facebook ───────────────────────
+// รูปแบบข้อความเดียวกับ copyAtRiskList ของ "กระดานแจ้งเตือนกลุ่มเสี่ยง" ในแดชบอร์ด
+// เก็บแถวที่ render ล่าสุดไว้ (แนบ subjectCode/subjectName/className ครบทุกแถว)
+// แบบเดียวกับที่แดชบอร์ดเก็บ window.currentAtRiskData
+let _arRows = [];
+let _arGroupKeys = [];
+
+const _arKey = (s) => `${s.subjectCode}|||${s.subjectName || s.subjectCode}|||${s.className || 'ไม่ระบุห้อง'}`;
+
+function _arCopyBtn(groupIdx, title) {
+  return `<button class="ar-copy" title="${title}" onclick="event.stopPropagation();copyReportList(${groupIdx === null ? "''" : groupIdx})">
+    <i class="fas fa-copy"></i></button>`;
+}
+
+// groupIdx = '' → ทุกวิชาที่แสดงอยู่, ตัวเลข → เฉพาะวิชานั้น. ทั้งคู่เคารพชิปกรองที่เลือกไว้
+window.copyReportList = function(groupIdx) {
+  let rows = _arRows;
+  if (_arActiveFilter) rows = rows.filter(s => _arBucket(parseFloat(s.percent)) === _arActiveFilter);
+  if (groupIdx !== '' && groupIdx !== undefined && groupIdx !== null) {
+    rows = rows.filter(s => _arKey(s) === _arGroupKeys[groupIdx]);
+  }
+
+  if (rows.length === 0) {
+    const msg = _arActiveFilter ? `ไม่มีนักเรียนกลุ่ม "${AR_LABEL[_arActiveFilter]}"` : 'ไม่มีนักเรียนให้คัดลอก';
+    if (typeof showToast === 'function') showToast(msg, 'info'); else showAlert(msg);
+    return;
+  }
+
+  const grouped = {};
+  rows.forEach(s => { (grouped[_arKey(s)] = grouped[_arKey(s)] || []).push(s); });
+
+  const scope = _arActiveFilter ? `กลุ่ม ${AR_LABEL[_arActiveFilter]}` : 'ทุกกลุ่ม';
+  let text = `📊 รายงานสถิติเวลาเรียน — ${scope}\n`;
+  text += `----------------------------------\n`;
+  Object.keys(grouped).sort().forEach(key => {
+    const [subCode, subName, cls] = key.split('|||');
+    text += `📚 ${subName} (${subCode}) — ห้อง ${cls}\n`;
+    grouped[key].forEach(s => {
+      const q = Number(s.remainingQuota);
+      const quota = isNaN(q) ? ''
+        : q < 0 ? ` ⛔ เกินโควตา ${Math.abs(q)} คาบ`
+        : q <= AR_QUOTA_LOW ? ` ⚠️ เหลือโควตา ${q} คาบ`
+        : ` เหลือโควตา ${q} คาบ`;
+      text += `   - ${s.id} ${s.name} — ${s.percent}% (ขาด ${s.absent}, ลา ${s.leave})${quota}\n`;
+    });
+    text += `\n`;
+  });
+  text += `----------------------------------\n`;
+  text += `⚠️ รบกวนนักเรียนที่มีรายชื่อ ติดต่อครูผู้สอนด่วนครับ!`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    const m = `✅ คัดลอกรายชื่อ ${rows.length} คน สำเร็จ!`;
+    if (typeof showToast === 'function') showToast(m, 'success'); else showAlert(m);
+  }).catch(err => {
+    showAlert('❌ เบราว์เซอร์ไม่รองรับการคัดลอก กรุณาเปลี่ยนเบราว์เซอร์ครับ: ' + err);
+  });
+}
+
 function filterReportByBucket(bucket) {
   _arActiveFilter = (_arActiveFilter === bucket) ? '' : bucket;
 
@@ -1625,7 +1683,7 @@ function filterReportByBucket(bucket) {
   });
 }
 
-function _arResetFilter() { _arActiveFilter = ''; }
+function _arResetFilter() { _arActiveFilter = ''; _arRows = []; _arGroupKeys = []; }
 
 function renderReportTable(res, subjectCode, subjectName, className) {
   showLoader(false);
@@ -1656,14 +1714,20 @@ function renderReportTable(res, subjectCode, subjectName, className) {
       <span class="ar-bar-meta">สอนแล้ว ${taught}/${total} คาบ (เหลือ ${remaining > 0 ? remaining : 0})</span>
       <div class="ar-taught" title="สอนไปแล้ว ${progressPercent}%"><span style="width:${progressPercent}%"></span></div>
       <span class="ar-bar-meta">ขาดได้ ${meta.maxAbsenceQuota} ครั้ง</span>
-      <div class="ar-chips">${_arChips(counts)}</div>
+      <div class="ar-chips">${_arChips(counts)}${_arCopyBtn(null, 'คัดลอกรายชื่อส่งไลน์/เฟซบุ๊ก')}</div>
     </div>`;
   }
 
   data.sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), 'th', { numeric: true }));
-  tbody.innerHTML = data.map((s, i) =>
-    _arRow(s, i + 1, meta.maxAbsenceQuota - ((s.leave || 0) + (s.absent || 0)))
-  ).join('');
+
+  // มุมมองวิชาเดียว — แถวไม่มี subjectCode/className/remainingQuota ติดมาจาก getSemesterReport
+  // ต้องแนบเองให้ข้อความที่คัดลอกครบ (เรียงหลัง sort ให้ลำดับตรงกับตาราง)
+  _arRows = data.map(s => ({
+    ...s, subjectCode, subjectName, className,
+    remainingQuota: meta.maxAbsenceQuota - ((s.leave || 0) + (s.absent || 0)),
+  }));
+
+  tbody.innerHTML = _arRows.map((s, i) => _arRow(s, i + 1, s.remainingQuota)).join('');
 }
 
 function renderAllSubjectsReportTable(data) {
@@ -1686,18 +1750,23 @@ function renderAllSubjectsReportTable(data) {
     info.innerHTML = `<div class="ar-bar">
       <span class="ar-bar-title">ทุกรายวิชาที่สอน</span>
       <span class="ar-bar-meta">${data.length} รายการ</span>
-      <div class="ar-chips">${_arChips(counts)}</div>
+      <div class="ar-chips">${_arChips(counts)}${_arCopyBtn(null, 'คัดลอกรายชื่อทุกวิชาที่แสดงอยู่')}</div>
     </div>`;
   }
+
+  _arRows = data;
 
   let html = '', currentGroup = '', studentIndex = 1;
   data.forEach(s => {
     const groupKey = `${s.subjectCode}_${s.className}`;
     if (groupKey !== currentGroup) {
       studentIndex = 1;
+      // ปุ่มบนหัวกลุ่ม = คัดลอกเฉพาะวิชานั้น (ยังเคารพชิปกรองที่เลือกไว้)
+      const gi = _arGroupKeys.push(_arKey(s)) - 1;
       html += `<tr class="ar-group"><td colspan="6">
         <i class="fas fa-book-open me-1"></i>${s.subjectCode} ${s.subjectName}
         <span class="ar-group-meta">· ห้อง ${s.className} · สอนแล้ว ${s.taught} คาบ</span>
+        ${_arCopyBtn(gi, `คัดลอกรายชื่อเฉพาะ ${s.subjectCode} ห้อง ${s.className}`)}
       </td></tr>`;
       currentGroup = groupKey;
     }
