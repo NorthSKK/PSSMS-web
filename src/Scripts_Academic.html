@@ -1559,19 +1559,27 @@ function _arBucket(p) {
 
 const AR_LABEL = { ok: 'ปกติ', watch: 'เฝ้าระวัง', ms: 'มส.', out: 'หมดสิทธิ์' };
 
+// 0 = ไม่มีอะไรต้องดู ทำจางไว้; ที่ไม่ใช่ 0 ขึ้นเป็นเม็ดสีให้กวาดตาเจอในตารางยาว ๆ
+// ห่อ .ar-slot กว้างคงที่เท่ากับหัวตาราง ไม่งั้นเม็ดสีกว้างไม่เท่ากันแล้ว label ไม่ตรงคอลัมน์
 function _arNum(n, cls) {
   const v = Number(n) || 0;
-  return `<span class="${v ? cls : 'ar-zero'}">${v}</span>`;
+  const inner = v ? `<span class="ar-pill ${cls}">${v}</span>` : `<span class="ar-zero">${v}</span>`;
+  return `<span class="ar-slot">${inner}</span>`;
 }
+
+// เตือนตอนโควตาใกล้หมด ไม่ใช่รอจนเกินแล้วค่อยแดง
+const AR_QUOTA_LOW = 3;
 
 // 1 แถว = 1 นักเรียน — % เป็นตัวบอกสถานะในตัว เลยไม่ต้องมีคอลัมน์ badge แยก
 function _arRow(s, index, remainingQuota) {
   const p = parseFloat(s.percent);
   const b = _arBucket(p);
   const rowCls = (b === 'ms' || b === 'out') ? ` ar-row-${b}` : '';
-  const quota = (remainingQuota >= 0)
-    ? `<span class="ar-quota">เหลือ ${remainingQuota}</span>`
-    : `<span class="ar-quota ar-quota-bad">เกิน ${Math.abs(remainingQuota)}</span>`;
+  const quota = (remainingQuota < 0)
+    ? `<span class="ar-quota ar-quota-bad">เกิน ${Math.abs(remainingQuota)}</span>`
+    : (remainingQuota <= AR_QUOTA_LOW)
+      ? `<span class="ar-quota ar-quota-warn">เหลือ ${remainingQuota}</span>`
+      : `<span class="ar-quota">เหลือ ${remainingQuota}</span>`;
 
   return `<tr class="ar-std${rowCls}" data-bucket="${b}">
     <td class="ar-col-no ar-no">${index}</td>
@@ -1579,8 +1587,8 @@ function _arRow(s, index, remainingQuota) {
       <div class="ar-name text-truncate" style="max-width:200px;">${s.name}</div>
       <div class="ar-sid">${s.id}</div>
     </td>
-    <td class="ar-num">${_arNum(s.present, '')}<span class="ar-sep">·</span>${_arNum(s.late, 'ar-late')}</td>
-    <td class="ar-num">${_arNum(s.leave, 'ar-leave')}<span class="ar-sep">·</span>${_arNum(s.absent, 'ar-miss')}</td>
+    <td class="ar-num">${_arNum(s.present, 'ar-present')}${_arNum(s.late, 'ar-late')}</td>
+    <td class="ar-num">${_arNum(s.leave, 'ar-leave')}${_arNum(s.absent, 'ar-miss')}</td>
     <td>${quota}</td>
     <td><span class="ar-pct ar-${b}" title="${AR_LABEL[b]}">${s.percent}%</span></td>
   </tr>`;

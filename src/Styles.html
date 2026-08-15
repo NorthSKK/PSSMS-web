@@ -1275,7 +1275,9 @@ body.dark-mode .pssms-dept-general {
 .ar-table tbody td.ar-col-no   { text-align: center; }
 /* ชื่อกินที่เหลือ คอลัมน์ตัวเลขแคบคงที่ ไม่งั้นเลข 2 ตัวลอยห่างกันกลางคอลัมน์กว้าง ๆ */
 .ar-table th.ar-col-name { width: 100%; }
+/* 2 slot × 44px + padding = 104 พอดี — th กับ td ต้อง padding เท่ากันเป๊ะ ไม่งั้น label เหลื่อม */
 .ar-table .ar-w { width: 104px; min-width: 104px; }
+.ar-table th.ar-w, .ar-table td.ar-num { padding-left: 8px; padding-right: 8px; }
 .ar-table tbody tr { transition: background .12s; }
 .ar-table tbody tr:hover { background: var(--p-accent-soft); }
 .ar-table tbody tr + tr td { box-shadow: inset 0 1px 0 var(--p-border); }
@@ -1283,15 +1285,27 @@ body.dark-mode .pssms-dept-general {
 .ar-no   { color: var(--p-text-muted); font-size: .7rem; }
 .ar-name { font-weight: 600; color: var(--p-text); line-height: 1.2; font-size: .78rem; }
 .ar-sid  { font-size: .64rem; color: var(--p-text-muted); font-variant-numeric: tabular-nums; }
-.ar-num  { font-variant-numeric: tabular-nums; }
-.ar-sep  { color: var(--p-border-strong); padding: 0 2px; }
-.ar-miss { color: var(--p-danger); font-weight: 700; }
-.ar-late { color: var(--p-warning); font-weight: 600; }
-.ar-leave{ color: var(--p-info); }
-.ar-zero { color: var(--p-text-muted); font-weight: 400; }
+/* nowrap บังคับความกว้างขั้นต่ำ — คอลัมน์ชื่อ (width:100%) จะบีบจนเม็ดสีตกบรรทัด */
+.ar-num  { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ar-zero { color: var(--p-text-muted); font-weight: 400; opacity: .5; }
 
-/* โควตา — ปกติจาง เกินโควตาแดง */
+/* ช่องกว้างคงที่ — ใช้ทั้งใน th และ td ให้ label ตรงกับเม็ดสีที่อยู่ใต้มันพอดี */
+.ar-slot { display: inline-block; width: 44px; text-align: center; vertical-align: middle; }
+
+/* เม็ดตัวเลข — เฉพาะค่าที่ไม่ใช่ 0 ให้กวาดตาเจอโดยไม่ต้องอ่านทีละแถว */
+.ar-pill {
+  display: inline-block; min-width: 26px; padding: 0 6px;
+  border-radius: 999px; font-size: .7rem; font-weight: 700; line-height: 1.6;
+  border: 1px solid transparent; font-variant-numeric: tabular-nums;
+}
+.ar-present { background: var(--p-dom); border-color: var(--p-border); color: var(--p-text-muted); font-weight: 500; }
+.ar-late    { background: #fef3c7; border-color: #fcd9a4; color: #92400e; }
+.ar-leave   { background: #dbeafe; border-color: #bfdbfe; color: #1e40af; }
+.ar-miss    { background: var(--p-danger); border-color: var(--p-danger); color: #fff; }
+
+/* โควตา — ปกติจาง, ใกล้หมดเหลือง, เกินแล้วแดง */
 .ar-quota     { font-size: .7rem; color: var(--p-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ar-quota-warn { color: var(--p-warning); font-weight: 700; }
 .ar-quota-bad { color: var(--p-danger); font-weight: 700; }
 
 /* เปอร์เซ็นต์ = ตัวชี้สถานะในตัว ไม่ต้องมีคอลัมน์ badge แยก */
@@ -1305,9 +1319,33 @@ body.dark-mode .pssms-dept-general {
 .ar-pct.ar-ms    { background: #fef3c7; color: #92400e; border-color: #fcd9a4; }
 .ar-pct.ar-out   { background: var(--p-danger); color: #fff; border-color: var(--p-danger); }
 
-/* แถบซ้ายบอกกลุ่ม — แทน table-warning/table-danger ที่ hardcode สีโหมดสว่าง */
+/* แถวที่ต้องตามงาน — ย้อมทั้งแถว + แถบซ้าย
+   ใช้ rgba/color-mix ทับ surface แทน table-warning/table-danger ของ bootstrap
+   ที่ hardcode สีโหมดสว่าง แล้วอ่านไม่ออกใน dark mode */
+.ar-table tbody tr.ar-row-ms  td { background: rgba(217,119,6,.10); }
+.ar-table tbody tr.ar-row-out td { background: rgba(220,53,69,.11); }
+
+/* คอลัมน์ตรึงต้องทึบ ไม่งั้นแถวที่เลื่อนผ่านทะลุขึ้นมา — บรรทัดแรกคือ fallback ของเบราว์เซอร์ที่ไม่มี color-mix */
+.ar-table tbody tr.ar-row-ms .ar-col-no,
+.ar-table tbody tr.ar-row-ms .ar-col-name {
+  background: #fdf4e6;
+  background: color-mix(in srgb, var(--p-surface) 90%, var(--p-warning));
+}
+.ar-table tbody tr.ar-row-out .ar-col-no,
+.ar-table tbody tr.ar-row-out .ar-col-name {
+  background: #fdecee;
+  background: color-mix(in srgb, var(--p-surface) 89%, var(--p-danger));
+}
 .ar-table tbody tr.ar-row-ms  .ar-col-no { box-shadow: inset 3px 0 0 var(--p-warning), inset -1px 0 0 var(--p-border); }
 .ar-table tbody tr.ar-row-out .ar-col-no { box-shadow: inset 3px 0 0 var(--p-danger),  inset -1px 0 0 var(--p-border); }
+
+/* hover ต้องยังเห็นผล — rule ย้อมสีอยู่หลัง rule hover เดิม เลยต้องประกาศซ้ำ */
+.ar-table tbody tr.ar-row-ms:hover td,
+.ar-table tbody tr.ar-row-out:hover td { background: var(--p-accent-soft); }
+.ar-table tbody tr.ar-row-ms:hover .ar-col-no,
+.ar-table tbody tr.ar-row-ms:hover .ar-col-name,
+.ar-table tbody tr.ar-row-out:hover .ar-col-no,
+.ar-table tbody tr.ar-row-out:hover .ar-col-name { background: var(--p-accent-soft); }
 
 /* หัวกลุ่มวิชา (มุมมอง "ทุกรายวิชา") */
 .ar-table tbody tr.ar-group td {
