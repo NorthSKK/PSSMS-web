@@ -1472,11 +1472,11 @@ function reloadReportSubjects() {
   select.innerHTML = `<option value="">⏳ กำลังโหลดวิชา...</option>`; 
   select.disabled = true;
   
-  const tbody = document.getElementById('reportTableBody'); 
-  if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center p-4 text-muted">กรุณาเลือกวิชา</td></tr>';
-  
-  const summaryDiv = document.getElementById('reportSummaryInfo'); 
-  if(summaryDiv) summaryDiv.remove();
+  const tbody = document.getElementById('reportTableBody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="6" class="ar-empty">กรุณาเลือกวิชา</td></tr>';
+
+  const summaryDiv = document.getElementById('reportSummaryInfo');
+  if(summaryDiv) summaryDiv.innerHTML = '';
 
   const subjectCacheKey = `report_subjects_${user.id}_${term}_${year}`;
   const cachedSubjects = sessionStorage.getItem(subjectCacheKey);
@@ -1548,131 +1548,154 @@ function generateReport() {
   }
 }
 
+// ── ตัวช่วยร่วมของรายงานสถิติเวลาเรียน (ar-*) ──────────────
+// เกณฑ์ต้องตรงกับของเดิมเป๊ะ: >85 ปกติ, >=80 เฝ้าระวัง, >=60 มส., ต่ำกว่านั้นหมดสิทธิ์
+function _arBucket(p) {
+  if (p > 85) return 'ok';
+  if (p >= 80) return 'watch';
+  if (p >= 60) return 'ms';
+  return 'out';
+}
+
+const AR_LABEL = { ok: 'ปกติ', watch: 'เฝ้าระวัง', ms: 'มส.', out: 'หมดสิทธิ์' };
+
+function _arNum(n, cls) {
+  const v = Number(n) || 0;
+  return `<span class="${v ? cls : 'ar-zero'}">${v}</span>`;
+}
+
+// 1 แถว = 1 นักเรียน — % เป็นตัวบอกสถานะในตัว เลยไม่ต้องมีคอลัมน์ badge แยก
+function _arRow(s, index, remainingQuota) {
+  const p = parseFloat(s.percent);
+  const b = _arBucket(p);
+  const rowCls = (b === 'ms' || b === 'out') ? ` ar-row-${b}` : '';
+  const quota = (remainingQuota >= 0)
+    ? `<span class="ar-quota">เหลือ ${remainingQuota}</span>`
+    : `<span class="ar-quota ar-quota-bad">เกิน ${Math.abs(remainingQuota)}</span>`;
+
+  return `<tr class="ar-std${rowCls}" data-bucket="${b}">
+    <td class="ar-col-no ar-no">${index}</td>
+    <td class="ar-col-name">
+      <div class="ar-name text-truncate" style="max-width:200px;">${s.name}</div>
+      <div class="ar-sid">${s.id}</div>
+    </td>
+    <td class="ar-num">${_arNum(s.present, '')}<span class="ar-sep">·</span>${_arNum(s.late, 'ar-late')}</td>
+    <td class="ar-num">${_arNum(s.leave, 'ar-leave')}<span class="ar-sep">·</span>${_arNum(s.absent, 'ar-miss')}</td>
+    <td>${quota}</td>
+    <td><span class="ar-pct ar-${b}" title="${AR_LABEL[b]}">${s.percent}%</span></td>
+  </tr>`;
+}
+
+// ชิปนับจำนวน — แทนการ์ดรายชื่อ 3 ใบเดิม กดแล้วกรองตารางแทนการอ่านรายชื่อซ้ำ
+function _arChips(counts) {
+  return ['ok', 'watch', 'ms', 'out'].map(b =>
+    `<span class="ar-chip ar-${b}" data-bucket="${b}" onclick="filterReportByBucket('${b}')">
+      ${AR_LABEL[b]} <b>${counts[b]}</b>
+    </span>`).join('');
+}
+
+let _arActiveFilter = '';
+
+function filterReportByBucket(bucket) {
+  _arActiveFilter = (_arActiveFilter === bucket) ? '' : bucket;
+
+  document.querySelectorAll('#reportSummaryInfo .ar-chip').forEach(c =>
+    c.classList.toggle('ar-on', c.dataset.bucket === _arActiveFilter));
+
+  const rows = document.querySelectorAll('#reportTableBody tr.ar-std');
+  rows.forEach(r => {
+    r.style.display = (!_arActiveFilter || r.dataset.bucket === _arActiveFilter) ? '' : 'none';
+  });
+
+  // หัวกลุ่มวิชาที่ไม่เหลือนักเรียนแล้วต้องหายไปด้วย ไม่งั้นเหลือหัวลอย ๆ
+  document.querySelectorAll('#reportTableBody tr.ar-group').forEach(g => {
+    let visible = false;
+    for (let el = g.nextElementSibling; el && !el.classList.contains('ar-group'); el = el.nextElementSibling) {
+      if (el.style.display !== 'none') { visible = true; break; }
+    }
+    g.style.display = visible ? '' : 'none';
+  });
+}
+
+function _arResetFilter() { _arActiveFilter = ''; }
+
 function renderReportTable(res, subjectCode, subjectName, className) {
   showLoader(false);
-  const tbody = document.getElementById('reportTableBody'); 
+  const tbody = document.getElementById('reportTableBody');
+  const info = document.getElementById('reportSummaryInfo');
   if (!tbody) return;
-  tbody.innerHTML = '';
-  
-  const oldHeader = document.getElementById('reportSummaryInfo'); 
-  if(oldHeader) oldHeader.remove();
+  _arResetFilter();
+  if (info) info.innerHTML = '';
 
-  if(!res || !res.students || res.students.length === 0) { 
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center p-4 text-muted">ไม่พบข้อมูลการเช็คชื่อในรายวิชานี้</td></tr>'; 
-      return; 
+  if (!res || !res.students || res.students.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="ar-empty">ไม่พบข้อมูลการเช็คชื่อในรายวิชานี้</td></tr>';
+    return;
   }
 
-  const data = res.students; 
-  const meta = res.meta || { periodsPerWeek: 0, totalCoursePeriods: 0, maxAbsenceQuota: 0, currentTotalTaught: 0 }; 
-  const taught = meta.currentTotalTaught; 
-  const total = meta.totalCoursePeriods; 
-  const progressPercent = total > 0 ? Math.min((taught / total) * 100, 100).toFixed(1) : 0; 
+  const data = res.students;
+  const meta = res.meta || { periodsPerWeek: 0, totalCoursePeriods: 0, maxAbsenceQuota: 0, currentTotalTaught: 0 };
+  const taught = meta.currentTotalTaught;
+  const total = meta.totalCoursePeriods;
+  const progressPercent = total > 0 ? Math.min((taught / total) * 100, 100).toFixed(1) : 0;
   const remaining = total - taught;
-  
-  const critical = []; const ms = []; const risk = [];
-  data.forEach(s => { 
-      const p = parseFloat(s.percent); 
-      if (p < 60) critical.push(s); 
-      else if (p < 80) ms.push(s); 
-      else if (p <= 85) risk.push(s); 
-  });
 
-  const renderList = (arr, colorClass) => {
-    if(arr.length === 0) return `<div class="text-center text-muted small py-3">ไม่มีนักเรียนในกลุ่มนี้ 🎉</div>`;
-    return arr.map(s => `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div><div class="fw-bold text-dark" style="font-size: 0.85rem;">${s.id} ${s.name}</div><div class="text-muted" style="font-size: 0.75rem;">มา <span class="text-success fw-bold">${s.present + s.late}</span>/${taught} คาบ (ขาด <span class="text-danger">${s.absent}</span>, ลา <span class="text-info">${s.leave}</span>)</div></div><span class="badge bg-${colorClass} rounded-pill" style="font-size: 0.8rem;">${s.percent}%</span></div>`).join('');
-  };
+  const counts = { ok: 0, watch: 0, ms: 0, out: 0 };
+  data.forEach(s => counts[_arBucket(parseFloat(s.percent))]++);
 
-  let infoHtml = `<div id="reportSummaryInfo" class="mb-4 animate__animated animate__fadeIn"><div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(to right, #ffffff, #f8f9fa);"><div class="card-body"><div class="d-flex justify-content-between align-items-center mb-2"><h6 class="fw-bold text-primary m-0"><i class="fas fa-clock me-2"></i>ความคืบหน้า: ${subjectCode} ${subjectName} (${className})</h6><span class="badge bg-light text-dark border">สอนแล้ว ${taught} / ${total} คาบ</span></div><div class="progress" style="height: 15px; border-radius: 10px; background-color: #e9ecef;"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: ${progressPercent}%">${progressPercent}%</div></div><div class="d-flex justify-content-between mt-2" style="font-size: 0.8rem;"><span class="text-secondary"><i class="fas fa-info-circle me-1"></i>เกณฑ์: ขาดได้สูงสุด <b>${meta.maxAbsenceQuota}</b> ครั้ง (20%)</span><span class="text-success fw-bold">เหลืออีก ${remaining > 0 ? remaining : 0} คาบ</span></div></div></div><h6 class="fw-bold text-danger mb-3"><i class="fas fa-exclamation-triangle me-2"></i>กระดานแจ้งเตือนรายบุคคล</h6><div class="row g-3 mb-4"><div class="col-md-4"><div class="card border-info shadow-sm h-100"><div class="card-header bg-info text-dark fw-bold small d-flex justify-content-between"><span>กลุ่มเสี่ยง (80-85%)</span><span class="badge bg-white text-dark">${risk.length}</span></div><div class="card-body p-2" style="max-height: 250px; overflow-y: auto;">${renderList(risk, 'info text-dark')}</div></div></div><div class="col-md-4"><div class="card border-warning shadow-sm h-100"><div class="card-header bg-warning text-dark fw-bold small d-flex justify-content-between"><span>ติด มส. (60-79%)</span><span class="badge bg-white text-dark">${ms.length}</span></div><div class="card-body p-2" style="max-height: 250px; overflow-y: auto;">${renderList(ms, 'warning text-dark')}</div></div></div><div class="col-md-4"><div class="card border-danger shadow-sm h-100"><div class="card-header bg-danger text-white fw-bold small d-flex justify-content-between"><span>หมดสิทธิ์ (< 60%)</span><span class="badge bg-white text-danger">${critical.length}</span></div><div class="card-body p-2" style="max-height: 250px; overflow-y: auto;">${renderList(critical, 'danger')}</div></div></div></div></div>`;
-  const tableEl = document.querySelector('table');
-  if(tableEl) { 
-      tableEl.insertAdjacentHTML('beforebegin', infoHtml); 
-      const theads = tableEl.querySelectorAll('th'); 
-      if (theads.length >= 3) { theads[1].innerText = "รหัสนักเรียน"; theads[2].innerText = "ชื่อ-สกุล"; } 
+  if (info) {
+    info.innerHTML = `<div class="ar-bar">
+      <span class="ar-bar-title">${subjectCode} ${subjectName} · ${className}</span>
+      <span class="ar-bar-meta">สอนแล้ว ${taught}/${total} คาบ (เหลือ ${remaining > 0 ? remaining : 0})</span>
+      <div class="ar-taught" title="สอนไปแล้ว ${progressPercent}%"><span style="width:${progressPercent}%"></span></div>
+      <span class="ar-bar-meta">ขาดได้ ${meta.maxAbsenceQuota} ครั้ง</span>
+      <div class="ar-chips">${_arChips(counts)}</div>
+    </div>`;
   }
 
-  let html = '';
-  
-  // เรียงรหัสแบบตัวเลข
-  data.sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), 'th', {numeric: true}));
-  
-  data.forEach((s, index) => {
-    const p = parseFloat(s.percent); 
-    const totalMissed = (s.leave || 0) + (s.absent || 0); 
-    const remainingQuota = meta.maxAbsenceQuota - totalMissed;
-    
-    let statusBadge = ''; let rowClass = ''; let progressColor = ''; let quotaText = '';
-    if (remainingQuota >= 0) quotaText = `<span class="text-muted small">ขาดได้อีก <b>${remainingQuota}</b> ครั้ง</span>`; 
-    else quotaText = `<span class="text-danger fw-bold small">เกินโควตา <b>${Math.abs(remainingQuota)}</b> ครั้ง</span>`;
-    
-    if (p > 85) { statusBadge = '<span class="badge bg-success rounded-pill px-2">ปกติ</span>'; progressColor = 'bg-success'; } 
-    else if (p >= 80) { statusBadge = '<span class="badge bg-info text-dark rounded-pill px-2">เฝ้าระวัง</span>'; progressColor = 'bg-info'; } 
-    else if (p >= 60) { statusBadge = '<span class="badge bg-warning text-dark rounded-pill px-2">มส.</span>'; rowClass = 'table-warning'; progressColor = 'bg-warning'; } 
-    else { statusBadge = '<span class="badge bg-danger rounded-pill px-2">หมดสิทธิ์</span>'; rowClass = 'table-danger'; progressColor = 'bg-danger'; }
-    
-    html += `<tr class="${rowClass}"><td class="text-center small">${index + 1}</td><td><div class="fw-bold text-primary small">${s.id}</div></td><td><div class="fw-bold small">${s.name}</div></td><td class="text-center"><span class="text-success fw-bold">${s.present}</span> <span class="text-muted">/</span> <span class="text-warning fw-bold">${s.late}</span></td><td class="text-center"><span class="text-info">${s.leave}</span> <span class="text-muted">/</span> <span class="text-danger fw-bold">${s.absent}</span><div class="mt-1">${quotaText}</div></td><td style="vertical-align: middle;"><div class="d-flex align-items-center"><div class="flex-grow-1 me-2"><div class="progress" style="height: 6px;"><div class="progress-bar ${progressColor}" style="width: ${p}%"></div></div></div><span class="fw-bold small ${p < 80 ? 'text-danger' : 'text-success'}">${p}%</span></div></td><td class="text-center">${statusBadge}</td></tr>`;
-  });
-  tbody.innerHTML = html;
+  data.sort((a, b) => String(a.id || "").localeCompare(String(b.id || ""), 'th', { numeric: true }));
+  tbody.innerHTML = data.map((s, i) =>
+    _arRow(s, i + 1, meta.maxAbsenceQuota - ((s.leave || 0) + (s.absent || 0)))
+  ).join('');
 }
 
 function renderAllSubjectsReportTable(data) {
   showLoader(false);
-  const tbody = document.getElementById('reportTableBody'); 
+  const tbody = document.getElementById('reportTableBody');
+  const info = document.getElementById('reportSummaryInfo');
   if (!tbody) return;
-  tbody.innerHTML = '';
-  
-  const oldHeader = document.getElementById('reportSummaryInfo'); 
-  if(oldHeader) oldHeader.remove();
-  
-  if(!data || data.length === 0) { 
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center p-4 text-muted">ไม่พบข้อมูลการเช็คชื่อในเทอมนี้</td></tr>'; 
-      return; 
+  _arResetFilter();
+  if (info) info.innerHTML = '';
+
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="ar-empty">ไม่พบข้อมูลการเช็คชื่อในเทอมนี้</td></tr>';
+    return;
   }
 
-  const critical = []; const ms = []; const risk = [];
-  data.forEach(s => { 
-      const p = parseFloat(s.percent); 
-      if (p < 60) critical.push(s); 
-      else if (p < 80) ms.push(s); 
-      else if (p <= 85) risk.push(s); 
-  });
-  
-  const renderList = (arr, colorClass) => {
-    if(arr.length === 0) return `<div class="text-center text-muted small py-3">ไม่มีนักเรียนในกลุ่มนี้ 🎉</div>`;
-    return arr.map(s => `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div style="flex-grow:1; padding-right:10px;"><div class="fw-bold text-dark" style="font-size: 0.85rem;">${s.id} ${s.name}</div><div class="text-primary" style="font-size: 0.75rem;"><i class="fas fa-book me-1"></i>${s.subjectCode} (${s.className})</div></div><span class="badge bg-${colorClass} rounded-pill" style="font-size: 0.8rem;">${s.percent}%</span></div>`).join('');
-  };
+  const counts = { ok: 0, watch: 0, ms: 0, out: 0 };
+  data.forEach(s => counts[_arBucket(parseFloat(s.percent))]++);
 
-  let infoHtml = `<div id="reportSummaryInfo" class="mb-4 animate__animated animate__fadeIn"><div class="card border-0 shadow-sm mb-4 bg-primary text-white text-center py-3" style="border-radius: 10px;"><h5 class="fw-bold m-0"><i class="fas fa-layer-group me-2"></i>สรุปสถิติเวลาเรียนรวมทุกรายวิชา</h5><div class="small mt-1 opacity-75">จำนวนข้อมูลนักเรียนทั้งหมด: <b>${data.length}</b> รายการ (แยกตามกลุ่มรายวิชา)</div></div><h6 class="fw-bold text-danger mb-3"><i class="fas fa-exclamation-triangle me-2"></i>กระดานแจ้งเตือนรายบุคคล (รวมทุกวิชา)</h6><div class="row g-3 mb-4"><div class="col-md-4"><div class="card border-info shadow-sm h-100"><div class="card-header bg-info text-dark fw-bold small d-flex justify-content-between"><span>กลุ่มเสี่ยง (80-85%)</span><span class="badge bg-white text-dark">${risk.length}</span></div><div class="card-body p-2" style="max-height: 250px; overflow-y: auto;">${renderList(risk, 'info text-dark')}</div></div></div><div class="col-md-4"><div class="card border-warning shadow-sm h-100"><div class="card-header bg-warning text-dark fw-bold small d-flex justify-content-between"><span>ติด มส. (60-79%)</span><span class="badge bg-white text-dark">${ms.length}</span></div><div class="card-body p-2" style="max-height: 250px; overflow-y: auto;">${renderList(ms, 'warning text-dark')}</div></div></div><div class="col-md-4"><div class="card border-danger shadow-sm h-100"><div class="card-header bg-danger text-white fw-bold small d-flex justify-content-between"><span>หมดสิทธิ์ (< 60%)</span><span class="badge bg-white text-danger">${critical.length}</span></div><div class="card-body p-2" style="max-height: 250px; overflow-y: auto;">${renderList(critical, 'danger')}</div></div></div></div></div>`;
-  const tableEl = document.querySelector('table');
-  if(tableEl) { 
-      tableEl.insertAdjacentHTML('beforebegin', infoHtml); 
-      const theads = tableEl.querySelectorAll('th'); 
-      if (theads.length >= 3) { theads[1].innerText = "รหัสนักเรียน"; theads[2].innerText = "ชื่อ-สกุล"; } 
+  if (info) {
+    info.innerHTML = `<div class="ar-bar">
+      <span class="ar-bar-title">ทุกรายวิชาที่สอน</span>
+      <span class="ar-bar-meta">${data.length} รายการ</span>
+      <div class="ar-chips">${_arChips(counts)}</div>
+    </div>`;
   }
 
-  let html = ''; let currentGroup = ''; let studentIndex = 1; 
-  data.forEach((s) => {
-    const p = parseFloat(s.percent); 
-    const remainingQuota = s.remainingQuota; 
+  let html = '', currentGroup = '', studentIndex = 1;
+  data.forEach(s => {
     const groupKey = `${s.subjectCode}_${s.className}`;
-    
     if (groupKey !== currentGroup) {
-      studentIndex = 1; 
-      html += `<tr style="background-color: #e7f1ff; border-top: 2px solid #0d6efd; border-bottom: 2px solid #0d6efd;"><td colspan="7" class="fw-bold text-primary text-start py-3 ps-3"><i class="fas fa-book-open me-2 text-primary"></i> <span style="font-size: 1.05rem;">วิชา: ${s.subjectCode} ${s.subjectName}</span><span class="badge bg-primary rounded-pill ms-2" style="font-size:0.85rem;"><i class="fas fa-users me-1"></i>ห้อง ${s.className}</span><span class="badge bg-light text-dark border ms-2 shadow-sm">สอนไปแล้ว ${s.taught} คาบ</span></td></tr>`;
+      studentIndex = 1;
+      html += `<tr class="ar-group"><td colspan="6">
+        <i class="fas fa-book-open me-1"></i>${s.subjectCode} ${s.subjectName}
+        <span class="ar-group-meta">· ห้อง ${s.className} · สอนแล้ว ${s.taught} คาบ</span>
+      </td></tr>`;
       currentGroup = groupKey;
     }
-    
-    let statusBadge = ''; let rowClass = ''; let progressColor = ''; let quotaText = '';
-    if (remainingQuota >= 0) quotaText = `<span class="text-muted small">เหลือโควตา <b>${remainingQuota}</b></span>`; 
-    else quotaText = `<span class="text-danger fw-bold small">เกิน <b>${Math.abs(remainingQuota)}</b></span>`;
-    
-    if (p > 85) { statusBadge = '<span class="badge bg-success rounded-pill px-2">ปกติ</span>'; progressColor = 'bg-success'; } 
-    else if (p >= 80) { statusBadge = '<span class="badge bg-info text-dark rounded-pill px-2">เฝ้าระวัง</span>'; progressColor = 'bg-info'; } 
-    else if (p >= 60) { statusBadge = '<span class="badge bg-warning text-dark rounded-pill px-2">มส.</span>'; rowClass = 'table-warning'; progressColor = 'bg-warning'; } 
-    else { statusBadge = '<span class="badge bg-danger rounded-pill px-2">หมดสิทธิ์</span>'; rowClass = 'table-danger'; progressColor = 'bg-danger'; }
-    
-    html += `<tr class="${rowClass}"><td class="text-center small">${studentIndex++}</td><td><div class="fw-bold text-primary small">${s.id}</div></td><td><div class="fw-bold small">${s.name}</div></td><td class="text-center"><span class="text-success fw-bold">${s.present}</span> <span class="text-muted">/</span> <span class="text-warning fw-bold">${s.late}</span></td><td class="text-center"><span class="text-info">${s.leave}</span> <span class="text-muted">/</span> <span class="text-danger fw-bold">${s.absent}</span><div class="mt-1">${quotaText}</div></td><td style="vertical-align: middle;"><div class="d-flex align-items-center"><div class="flex-grow-1 me-2"><div class="progress" style="height: 6px;"><div class="progress-bar ${progressColor}" style="width: ${p}%"></div></div></div><span class="fw-bold small ${p < 80 ? 'text-danger' : 'text-success'}">${p}%</span></div></td><td class="text-center">${statusBadge}</td></tr>`;
+    html += _arRow(s, studentIndex++, s.remainingQuota);
   });
-  
+
   tbody.innerHTML = html;
 }
 

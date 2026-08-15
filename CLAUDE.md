@@ -387,6 +387,24 @@ Buckets:  percent < 60  → critical
 
 **อย่าใช้** `COUNT(*)` ของ attendance เป็นตัวหาร — จะทำให้ percent inflate.
 
+### หน้ารายงานสถิติเวลาเรียน — `ar-*`
+
+`src/Page_Academic_Report.html.html` + `renderReportTable` / `renderAllSubjectsReportTable`
+(`src/Scripts_Academic.html`) ใช้ CSS family `ar-*` ที่ล้อความหนาแน่นของ `mg-*`
+(เช็คชื่อย้อนหลัง): หัวตาราง + คอลัมน์ ที่/นักเรียน ตรึง, ค่าปกติทำจางให้ข้อยกเว้นเด่น,
+ล้อ palette เดียวกับ `mg-*` (โครงใช้ token `--p-*`, ชิปเตือนใช้สีคงที่ชุดเดียวกับ
+`mg-late`/`mg-leave`) — **ห้ามใช้ `table-warning` / `bg-info` / `text-dark` ของ bootstrap**
+เพราะ hardcode สีโหมดสว่างทั้งพื้นทั้งตัวอักษร แล้วอ่านไม่ออกใน dark mode
+
+- 6 คอลัมน์: ที่ · นักเรียน (ชื่อ+รหัส) · มา·สาย · ลา·ขาด · โควตา · เวลาเรียน
+  `%` เป็นตัวบอกสถานะในตัว (สีตาม bucket) เลยไม่มีคอลัมน์ badge แยก
+- การ์ดรายชื่อ 3 ใบเดิมถูกแทนด้วยชิปนับจำนวนบน `.ar-bar` — กดแล้ว `filterReportByBucket()`
+  กรองตาราง (กดซ้ำ = ยกเลิก) และซ่อนหัวกลุ่มวิชาที่ไม่เหลือนักเรียน
+- Bucket ของแถวคำนวณจาก `_arBucket()` — `>85` ปกติ, `≥80` เฝ้าระวัง, `≥60` มส., ต่ำกว่านั้นหมดสิทธิ์
+  ⚠️ subtitle ของหน้าเขียนว่า "ปกติ ≥80%" ซึ่งไม่ตรงกับ `_arBucket` (ของเดิมก็ไม่ตรง ยังไม่แก้)
+- `#reportSummaryInfo` เป็น container ถาวรใน page HTML — render ด้วย `innerHTML`
+  (เดิม insert ก่อน `document.querySelector('table')` แล้วเขียนทับ `th.innerText` ทีหลัง)
+
 ### Massive Grid — auto-generate คาบย้อนหลัง
 
 `getMassiveAttendanceGrid` ไม่ได้คืนแค่ session ที่เคยเช็คแล้ว แต่เติม**ทุกคาบที่
