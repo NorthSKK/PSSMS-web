@@ -254,6 +254,8 @@ async function fnName([arg1, arg2, arg3]) { ... }
 - `getAllInOneScoreGridData(subjectCode, className, term, year)` — 4 args, **ไม่มี** teacherId
 - `getSemesterReport(subjectCode, className, term, year)` — 4 args (ไม่ใช่ `(teacherId, term, year)`)
 - `createClub(payload)` / `updateClub(payload)` — 1 object, clubId อยู่ใน payload สำหรับ update. createClub generate clubId เสมอ (`CLUB${Date.now()}`)
+- `manualCreateAffected(teacherId, startDate, endDate, leaveId)` — **4 args**
+  `leaveId` เพิ่มทีหลัง ถ้าไม่ส่ง คาบสอนแทนจะไม่ผูกใบลา แล้วป้ายประเภทการลาหายทั้งหน้า
 - `saveStudentRemarkDirectly(studentId, subjectCode, term, year, remark)` — **5 args**
   ลำดับตาม `updateRemarkInstant()` ใน `src/Scripts_Score.html` เคยประกาศ backend เป็น
   `[studentId, remark, term, year]` (4 ตัว) → `remark` รับค่า subjectCode ไป
@@ -451,6 +453,42 @@ Buckets:  percent < 60  → critical
   `title`) หน้าพิมพ์ใส่วงเล็บต่อท้ายชื่อครูเดิม
   ⚠️ ต้องเป็น LEFT JOIN — คาบที่กด "เพิ่มเอง" ไม่มี `leave_id` ถ้า INNER จะหายทั้งแถว
 - ครูเดิมแสดงเป็น**ตัวอักษรสีเทา ไม่ขีดฆ่า** — ครูไม่ได้ถูกยกเลิก แค่ไม่อยู่
+
+### คำศัพท์สถานะ — ต้องตรงกัน backend / frontend
+
+**`leave_records.status`** มี 3 ค่า: `รอพิจารณา` · `อนุมัติ` · `ปฏิเสธ`
+เขียนผ่าน `_setLeaveStatus()` ตัวเดียว (throw ถ้า `rowCount=0` — เดิม UPDATE ใบลาที่ไม่มีอยู่
+แล้วคืน success เงียบ ๆ) ⚠️ `rejectLeave` เคยเขียน `'ไม่อนุมัติ'` ซึ่งไม่มีที่ไหนอ่าน
+ใบลาจะค้างแสดงเป็น "รอพิจารณา" ตลอดไป
+
+**`substitute_assignments.status`** มี 4 ค่า: `รอจัด` · `จัดแล้ว` · `ยืนยันแล้ว` · `ยกเลิก`
+- แท็บ "จัดแล้ว" ต้องกรองผ่าน `_subInTab()` ซึ่งรวม `ยืนยันแล้ว` ด้วย — ไม่งั้นพอครูสอนแทน
+  กด `confirmSubstitute` แถวจะหายจากทุกแท็บ (แท็บมีแค่ 3 อัน)
+- `ยกเลิก` เขียนโดย `deleteLeave` เท่านั้น (`unassignSubstitute` ย้อนกลับเป็น `รอจัด`)
+- `saveSubstituteAssignment` เคย INSERT เป็น `รอยืนยัน` ซึ่งไม่มีแท็บไหนแสดง → เปลี่ยนเป็น `จัดแล้ว`
+
+### ลาแล้วเกิดคาบสอนแทนยังไง
+
+```
+saveLeaveRequest (teacher_id จาก JWT, status 'รอพิจารณา')
+  → reviewLeave (admin) → 'อนุมัติ'
+  → frontend ยิงต่อทันที: manualCreateAffected(teacherId, start, end, leaveId)
+       สร้าง 1 แถวต่อ (วัน × คาบในตารางสอน) status 'รอจัด'
+  → assignSubstitute(assignmentId, subTeacherId, note)  → 'จัดแล้ว'
+  → confirmSubstitute(subId) โดยครูสอนแทนเอง            → 'ยืนยันแล้ว'
+```
+
+- ⚠️ **`manualCreateAffected` ต้องรับ `leaveId` เป็น arg ที่ 4 และ INSERT ลง `leave_id`** —
+  เดิมไม่ผูก ทำให้ `getPendingSubstitutes` join ไม่เจอ ป้ายประเภทการลาว่างทุกแถวบน production
+  (dev ไม่เห็นเพราะ seed ผูกให้เอง)
+- `assignSubstitute` เช็คคาบชนก่อนเสมอ (`_assertSubstituteFree`): ครูเจ้าของคาบเอง /
+  มีคาบสอนของตัวเองใน `timetable` วัน+คาบเดียวกัน / ถูกจัดสอนแทนคาบนั้นไปแล้ว → throw ภาษาไทย
+  `getAvailableSubstitutes` กรองให้บนหน้าจอแล้วก็จริง แต่ id มาจาก client ต้องเช็คฝั่ง server ด้วย
+- `deleteLeave` ลบคาบที่ยัง `รอจัด` ทิ้ง และตั้งคาบที่จัดครูไปแล้วเป็น `ยกเลิก` (`leave_id=NULL`)
+  ในทรานแซกชันเดียวกับการลบใบลา — ครูสอนแทนที่รู้ตัวแล้วต้องเห็นว่าถูกยกเลิก ไม่ใช่แถวหายเฉย ๆ
+- FK `substitute_assignments.leave_id` เป็น `ON DELETE SET NULL`
+  (`db/migrations/2026-08-17-substitute-leave-fk.sql`) — ตาข่ายรองรับ path อื่น
+  เดิมไม่มี `ON DELETE` ลบใบลาที่มีคาบผูกอยู่แล้วพังทั้งคำสั่ง
 
 ### Massive Grid — auto-generate คาบย้อนหลัง
 

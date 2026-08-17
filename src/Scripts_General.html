@@ -771,7 +771,7 @@ function submitLeaveReview(status) {
             google.script.run
               .withSuccessHandler(function() { loadPage('Page_Substitute_Admin'); })
               .withFailureHandler(function() { loadPage('Page_Substitute_Admin'); })
-              .manualCreateAffected(leaveRec.teacherId, leaveRec.startDate, leaveRec.endDate || leaveRec.startDate);
+              .manualCreateAffected(leaveRec.teacherId, leaveRec.startDate, leaveRec.endDate || leaveRec.startDate, id);
           } else {
             setTimeout(function() { loadPage('Page_Substitute_Admin'); }, 400);
           }
@@ -1048,6 +1048,7 @@ function _renderSubDoneView(rows) {
           _subLeaveChip(r) +
           '<i class="fas fa-arrow-right sub-arrow"></i>' +
           '<span class="sub-to">' + (r.substituteTeacherName ? _escH(r.substituteTeacherName) : '—') + '</span>' +
+          (r.status === 'ยืนยันแล้ว' ? '<span class="sub-confirmed"><i class="fas fa-check me-1"></i>ยืนยันแล้ว</span>' : '') +
         '</div>' +
         '<button class="btn btn-sm btn-outline-danger sub-undo" onclick="doUnassignSubstitute(\'' + _escH(r.assignmentId) + '\')">' +
           '<i class="fas fa-undo me-1"></i>ยกเลิกการจัด</button>' +
@@ -1058,10 +1059,17 @@ function _renderSubDoneView(rows) {
   host.innerHTML = html;
 }
 
+// 'ยืนยันแล้ว' คือครูสอนแทนกดยืนยันรับคาบแล้ว — ยังเป็นคาบที่จัดเสร็จ ต้องอยู่แท็บเดียวกับ 'จัดแล้ว'
+// ไม่งั้นพอครูกดยืนยัน แถวจะหายไปจากทุกแท็บ
+function _subInTab(r, tab) {
+  if (tab === 'จัดแล้ว') return r.status === 'จัดแล้ว' || r.status === 'ยืนยันแล้ว';
+  return r.status === tab;
+}
+
 function _renderSubAdminTable() {
   var tbody = document.getElementById('subAdminTableBody');
   if (!tbody) return;
-  var rows = _subAdminData.filter(function(r){ return r.status === _subAdminTab; });
+  var rows = _subAdminData.filter(function(r){ return _subInTab(r, _subAdminTab); });
 
   // สลับมุมมองทุกครั้งที่ render — subAdminReload() render ใหม่โดยไม่ผ่าน subAdminShowTab
   var isDone = (_subAdminTab === 'จัดแล้ว');
@@ -1163,7 +1171,7 @@ function _subBuildPrintHtml(rows) {
 }
 
 function subPrintDone() {
-  var rows = _subAdminData.filter(function(r){ return r.status === 'จัดแล้ว'; });
+  var rows = _subAdminData.filter(function(r){ return _subInTab(r, 'จัดแล้ว'); });
   if (!rows.length) { showAlert('ไม่มีรายการให้พิมพ์'); return; }
 
   var iframe = document.getElementById('subPrintIframe');

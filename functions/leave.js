@@ -21,20 +21,27 @@ async function saveLeaveRequest([requestData], user) {
   return { status: 'success', message: 'ส่งคำขอลาสำเร็จ', id: rows[0].id };
 }
 
-async function approveLeave([leaveId, /* reviewedByName — ignored, JWT user.id used instead */, comment], user) {
-  await query(
-    `UPDATE leave_records SET status='อนุมัติ', reviewed_by=$1, admin_comment=$2 WHERE id=$3`,
-    [String(user?.id || ''), comment || '', leaveId]
+// สถานะใบลามี 3 ค่าเท่านั้น — ต้องตรงกับที่ frontend กรอง (leaveTabPending/Approved/Rejected)
+const LEAVE_PENDING  = 'รอพิจารณา';
+const LEAVE_APPROVED = 'อนุมัติ';
+const LEAVE_REJECTED = 'ปฏิเสธ';
+
+async function _setLeaveStatus(leaveId, status, comment, user) {
+  const { rowCount } = await query(
+    `UPDATE leave_records SET status=$1, reviewed_by=$2, admin_comment=$3 WHERE id=$4`,
+    [status, String(user?.id || ''), comment || '', leaveId]
   );
+  if (rowCount === 0) throw new Error('ไม่พบใบลานี้');
   return { status: 'success', message: 'บันทึกสำเร็จ' };
 }
 
+async function approveLeave([leaveId, /* reviewedByName — ignored, JWT user.id used instead */, comment], user) {
+  return _setLeaveStatus(leaveId, LEAVE_APPROVED, comment, user);
+}
+
+// เดิมเขียน 'ไม่อนุมัติ' ซึ่งไม่มีที่ไหนอ่าน — ใบลาจะค้างแสดงเป็น "รอพิจารณา" ตลอดไป
 async function rejectLeave([leaveId, /* reviewedByName — ignored, JWT user.id used instead */, comment], user) {
-  await query(
-    `UPDATE leave_records SET status='ไม่อนุมัติ', reviewed_by=$1, admin_comment=$2 WHERE id=$3`,
-    [String(user?.id || ''), comment || '', leaveId]
-  );
-  return { status: 'success', message: 'บันทึกสำเร็จ' };
+  return _setLeaveStatus(leaveId, LEAVE_REJECTED, comment, user);
 }
 
 async function saveSubstituteAssignment([assignData], user) {
@@ -43,7 +50,7 @@ async function saveSubstituteAssignment([assignData], user) {
   const assignedBy = isAdmin(user) ? (a.assignedBy || String(user?.id || '')) : String(user?.id || '');
   const { rows } = await query(
     `INSERT INTO substitute_assignments(leave_id,date,period,day_of_week,original_teacher_id,original_teacher_name,sub_teacher_id,sub_teacher_name,subject_code,subject_name,class,room,status,assigned_by,note)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'รอยืนยัน',$13,$14)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'จัดแล้ว',$13,$14)
      RETURNING id`,
     [
       a.leaveId || null,
@@ -71,15 +78,47 @@ async function confirmSubstitute([subId], user) {
 }
 
 async function reviewLeave([leaveId, status, comment], user) {
-  const dbStatus = status === 'อนุมัติ' ? 'อนุมัติ' : 'ปฏิเสธ';
-  await query(
-    `UPDATE leave_records SET status=$1, reviewed_by=$2, admin_comment=$3 WHERE id=$4`,
-    [dbStatus, String(user?.id || ''), comment || '', leaveId]
-  );
+  await _setLeaveStatus(leaveId, status === LEAVE_APPROVED ? LEAVE_APPROVED : LEAVE_REJECTED, comment, user);
   return { status: 'success', message: 'บันทึกการพิจารณาสำเร็จ' };
 }
 
+// ครูที่ติดคาบอยู่แล้วต้องจัดไม่ได้ — เดิม UPDATE ตรง ๆ เลยจัดซ้อนได้เงียบ ๆ
+// (getAvailableSubstitutes กรองให้บนหน้าจอแล้ว แต่ assignmentId/subTeacherId มาจาก client)
+async function _assertSubstituteFree(assignmentId, subTeacherId) {
+  const { rows: aRows } = await query(
+    `SELECT date::text AS date, period, day_of_week, original_teacher_id
+       FROM substitute_assignments WHERE id=$1`, [assignmentId]
+  );
+  if (!aRows.length) throw new Error('ไม่พบคาบสอนแทนนี้');
+  const a = aRows[0];
+  if (String(a.original_teacher_id) === String(subTeacherId)) {
+    throw new Error('ครูคนนี้คือครูเจ้าของคาบ จัดให้สอนแทนตัวเองไม่ได้');
+  }
+
+  const { rows: setting } = await query(
+    `SELECT value1, value2 FROM system_settings WHERE key='Active' AND subkey='Term' LIMIT 1`
+  );
+  const term = setting[0] ? setting[0].value1 : '1';
+  const year = setting[0] ? setting[0].value2 : '2569';
+
+  const { rows: own } = await query(
+    `SELECT subject_code FROM timetable
+      WHERE teacher_id=$1 AND day=$2 AND period=$3 AND term=$4 AND year=$5 LIMIT 1`,
+    [subTeacherId, a.day_of_week || '', String(a.period), term, year]
+  );
+  if (own.length) throw new Error(`ครูคนนี้มีคาบสอนของตัวเองอยู่แล้ว (${own[0].subject_code}) คาบ ${a.period}`);
+
+  const { rows: dup } = await query(
+    `SELECT 1 FROM substitute_assignments
+      WHERE date=$1 AND period=$2 AND sub_teacher_id=$3 AND status<>'ยกเลิก' AND id<>$4 LIMIT 1`,
+    [a.date, String(a.period), subTeacherId, assignmentId]
+  );
+  if (dup.length) throw new Error(`ครูคนนี้ถูกจัดสอนแทนคาบ ${a.period} ของวันนี้ไปแล้ว`);
+}
+
 async function assignSubstitute([assignmentId, subTeacherId, note, /* assignedByName — ignored, JWT user.id used instead */], user) {
+  if (!subTeacherId) throw new Error('ยังไม่ได้เลือกครูสอนแทน');
+  await _assertSubstituteFree(assignmentId, subTeacherId);
   const { rows } = await query(`SELECT full_name FROM users WHERE username=$1`, [subTeacherId]);
   const subTeacherName = rows[0] ? rows[0].full_name : '';
   await query(
@@ -123,13 +162,34 @@ async function updateLeave([leaveId, data], user) {
   return { status: 'success', message: 'แก้ไขสำเร็จ' };
 }
 
+// ลบใบลาแล้วคาบสอนแทนที่ผูกอยู่ต้องไม่ค้าง — FK ไม่มี ON DELETE ตอนแรก DELETE เลยพังทั้งคำสั่ง
+// คาบที่ยังไม่ได้จัด = ทิ้งได้เลย, คาบที่จัดครูไปแล้ว = ตั้งเป็น 'ยกเลิก' ไม่ลบ
+// เพราะครูสอนแทนอาจรู้ตัวแล้ว ต้องเห็นว่าถูกยกเลิกในแท็บ "ยกเลิก"
 async function deleteLeave([leaveId], user) {
   await _assertOwnsLeave(user, leaveId);
-  await query(`DELETE FROM leave_records WHERE id=$1`, [leaveId]);
-  return { status: 'success', message: 'ลบสำเร็จ' };
+  const { pool } = require('../lib/db');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM substitute_assignments WHERE leave_id=$1 AND status='รอจัด'`, [leaveId]);
+    const { rowCount: cancelled } = await client.query(
+      `UPDATE substitute_assignments SET status='ยกเลิก', leave_id=NULL WHERE leave_id=$1`, [leaveId]
+    );
+    await client.query(`DELETE FROM leave_records WHERE id=$1`, [leaveId]);
+    await client.query('COMMIT');
+    return {
+      status: 'success',
+      message: cancelled ? `ลบสำเร็จ (ยกเลิกคาบสอนแทนที่จัดไว้แล้ว ${cancelled} คาบ)` : 'ลบสำเร็จ',
+    };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
-async function manualCreateAffected([teacherId, startDate, endDate]) {
+async function manualCreateAffected([teacherId, startDate, endDate, leaveId]) {
   const { rows: settingRows } = await query(
     `SELECT value1, value2 FROM system_settings WHERE key='Active' AND subkey='Term' LIMIT 1`
   );
@@ -180,12 +240,13 @@ async function manualCreateAffected([teacherId, startDate, endDate]) {
   try {
     await client.query('BEGIN');
     for (const { dateStr, period, dayName, tt } of toInsert) {
+      // leave_id ต้องผูกไว้ ไม่งั้นหน้าจัดสอนแทนไม่รู้ว่าครูลาอะไร (leaveType ว่างทุกแถว)
       await client.query(
         `INSERT INTO substitute_assignments
-         (date,period,day_of_week,original_teacher_id,original_teacher_name,
+         (leave_id,date,period,day_of_week,original_teacher_id,original_teacher_name,
           subject_code,subject_name,class,room,status)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'รอจัด')`,
-        [dateStr, period, dayName, teacherId, tt.teacher_name || '',
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'รอจัด')`,
+        [leaveId || null, dateStr, period, dayName, teacherId, tt.teacher_name || '',
          tt.subject_code, tt.subject_name, tt.class_name, tt.room]
       );
     }
