@@ -83,6 +83,12 @@ DATABASE_URL=$(node -e "require('dotenv').config({path:'.env.prod'});process.std
   HR ครบ จันทร์-ศุกร์ period `'0'`, calendar event สีแดง `#dc3545` 1 อัน
   ถ้า seed ใช้ id เลขล้วน บั๊กตระกูล normID/cleanStdId จะไม่โผล่ตอนเทส
 - **เทสบน dev ไม่ต้องคืนค่าเดิม** — แต่ถ้ารันด้วย `.env.prod` ยังต้องคืนเหมือนเดิม
+- `substitute_assignments` seed **ผูกกับสัปดาห์ปัจจุบันเสมอ** (`mondayOffset()`) เพราะหน้า
+  จัดตารางสอนแทนเปิดมาด้วยตัวกรอง `_subWeekRange(0)` — ถ้า hardcode วัน พอเวลาผ่านไป
+  จะเปิดหน้ามาเจอ "ไม่มีรายการ" ทุกแท็บ. ครบ 3 สถานะ (จัดแล้ว 4 / รอจัด 2 / ยกเลิก 1)
+  ⚠️ สร้างวันที่ด้วย local getFullYear/getMonth/getDate **ห้ามใช้ `toISOString()`** —
+  TZ ไทย +07 ทำให้เที่ยงคืนตามเครื่องกลายเป็นวันก่อนหน้าใน UTC แล้ว `date` กับ
+  `day_of_week` หลุดกันคนละวัน
 
 ---
 

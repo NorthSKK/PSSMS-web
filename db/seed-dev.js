@@ -54,6 +54,40 @@ const SUBJECTS = [
     slots: [['อังคาร', '3']] },
 ];
 
+// คาบสอนแทน — ผูกกับ "สัปดาห์นี้" เสมอ เพราะหน้าจัดตารางสอนแทนเปิดมาด้วยตัวกรอง
+// สัปดาห์ปัจจุบัน (initSubstituteAdminPage → _subWeekRange(0)) ถ้า hardcode วันไว้
+// พอเวลาผ่านไปจะเปิดหน้ามาเจอ "ไม่มีรายการ" ทุกแท็บ
+const THAI_DOW = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+function mondayOffset(n) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + n); // 0 = จันทร์สัปดาห์นี้
+  return d;
+}
+// ห้ามใช้ toISOString() — TZ ไทยเป็น +07 เที่ยงคืนตามเวลาเครื่องจะกลายเป็นวันก่อนหน้าใน UTC
+// แล้ว date กับ day_of_week จะไม่ตรงกัน (เจอมาแล้วตอนเขียน seed นี้)
+const SUB_DAY = (n) => {
+  const d = mondayOffset(n);
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { date, dow: THAI_DOW[d.getDay()] };
+};
+
+// ครบทั้ง 3 สถานะ — จัดแล้ว 2 วัน (เทสมุมมองจัดกลุ่มตามวัน + หน้าพิมพ์),
+// รอจัด (ปุ่ม "จัด" + badge นับ), ยกเลิก (แท็บที่ 3)
+const SUBSTITUTES = [
+  // teacher1 ไม่อยู่ → teacher2 สอนแทน
+  { day: 1, period: '2', orig: 'teacher1', sub: 'teacher2', code: 'ว30205', name: 'ฟิสิกส์',   cls: 'ม.6/1', room: '214',    status: 'จัดแล้ว' },
+  { day: 1, period: '6', orig: 'teacher1', sub: 'teacher2', code: 'ว30205', name: 'ฟิสิกส์',   cls: 'ม.6/1', room: '214',    status: 'จัดแล้ว' },
+  { day: 3, period: '1', orig: 'teacher1', sub: 'teacher2', code: 'ว30205', name: 'ฟิสิกส์',   cls: 'ม.6/1', room: '',       status: 'จัดแล้ว' },
+  // teacher2 ไม่อยู่ → teacher1 สอนแทน
+  { day: 3, period: '3', orig: 'teacher2', sub: 'teacher1', code: 'พ22101', name: 'สุขศึกษา', cls: 'ม.2/1', room: 'โรงยิม', status: 'จัดแล้ว' },
+  // ยังไม่ได้จัด
+  { day: 4, period: '3', orig: 'teacher2', sub: '',         code: 'พ22101', name: 'สุขศึกษา', cls: 'ม.2/1', room: 'โรงยิม', status: 'รอจัด' },
+  { day: 4, period: '0', orig: 'teacher2', sub: '',         code: 'HR',     name: 'กิจกรรมโฮมรูมหน้าเสาธง', cls: 'ม.2/1', room: '', status: 'รอจัด' },
+  // ครูกลับมาเอง เลยยกเลิกไป
+  { day: 2, period: '2', orig: 'teacher1', sub: '',         code: 'ว30205', name: 'ฟิสิกส์',   cls: 'ม.6/1', room: '214',    status: 'ยกเลิก' },
+];
+
 const HOLIDAYS = [
   { id: 'EVTDEV_1', title: 'วันแม่แห่งชาติ', date: '2026-08-12' },
   { id: 'EVTDEV_2', title: 'วันเข้าพรรษา',   date: '2026-07-30' },
@@ -144,6 +178,24 @@ async function main() {
     }
   }
 
+  const teacherName = (id) => (TEACHERS.find(t => t.username === id) || {}).name || '';
+  for (const s of SUBSTITUTES) {
+    const { date, dow } = SUB_DAY(s.day);
+    await query(
+      `INSERT INTO substitute_assignments(
+         date, period, day_of_week,
+         original_teacher_id, original_teacher_name,
+         sub_teacher_id, sub_teacher_name,
+         subject_code, subject_name, class, room, status, assigned_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [date, s.period, dow,
+       s.orig, teacherName(s.orig),
+       s.sub || null, s.sub ? teacherName(s.sub) : null,
+       s.code, s.name, s.cls, s.room, s.status,
+       s.status === 'จัดแล้ว' ? 'admin' : null]
+    );
+  }
+
   // สีแดง = วันหยุด (ข้อตกลงเรื่องสี ไม่ใช่คอลัมน์ใน schema)
   for (const h of HOLIDAYS) {
     await query(
@@ -154,7 +206,7 @@ async function main() {
   }
 
   const counts = {};
-  for (const t of ['users', 'timetable', 'subject_config', 'attendance', 'score_database', 'calendar_events']) {
+  for (const t of ['users', 'timetable', 'subject_config', 'attendance', 'score_database', 'calendar_events', 'substitute_assignments']) {
     counts[t] = (await query(`SELECT COUNT(*) c FROM ${t}`)).rows[0].c;
   }
   console.log('✅ seed เสร็จ:', JSON.stringify(counts));
