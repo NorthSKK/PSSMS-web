@@ -1234,12 +1234,22 @@ body.dark-mode .pssms-dept-general {
 .sub-subject { font-weight: 600; color: var(--p-text); line-height: 1.25; }
 .sub-where   { font-size: .7rem; color: var(--p-text-muted); }
 
-/* ครูเดิม → ครูสอนแทน คือใจความของแท็บนี้ ทำให้อ่านเป็นประโยคเดียว */
-.sub-who   { flex: 1 1 260px; display: flex; align-items: center; gap: .5rem; min-width: 0; }
-.sub-from  { color: var(--p-text-muted); text-decoration: line-through; }
+/* ครูเดิม → ครูสอนแทน คือใจความของแท็บนี้ ทำให้อ่านเป็นประโยคเดียว
+   ครูเดิมใช้สีเทา ไม่ขีดฆ่า — ครูไม่ได้ถูกยกเลิก แค่ไม่อยู่ */
+.sub-who   { flex: 1 1 300px; display: flex; align-items: center; gap: .4rem; min-width: 0; flex-wrap: wrap; }
+.sub-from  { color: var(--p-text-muted); }
 .sub-arrow { color: var(--p-border-strong); font-size: .7rem; }
 .sub-to    { font-weight: 700; color: var(--p-accent); }
 .sub-undo  { flex: 0 0 auto; white-space: nowrap; }
+
+/* ประเภทการลา — มาจาก leave_records ผ่าน leave_id (คาบที่ "เพิ่มเอง" จะไม่มี) */
+.sub-leave {
+  font-size: .64rem; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--p-border); background: var(--p-dom); color: var(--p-text-muted);
+  white-space: nowrap;
+}
+.sub-leave.is-sick { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+.sub-leave.is-biz  { background: #fef3c7; border-color: #fcd9a4; color: #92400e; }
 
 @media (max-width: 768px) {
   .sub-slot { flex-wrap: wrap; }

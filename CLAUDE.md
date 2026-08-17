@@ -444,6 +444,13 @@ Buckets:  percent < 60  → critical
   (`_syncSchoolBrandingFromServer` ใน `Scripts_Core.html` เป็นคนเซ็ต)
 - ⚠️ **`</script>` ในสตริงต้องเขียนเป็น `<\/script>`** — `routes/assets.js` strip ด้วย
   `/<\/script>/gi` ตอนเสิร์ฟ ถ้าไม่ escape ไฟล์ทั้งไฟล์จะถูกตัดกลางคัน
+- ตัวกรองเปิดมา default = **วันนี้** (ไม่ใช่สัปดาห์นี้) — งานประจำวันคือ "วันนี้ใครไม่อยู่"
+  อยากดูช่วงกว้างใช้ปุ่ม สัปดาห์นี้ / สัปดาห์หน้า. seed จึงต้องมีคาบของ `day 0` ด้วยเสมอ
+- `getPendingSubstitutes` **LEFT JOIN `leave_records`** ผ่าน `leave_id` คืน `leaveType` /
+  `leaveReason` เพิ่ม → `_subLeaveChip()` ทำป้าย (ลาป่วย=แดง ลากิจ=เหลือง reason อยู่ใน
+  `title`) หน้าพิมพ์ใส่วงเล็บต่อท้ายชื่อครูเดิม
+  ⚠️ ต้องเป็น LEFT JOIN — คาบที่กด "เพิ่มเอง" ไม่มี `leave_id` ถ้า INNER จะหายทั้งแถว
+- ครูเดิมแสดงเป็น**ตัวอักษรสีเทา ไม่ขีดฆ่า** — ครูไม่ได้ถูกยกเลิก แค่ไม่อยู่
 
 ### Massive Grid — auto-generate คาบย้อนหลัง
 

@@ -57,10 +57,14 @@ async function getPendingSubstitutes([from, to] = []) {
   let where = '';
   if (from && to) {
     params.push(from, to);
-    where = `WHERE date >= $1 AND date <= $2`;
+    where = `WHERE s.date >= $1 AND s.date <= $2`;
   }
+  // LEFT JOIN — คาบที่สร้างเองด้วย "เพิ่มเอง" ไม่มี leave_id ต้องไม่หายไปจากรายการ
   const { rows } = await query(
-    `SELECT * FROM substitute_assignments ${where} ORDER BY date`,
+    `SELECT s.*, l.type AS leave_type, l.reason AS leave_reason
+       FROM substitute_assignments s
+       LEFT JOIN leave_records l ON l.id = s.leave_id
+       ${where} ORDER BY s.date`,
     params
   );
   return rows.map(r => ({
@@ -79,6 +83,8 @@ async function getPendingSubstitutes([from, to] = []) {
     className: r.class || '',
     room:      r.room  || '',
     status:    r.status || '',
+    leaveType:   r.leave_type   || '',
+    leaveReason: r.leave_reason || '',
   }));
 }
 

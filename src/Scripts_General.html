@@ -900,9 +900,11 @@ function _subWeekRange(offsetWeeks) {
 
 function initSubstituteAdminPage() {
   if (!document.getElementById('subAdminTableBody')) return;
-  var wk = _subWeekRange(0);
-  document.getElementById('subFilterFrom').value = wk.from;
-  document.getElementById('subFilterTo').value = wk.to;
+  // เปิดมาเห็นของวันนี้ก่อน — งานประจำวันคือ "วันนี้ใครไม่อยู่ ใครสอนแทน"
+  // อยากดูช่วงกว้างค่อยกดปุ่ม สัปดาห์นี้ / สัปดาห์หน้า
+  var today = _subFmtDate(new Date());
+  document.getElementById('subFilterFrom').value = today;
+  document.getElementById('subFilterTo').value = today;
   subUpdateFilterDayLabel();
   subAdminReload();
 }
@@ -998,6 +1000,15 @@ function _subSortRows(rows) {
   });
 }
 
+// ป้ายประเภทการลา — ไม่มี leave_id (คาบที่ "เพิ่มเอง") ก็ไม่ต้องขึ้นป้าย
+function _subLeaveChip(r) {
+  var t = String(r.leaveType || '').trim();
+  if (!t) return '';
+  var cls = t.indexOf('ป่วย') >= 0 ? ' is-sick' : t.indexOf('กิจ') >= 0 ? ' is-biz' : '';
+  var title = r.leaveReason ? ' title="' + _escH(r.leaveReason) + '"' : '';
+  return '<span class="sub-leave' + cls + '"' + title + '>' + _escH(t) + '</span>';
+}
+
 function _subGroupByDate(rows) {
   var groups = [];
   _subSortRows(rows).forEach(function(r) {
@@ -1034,6 +1045,7 @@ function _renderSubDoneView(rows) {
         '</div>' +
         '<div class="sub-who">' +
           '<span class="sub-from">' + _escH(r.originalTeacherName) + '</span>' +
+          _subLeaveChip(r) +
           '<i class="fas fa-arrow-right sub-arrow"></i>' +
           '<span class="sub-to">' + (r.substituteTeacherName ? _escH(r.substituteTeacherName) : '—') + '</span>' +
         '</div>' +
@@ -1117,7 +1129,8 @@ function _subBuildPrintHtml(rows) {
       body += '<tr><td class="c">' + _escH(r.period) + '</td>' +
         '<td>' + _escH(r.subjectName) + '</td>' +
         '<td class="c">' + _escH(r.className) + (r.room ? ' / ' + _escH(r.room) : '') + '</td>' +
-        '<td>' + _escH(r.originalTeacherName) + '</td>' +
+        '<td>' + _escH(r.originalTeacherName) +
+          (r.leaveType ? ' <span class="lv">(' + _escH(r.leaveType) + ')</span>' : '') + '</td>' +
         '<td><b>' + _escH(r.substituteTeacherName || '—') + '</b></td>' +
         '<td>&nbsp;</td></tr>';
     });
@@ -1135,7 +1148,7 @@ function _subBuildPrintHtml(rows) {
     'h4{margin:16px 0 6px;padding-bottom:3px;border-bottom:2px solid #333;font-size:12pt;}' +
     'table{width:100%;border-collapse:collapse;font-size:11pt;page-break-inside:avoid;}' +
     'th,td{border:1px solid #999;padding:5px 6px;vertical-align:middle;}' +
-    'th{background:#eee;font-weight:600;} .c{text-align:center;}' +
+    'th{background:#eee;font-weight:600;} .c{text-align:center;} .lv{color:#666;font-size:10pt;}' +
     '.printed{margin-top:18px;text-align:right;font-size:10pt;color:#666;}' +
     '.ctrl{text-align:center;padding:12px;margin-bottom:16px;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.1);position:sticky;top:0;z-index:100;}' +
     '.btn{padding:8px 20px;border:none;border-radius:5px;cursor:pointer;font-size:13pt;font-family:"Sarabun",sans-serif;font-weight:bold;margin:0 4px;}' +
