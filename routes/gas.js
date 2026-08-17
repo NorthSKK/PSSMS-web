@@ -8,7 +8,7 @@ const cache = require('../lib/cache');
 const TIMETABLE_WRITE_FNS = new Set([
   'updateTimetableRow', 'deleteTimetableRow', 'importTimetableCSV',
   'swapTimetableTeacher', 'setHomeroomTeacher', 'setAllHomeroomTeachers',
-  'teacherUpdateTimetableRow',
+  'teacherUpdateTimetableRow', 'removeDuplicateTimetableRows',
 ]);
 // Functions that invalidate student-list caches on success
 const USER_WRITE_FNS = new Set([
@@ -24,6 +24,7 @@ const ADMIN_ONLY = new Set([
   'saveSystemConfig', 'saveCalendarEvent', 'deleteCalendarEvent', 'importCalendarCSV',
   'updateTimetableRow', 'deleteTimetableRow', 'importTimetableCSV', 'swapTimetableTeacher',
   'setHomeroomTeacher', 'setAllHomeroomTeachers',
+  'findDuplicateTimetableRows', 'removeDuplicateTimetableRows',
   'approveLeave', 'rejectLeave', 'assignSubstitute', 'unassignSubstitute', 'manualCreateAffected',
   'saveSchoolInfo', 'savePrintConfigData', 'importCurriculumCSV',
   'addCurriculumItem', 'updateCurriculumItem', 'deleteCurriculumItem',
@@ -120,6 +121,8 @@ const handlers = {
   getFilteredTimetables:           (args) => timetableAdmin.getFilteredTimetables(args),
   updateTimetableRow:              (args) => timetableAdmin.updateTimetableRow(args),
   deleteTimetableRow:              (args) => timetableAdmin.deleteTimetableRow(args),
+  findDuplicateTimetableRows:      (args) => timetableAdmin.findDuplicateTimetableRows(args),
+  removeDuplicateTimetableRows:    (args) => timetableAdmin.removeDuplicateTimetableRows(args),
   importTimetableCSV:              (args) => timetableAdmin.importTimetableCSV(args),
   swapTimetableTeacher:            (args) => timetableAdmin.swapTimetableTeacher(args),
   teacherUpdateTimetableRow:       (args, user) => timetableAdmin.teacherUpdateTimetableRow(args, user),
@@ -236,6 +239,7 @@ const handlers = {
   getCurriculumBySubject:          (args) => missing.getCurriculumBySubject(args),
   getAvailableSubstitutes:         (args) => missing.getAvailableSubstitutes(args),
   updateTaskStatus:                (args) => missing.updateTaskStatus(args),
+  sendTaskToNotion:                (args) => missing.sendTaskToNotion(args),
   adminAddMember:                  (args) => missing.adminAddMember(args),
   adminRemoveMember:               (args) => missing.adminRemoveMember(args),
   promoteStudentsToNextYear:       () => missing.promoteStudentsToNextYear(),

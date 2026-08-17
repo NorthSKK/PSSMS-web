@@ -18,6 +18,41 @@ async function getFilteredTimetables([teacherId, term, year]) {
   return rows.map(r => ({ rowIndex: r.id, data: rowToArray(r) }));
 }
 
+// แถวซ้ำ = สอนวิชาเดียวกัน ห้องเดียวกัน ครูคนเดียวกัน วัน+คาบเดียวกัน ในเทอม/ปีเดียวกัน
+// (import CSV ซ้ำรอบสองทำให้เกิด แล้วรายงานคาบสอนจะนับซ้ำตาม)
+const _dupKey = (r) => [r.subject_code, r.level, r.room, r.teacher_id, r.day, r.period]
+  .map(v => String(v == null ? '' : v).trim()).join('|');
+
+// เก็บแถวแรก (id น้อยสุด) ทิ้งที่เหลือ — find กับ remove ต้องเรียงเหมือนกัน
+// ไม่งั้นหน้าจอบอกว่าจะลบแถวหนึ่ง แต่ระบบไปลบอีกแถว
+async function _dupGroups(term, year) {
+  const { rows } = await query(
+    `SELECT * FROM timetable WHERE term=$1 AND year=$2 ORDER BY id`,
+    [String(term), String(year)]
+  );
+  const byKey = new Map();
+  for (const r of rows) {
+    const k = _dupKey(r);
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(r);
+  }
+  return [...byKey.values()].filter(g => g.length > 1);
+}
+
+async function findDuplicateTimetableRows([term, year]) {
+  const groups = await _dupGroups(term, year);
+  // frontend อ่าน row.rowIdx (ไม่ใช่ rowIndex เหมือน getFilteredTimetables)
+  return groups.map(g => g.map(r => ({ rowIdx: r.id, data: rowToArray(r) })));
+}
+
+async function removeDuplicateTimetableRows([term, year]) {
+  const groups = await _dupGroups(term, year);
+  const ids = groups.flatMap(g => g.slice(1).map(r => r.id));
+  if (!ids.length) return { status: 'success', message: 'ไม่พบแถวซ้ำ', removed: 0 };
+  await query(`DELETE FROM timetable WHERE id = ANY($1::int[])`, [ids]);
+  return { status: 'success', message: `ลบแถวซ้ำ ${ids.length} แถว (เก็บไว้ ${groups.length} แถว)`, removed: ids.length };
+}
+
 async function updateTimetableRow([rowIndex, data]) {
   // data = [subject_code, subject_name, level, room, location, teacher_id, day, period, term, year]
   await query(
@@ -220,6 +255,8 @@ async function setAllHomeroomTeachers([assignments, term, year]) {
 
 module.exports = {
   getFilteredTimetables,
+  findDuplicateTimetableRows,
+  removeDuplicateTimetableRows,
   updateTimetableRow,
   deleteTimetableRow,
   importTimetableCSV,

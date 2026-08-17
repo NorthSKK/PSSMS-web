@@ -688,9 +688,25 @@ Enforcement ก่อน handler ทุก request (ยกเว้น `PUBLIC_F
 เช็คก่อนทับ: เจ้าของหรือ Admin เท่านั้น แถวที่ `created_by` ว่าง (ข้อมูลก่อนเพิ่มคอลัมน์)
 สงวนให้ Admin แก้
 
-**Stub ที่ยัง no-op โดยตั้งใจ:** `updateTaskStatus` (Notion hook เฉพาะ
-`teacher12` — todo จริง sync ผ่าน `getTodoList.save`), `uploadSarabunFile`
-(ไม่รองรับ upload ใน web)
+**Stub ที่ยัง no-op โดยตั้งใจ:** `updateTaskStatus` + `sendTaskToNotion` (Notion hook
+เฉพาะ `teacher12` — todo จริง sync ผ่าน `getTodoList.save`; `sendTaskToNotion` ต้องคืน
+**สตริง JSON** `'{}'` ไม่ใช่ object เพราะ frontend ทำ `JSON.parse(response)` แล้วอ่าน `.id`),
+`uploadSarabunFile` (ไม่รองรับ upload ใน web)
+
+### ชื่อ RPC ต้องตรงกับ handlers map เป๊ะ
+
+`routes/gas.js` ตอบ `'<fn>' not implemented in web prototype yet` เมื่อไม่เจอชื่อ —
+เป็น error ตอน runtime อย่างเดียว ไม่มีอะไรจับตอน build เคยหลุดมาแล้ว 4 ตัว
+(`submitLeaveRequest` ที่จริงชื่อ `saveLeaveRequest` ทำให้ครูแจ้งลาไม่ได้เลยตั้งแต่
+commit แรกที่ย้าย `src/` เข้า repo, บวก `findDuplicateTimetableRows` /
+`removeDuplicateTimetableRows` / `sendTaskToNotion` ที่ไม่มี backend เลย)
+
+⚠️ อาการหลอก: ฟอร์มแจ้งลาขึ้น optimistic success ก่อนยิง API แล้วค่อย rollback
+ตอน fail — ดูเหมือนบันทึกติดแล้วค่อยเด้งแดง
+
+หา mismatch ทั้ง repo ด้วยการไล่ chain `google.script.run` (นับวงเล็บ ไม่ใช่ regex
+หยาบ ๆ ไม่งั้นติด `.getElementById(` `.filter(` เต็มไปหมด) แล้วเทียบกับ key ใน
+handlers map — ตัวปิด chain คือ method แรกที่ไม่ขึ้นต้นด้วย `with`
 
 ---
 

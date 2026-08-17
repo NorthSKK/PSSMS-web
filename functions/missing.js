@@ -598,6 +598,14 @@ async function updateTaskStatus([pageId, isDone]) {
   return { status: 'success' };
 }
 
+// sendTaskToNotion — คู่กับ updateTaskStatus, no-op เหมือนกัน (web ไม่ได้ต่อ Notion)
+// เรียกเฉพาะ user 'teacher12' ตอนเพิ่ม todo. frontend ทำ JSON.parse(response) แล้วอ่าน .id
+// ต้องคืน "สตริง JSON" ไม่ใช่ object และไม่มี id เพื่อให้ frontend ข้ามการผูก notionId ไป
+// (todo จริง sync ผ่าน getTodoList.save อยู่แล้ว)
+async function sendTaskToNotion([text]) {
+  return '{}';
+}
+
 // ============================================================
 // adminAddMember / adminRemoveMember — club admin actions
 // ============================================================
@@ -784,6 +792,7 @@ module.exports = {
   getMyClubs,
   getAvailableSubstitutes,
   updateTaskStatus,
+  sendTaskToNotion,
   adminAddMember,
   adminRemoveMember,
   promoteStudentsToNextYear,
