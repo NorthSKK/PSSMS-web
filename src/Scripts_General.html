@@ -557,6 +557,9 @@ function submitLeave() {
   var data = {
     teacherId: user.id, staffName: user.name,
     type: type, startDate: start, endDate: end,
+    // ต้องส่ง days ด้วย — backend default เป็น 1 ลา 3 วันจะถูกบันทึกเป็น 1 วัน
+    // แล้วโควตาคงเหลือในหน้าสถิติจะนับผิดตาม
+    days: days,
     reason: reason, year: user.currentYear || ''
   };
   google.script.run
@@ -589,7 +592,7 @@ function submitLeave() {
       _leaveAllHistory = (_leaveAllHistory || []).filter(function(r){ return r.id !== optimisticRow.id; });
       _renderLeaveHistory(_leaveAllHistory);
     })
-    .submitLeaveRequest(data);
+    .saveLeaveRequest(data);
 }
 
 function _leaveStatus(msg, type) {
