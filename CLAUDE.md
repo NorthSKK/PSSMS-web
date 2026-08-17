@@ -420,6 +420,25 @@ Buckets:  percent < 60  → critical
 - `#reportSummaryInfo` เป็น container ถาวรใน page HTML — render ด้วย `innerHTML`
   (เดิม insert ก่อน `document.querySelector('table')` แล้วเขียนทับ `th.innerText` ทีหลัง)
 
+### หน้าจัดตารางสอนแทน — แท็บ "จัดแล้ว" (`sub-*`)
+
+`src/Page_Substitute_Admin.html` + `_renderSubDoneView` / `subPrintDone`
+(`src/Scripts_General.html`). แท็บ `รอจัด` / `ยกเลิก` ยังใช้ตารางแบนเหมือนเดิม
+ส่วน `จัดแล้ว` สลับไปใช้ `#subDoneView` — 1 การ์ด = 1 วัน, แถวเป็น
+`คาบ · วิชา/ห้อง · ครูเดิม → ครูสอนแทน · ปุ่มยกเลิกการจัด`
+
+- **สลับมุมมองต้องอยู่ใน `_renderSubAdminTable()` ไม่ใช่ `subAdminShowTab()`** —
+  `subAdminReload()` render ใหม่หลัง fetch โดยไม่ผ่าน tab switcher ถ้าไปสลับที่ switcher
+  พอกดค้นหาซ้ำจะเห็นตารางเปล่าซ้อนกับมุมมองใหม่
+- เรียงด้วย `_subSortRows()` — วันก่อน แล้ว `Number(period)` **ห้ามเรียง period เป็น string**
+  ไม่งั้นคาบ 10 มาก่อนคาบ 2
+- `subPrintDone()` เขียน HTML ลง iframe overlay เต็มจอ (`#subPrintIframe`) แบบเดียวกับ
+  `tcPrintMembers` — ไม่ต้องสู้กับ layout ของ SPA. `_subBuildPrintHtml(rows)` แยกออกมา
+  เพื่อเทสได้โดยไม่ต้องเปิด print dialog. ชื่อโรงเรียนอ่านจาก `localStorage.pssms_school_name`
+  (`_syncSchoolBrandingFromServer` ใน `Scripts_Core.html` เป็นคนเซ็ต)
+- ⚠️ **`</script>` ในสตริงต้องเขียนเป็น `<\/script>`** — `routes/assets.js` strip ด้วย
+  `/<\/script>/gi` ตอนเสิร์ฟ ถ้าไม่ escape ไฟล์ทั้งไฟล์จะถูกตัดกลางคัน
+
 ### Massive Grid — auto-generate คาบย้อนหลัง
 
 `getMassiveAttendanceGrid` ไม่ได้คืนแค่ session ที่เคยเช็คแล้ว แต่เติม**ทุกคาบที่

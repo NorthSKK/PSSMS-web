@@ -1199,6 +1199,55 @@ body.dark-mode .pssms-dept-general {
 }
 
 /* ==========================================================
+   sub-* — แท็บ "จัดแล้ว" ของหน้าจัดตารางสอนแทน
+   จัดกลุ่มตามวัน 1 การ์ด = 1 วัน อ่านเป็น "วันนี้ใครสอนแทนคาบไหน"
+   ========================================================== */
+.sub-day { padding: 0; overflow: hidden; }
+.sub-day-head {
+  display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
+  padding: 7px 12px; background: var(--p-sec); color: var(--p-text);
+  border-bottom: 1px solid var(--p-border);
+}
+.sub-day-date  { font-weight: 700; font-size: .85rem; }
+.sub-day-dow   { font-size: .75rem; color: var(--p-text-muted); }
+.sub-day-count {
+  margin-left: auto; font-size: .7rem; font-weight: 600;
+  padding: 1px 9px; border-radius: 999px;
+  background: var(--p-surface); border: 1px solid var(--p-border); color: var(--p-text-muted);
+}
+
+.sub-slot {
+  display: flex; align-items: center; gap: .75rem;
+  padding: 7px 12px; font-size: .8rem;
+}
+.sub-slot + .sub-slot { border-top: 1px solid var(--p-border); }
+.sub-slot:hover { background: var(--p-hover); }
+
+.sub-period {
+  flex: 0 0 42px; text-align: center; line-height: 1.05;
+  color: var(--p-accent);
+}
+.sub-period b    { display: block; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.sub-period span { font-size: .58rem; color: var(--p-text-muted); }
+
+.sub-what    { flex: 1 1 180px; min-width: 0; }
+.sub-subject { font-weight: 600; color: var(--p-text); line-height: 1.25; }
+.sub-where   { font-size: .7rem; color: var(--p-text-muted); }
+
+/* ครูเดิม → ครูสอนแทน คือใจความของแท็บนี้ ทำให้อ่านเป็นประโยคเดียว */
+.sub-who   { flex: 1 1 260px; display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.sub-from  { color: var(--p-text-muted); text-decoration: line-through; }
+.sub-arrow { color: var(--p-border-strong); font-size: .7rem; }
+.sub-to    { font-weight: 700; color: var(--p-accent); }
+.sub-undo  { flex: 0 0 auto; white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .sub-slot { flex-wrap: wrap; }
+  .sub-who  { flex-basis: 100%; padding-left: 54px; }
+  .sub-undo { margin-left: auto; }
+}
+
+/* ==========================================================
    ar-* — รายงานสถิติเวลาเรียน
    ความหนาแน่นเดียวกับ mg-* (เช็คชื่อย้อนหลัง): หัวตาราง+คอลัมน์ซ้ายตรึง,
    ค่าปกติจาง ให้ข้อยกเว้นเด่น, ใช้ token --p-* ล้วนเพื่อให้ dark mode ตามมาเอง

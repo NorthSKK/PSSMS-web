@@ -966,6 +966,8 @@ function subAdminShowTab(tab) {
     activeBtn.classList.add('active');
     activeBtn.style.cssText = '';
   }
+  var pb = document.getElementById('subPrintBtn');
+  if (pb) pb.style.display = (tab === 'จัดแล้ว') ? '' : 'none';
   _renderSubAdminTable();
 }
 
@@ -988,10 +990,75 @@ function subAdminReload() {
     .getPendingSubstitutes(from, to);
 }
 
+// เรียงตามวัน แล้วตามคาบแบบตัวเลข — คาบเป็น string ถ้าเรียงตรง ๆ คาบ 10 จะมาก่อนคาบ 2
+function _subSortRows(rows) {
+  return rows.slice().sort(function(a, b) {
+    if (a.date !== b.date) return String(a.date) < String(b.date) ? -1 : 1;
+    return (Number(a.period) || 0) - (Number(b.period) || 0);
+  });
+}
+
+function _subGroupByDate(rows) {
+  var groups = [];
+  _subSortRows(rows).forEach(function(r) {
+    var g = groups[groups.length - 1];
+    if (!g || g.date !== r.date) { g = { date: r.date, dayOfWeek: r.dayOfWeek, rows: [] }; groups.push(g); }
+    g.rows.push(r);
+  });
+  return groups;
+}
+
+// แท็บ "จัดแล้ว" = รายการที่จัดเสร็จแล้ว ครูอ่านเป็น "วันนี้ใครสอนแทนคาบไหน"
+// จัดกลุ่มตามวันจึงอ่านง่ายกว่าตารางแบนที่วันซ้ำกันทุกแถว
+function _renderSubDoneView(rows) {
+  var host = document.getElementById('subDoneView');
+  if (!host) return;
+  if (!rows.length) {
+    host.innerHTML = '<div class="pssms-card text-center text-muted py-4">ไม่มีรายการในแท็บนี้</div>';
+    return;
+  }
+  var html = '';
+  _subGroupByDate(rows).forEach(function(g) {
+    html += '<div class="pssms-card sub-day mb-3">' +
+      '<div class="sub-day-head">' +
+        '<span class="sub-day-date">' + _subThaiDate(g.date) + '</span>' +
+        '<span class="sub-day-dow">' + _escH(g.dayOfWeek) + '</span>' +
+        '<span class="sub-day-count">' + g.rows.length + ' คาบ</span>' +
+      '</div>';
+    g.rows.forEach(function(r) {
+      html += '<div class="sub-slot">' +
+        '<div class="sub-period"><b>' + _escH(r.period) + '</b><span>คาบ</span></div>' +
+        '<div class="sub-what">' +
+          '<div class="sub-subject">' + _escH(r.subjectName) + '</div>' +
+          '<div class="sub-where">' + _escH(r.className) + (r.room ? ' · ห้อง ' + _escH(r.room) : '') + '</div>' +
+        '</div>' +
+        '<div class="sub-who">' +
+          '<span class="sub-from">' + _escH(r.originalTeacherName) + '</span>' +
+          '<i class="fas fa-arrow-right sub-arrow"></i>' +
+          '<span class="sub-to">' + (r.substituteTeacherName ? _escH(r.substituteTeacherName) : '—') + '</span>' +
+        '</div>' +
+        '<button class="btn btn-sm btn-outline-danger sub-undo" onclick="doUnassignSubstitute(\'' + _escH(r.assignmentId) + '\')">' +
+          '<i class="fas fa-undo me-1"></i>ยกเลิกการจัด</button>' +
+      '</div>';
+    });
+    html += '</div>';
+  });
+  host.innerHTML = html;
+}
+
 function _renderSubAdminTable() {
   var tbody = document.getElementById('subAdminTableBody');
   if (!tbody) return;
   var rows = _subAdminData.filter(function(r){ return r.status === _subAdminTab; });
+
+  // สลับมุมมองทุกครั้งที่ render — subAdminReload() render ใหม่โดยไม่ผ่าน subAdminShowTab
+  var isDone = (_subAdminTab === 'จัดแล้ว');
+  var card = document.getElementById('subTableCard');
+  var done = document.getElementById('subDoneView');
+  if (card) card.style.display = isDone ? 'none' : '';
+  if (done) done.style.display = isDone ? '' : 'none';
+  if (isDone) { _renderSubDoneView(rows); return; }
+
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">ไม่มีรายการในแท็บนี้</td></tr>';
     return;
@@ -1023,6 +1090,83 @@ function _renderSubAdminTable() {
       '</tr>';
   });
   tbody.innerHTML = html;
+}
+
+// ── พิมพ์ตารางสอนแทน (แท็บ "จัดแล้ว") ──────────────────────
+// สร้าง HTML แยกใน iframe overlay แบบเดียวกับ tcPrintMembers — ไม่ต้องสู้กับ layout ของ SPA
+// แยกฟังก์ชัน build ออกมาเพื่อเทสได้โดยไม่ต้องเปิด print dialog
+function _subBuildPrintHtml(rows) {
+  var school = localStorage.getItem('pssms_school_name') || 'โรงเรียนภูพระบาทวิทยา';
+  var sorted = _subSortRows(rows);
+  var from = document.getElementById('subFilterFrom');
+  var to   = document.getElementById('subFilterTo');
+  var d1 = (from && from.value) || sorted[0].date;
+  var d2 = (to && to.value) || sorted[sorted.length - 1].date;
+  var range = (d1 === d2) ? _subThaiDate(d1) : (_subThaiDate(d1) + ' – ' + _subThaiDate(d2));
+
+  var body = '<h2>ตารางสอนแทน</h2>' +
+             '<h3>' + _escH(school) + '</h3>' +
+             '<p class="range">ระหว่างวันที่ ' + range + ' · รวม ' + sorted.length + ' คาบ</p>';
+
+  _subGroupByDate(sorted).forEach(function(g) {
+    body += '<h4>' + _subThaiDate(g.date) + ' (' + _escH(g.dayOfWeek) + ') — ' + g.rows.length + ' คาบ</h4>' +
+      '<table><thead><tr><th class="c" style="width:8%;">คาบ</th><th style="width:26%;">วิชา</th>' +
+      '<th class="c" style="width:14%;">ชั้น/ห้อง</th><th style="width:22%;">ครูเดิม</th>' +
+      '<th style="width:22%;">ครูสอนแทน</th><th class="c" style="width:8%;">ลงชื่อ</th></tr></thead><tbody>';
+    g.rows.forEach(function(r) {
+      body += '<tr><td class="c">' + _escH(r.period) + '</td>' +
+        '<td>' + _escH(r.subjectName) + '</td>' +
+        '<td class="c">' + _escH(r.className) + (r.room ? ' / ' + _escH(r.room) : '') + '</td>' +
+        '<td>' + _escH(r.originalTeacherName) + '</td>' +
+        '<td><b>' + _escH(r.substituteTeacherName || '—') + '</b></td>' +
+        '<td>&nbsp;</td></tr>';
+    });
+    body += '</tbody></table>';
+  });
+
+  body += '<p class="printed">พิมพ์เมื่อ ' + _subThaiDate(_subFmtDate(new Date())) + '</p>';
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>ตารางสอนแทน</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
+    '<style>body{font-family:"Sarabun",sans-serif;padding:20px;background:#e8edf3;}' +
+    '.page{max-width:210mm;margin:0 auto;background:#fff;padding:15mm;box-shadow:0 0 10px rgba(0,0,0,.15);}' +
+    'h2,h3,.range{text-align:center;margin:0 0 4px;} h2{font-size:18pt;} h3{font-size:14pt;font-weight:600;}' +
+    '.range{font-size:11pt;color:#444;margin-bottom:14px;}' +
+    'h4{margin:16px 0 6px;padding-bottom:3px;border-bottom:2px solid #333;font-size:12pt;}' +
+    'table{width:100%;border-collapse:collapse;font-size:11pt;page-break-inside:avoid;}' +
+    'th,td{border:1px solid #999;padding:5px 6px;vertical-align:middle;}' +
+    'th{background:#eee;font-weight:600;} .c{text-align:center;}' +
+    '.printed{margin-top:18px;text-align:right;font-size:10pt;color:#666;}' +
+    '.ctrl{text-align:center;padding:12px;margin-bottom:16px;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.1);position:sticky;top:0;z-index:100;}' +
+    '.btn{padding:8px 20px;border:none;border-radius:5px;cursor:pointer;font-size:13pt;font-family:"Sarabun",sans-serif;font-weight:bold;margin:0 4px;}' +
+    '.btn-p{background:#0d6efd;color:#fff;} .btn-c{background:#6c757d;color:#fff;}' +
+    '@media print{.ctrl{display:none!important;}body{background:#fff;padding:0;}' +
+    '.page{max-width:none;box-shadow:none;padding:0;}@page{size:A4 portrait;margin:15mm;}}' +
+    '</style></head><body>' +
+    '<div class="ctrl"><button class="btn btn-p" onclick="window.print()">🖨️ พิมพ์</button>' +
+    '<button class="btn btn-c" onclick="if(window.parent&&window.parent._closeSubPrintOverlay)window.parent._closeSubPrintOverlay();else window.close();">✕ ปิด</button></div>' +
+    '<div class="page">' + body + '</div>' +
+    '<script>window.onload=function(){window.print();}<\/script></body></html>';
+}
+
+function subPrintDone() {
+  var rows = _subAdminData.filter(function(r){ return r.status === 'จัดแล้ว'; });
+  if (!rows.length) { showAlert('ไม่มีรายการให้พิมพ์'); return; }
+
+  var iframe = document.getElementById('subPrintIframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'subPrintIframe';
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999999;border:none;background:#e8edf3;';
+    document.body.appendChild(iframe);
+  }
+  iframe.style.display = 'block';
+  var doc = iframe.contentWindow.document;
+  doc.open(); doc.write(_subBuildPrintHtml(rows)); doc.close();
+  window._closeSubPrintOverlay = function() {
+    iframe.style.display = 'none';
+    iframe.src = 'about:blank';
+  };
 }
 
 function openAssignModal(assignmentId) {
