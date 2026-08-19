@@ -11,9 +11,9 @@ window.initSarabunPage = function() {
     const dateStr = today.toISOString().split('T')[0];
     
     // เซ็ตวันที่ให้ฟิลด์ต่างๆ อัตโนมัติ
-    if (document.getElementById('docTargetDate')) document.getElementById('docTargetDate').value = dateStr;
-    if (document.getElementById('docActionDate')) document.getElementById('docActionDate').value = dateStr;
-    if (document.getElementById('refDocDate')) document.getElementById('refDocDate').value = dateStr;
+    setDateValue('docTargetDate', dateStr);
+    setDateValue('docActionDate', dateStr);
+    setDateValue('refDocDate', dateStr);
     
     // ตั้งค่าเวลา
     const timeStr = today.toTimeString().substring(0, 5);
@@ -264,7 +264,7 @@ window.editSarabunRecord = function(id) {
     document.getElementById('editSarabunDocNumber').value = row.docNumber;
     document.getElementById('editSarabunSubject').value = row.subject;
     document.getElementById('editSarabunRequester').value = row.requester || '';
-    document.getElementById('editSarabunTargetDate').value = row.targetDate || '';
+    setDateValue('editSarabunTargetDate', row.targetDate || '');
     var statusSel = document.getElementById('editSarabunStatus');
     var statusVal = row.status || 'รอดำเนินการ';
     if (!Array.from(statusSel.options).some(function(o){ return o.value === statusVal; })) {
@@ -794,8 +794,8 @@ function openLeaveEdit(leaveId) {
   if (!rec) return;
   document.getElementById('editLeaveId').value = leaveId;
   document.getElementById('editLeaveType').value = rec.type || 'ลาป่วย';
-  document.getElementById('editLeaveStartDate').value = rec.startDate || '';
-  document.getElementById('editLeaveEndDate').value = rec.endDate || '';
+  setDateValue('editLeaveStartDate', rec.startDate || '');
+  setDateValue('editLeaveEndDate', rec.endDate || '');
   document.getElementById('editLeaveDays').value = rec.days || 1;
   document.getElementById('editLeaveReason').value = rec.reason || '';
   new bootstrap.Modal(document.getElementById('leaveEditModal')).show();
@@ -906,8 +906,8 @@ function initSubstituteAdminPage() {
   // เปิดมาเห็นของวันนี้ก่อน — งานประจำวันคือ "วันนี้ใครไม่อยู่ ใครสอนแทน"
   // อยากดูช่วงกว้างค่อยกดปุ่ม สัปดาห์นี้ / สัปดาห์หน้า
   var today = _subFmtDate(new Date());
-  document.getElementById('subFilterFrom').value = today;
-  document.getElementById('subFilterTo').value = today;
+  setDateValue('subFilterFrom', today);
+  setDateValue('subFilterTo', today);
   subUpdateFilterDayLabel();
   subAdminReload();
 }
@@ -924,12 +924,12 @@ function subUpdateFilterDayLabel() {
 function subFilterPreset(preset) {
   if (preset === 'today') {
     var today = _subFmtDate(new Date());
-    document.getElementById('subFilterFrom').value = today;
-    document.getElementById('subFilterTo').value = today;
+    setDateValue('subFilterFrom', today);
+    setDateValue('subFilterTo', today);
   } else {
     var wk = _subWeekRange(preset === 'nextWeek' ? 1 : 0);
-    document.getElementById('subFilterFrom').value = wk.from;
-    document.getElementById('subFilterTo').value = wk.to;
+    setDateValue('subFilterFrom', wk.from);
+    setDateValue('subFilterTo', wk.to);
   }
   subUpdateFilterDayLabel();
   subAdminReload();
@@ -952,8 +952,8 @@ function subManualPreset(preset) {
     var wk = _subWeekRange(preset === 'nextWeek' ? 1 : 0);
     s = wk.from; e = wk.to;
   }
-  document.getElementById('subManualStart').value = s;
-  document.getElementById('subManualEnd').value = e;
+  setDateValue('subManualStart', s);
+  setDateValue('subManualEnd', e);
   subUpdateManualDayLabel();
 }
 
@@ -1133,8 +1133,8 @@ function _subBuildPrintHtml(rows) {
 
   _subGroupByDate(sorted).forEach(function(g) {
     body += '<h4>' + _subThaiDate(g.date) + ' (' + _escH(g.dayOfWeek) + ') — ' + g.rows.length + ' คาบ</h4>' +
-      '<table><thead><tr><th class="c" style="width:8%;">คาบ</th><th style="width:26%;">วิชา</th>' +
-      '<th class="c" style="width:14%;">ชั้น/ห้อง</th><th style="width:22%;">ครูเดิม</th>' +
+      '<table><thead><tr><th class="c" style="width:7%;">คาบ</th><th style="width:23%;">วิชา</th>' +
+      '<th class="c" style="width:13%;">ชั้น/ห้อง</th><th style="width:27%;">ครูเดิม</th>' +
       '<th style="width:22%;">ครูสอนแทน</th><th class="c" style="width:8%;">ลงชื่อ</th></tr></thead><tbody>';
     g.rows.forEach(function(r) {
       body += '<tr><td class="c">' + _escH(r.period) + '</td>' +
@@ -1159,7 +1159,8 @@ function _subBuildPrintHtml(rows) {
     'h4{margin:16px 0 6px;padding-bottom:3px;border-bottom:2px solid #333;font-size:12pt;}' +
     'table{width:100%;border-collapse:collapse;font-size:11pt;page-break-inside:avoid;}' +
     'th,td{border:1px solid #999;padding:5px 6px;vertical-align:middle;}' +
-    'th{background:#eee;font-weight:600;} .c{text-align:center;} .lv{color:#666;font-size:10pt;}' +
+    // nowrap ไม่งั้น "(ลาป่วย)" แตกคำกลางเป็น "(ลา ป่วย)" ตอนคอลัมน์แคบ
+    'th{background:#eee;font-weight:600;} .c{text-align:center;} .lv{color:#666;font-size:10pt;white-space:nowrap;}' +
     '.printed{margin-top:18px;text-align:right;font-size:10pt;color:#666;}' +
     '.ctrl{text-align:center;padding:12px;margin-bottom:16px;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.1);position:sticky;top:0;z-index:100;}' +
     '.btn{padding:8px 20px;border:none;border-radius:5px;cursor:pointer;font-size:13pt;font-family:"Sarabun",sans-serif;font-weight:bold;margin:0 4px;}' +
@@ -1309,8 +1310,8 @@ function doUnassignSubstitute(assignmentId) {
 function openManualCreateModal() {
   var sel = document.getElementById('subManualTeacher');
   var wk = _subWeekRange(0);
-  document.getElementById('subManualStart').value = wk.from;
-  document.getElementById('subManualEnd').value = wk.to;
+  setDateValue('subManualStart', wk.from);
+  setDateValue('subManualEnd', wk.to);
   subUpdateManualDayLabel();
   document.getElementById('subManualStatus').classList.add('d-none');
   if (sel.options.length <= 1) {

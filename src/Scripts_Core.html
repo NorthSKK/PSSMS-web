@@ -1097,6 +1097,16 @@ function applySavedTheme() {
 // ==========================================
 // 5. THAI DATEPICKER SYSTEM
 // ==========================================
+// flatpickr ตั้ง altInput:true — มันซ่อน input จริงไว้แล้วสร้างช่องข้อความไทยมาโชว์แทน
+// เซ็ต el.value ตรง ๆ ค่าจะเปลี่ยนจริงแต่ช่องที่ครูเห็นยังโชว์ค่าเดิม
+// ทุกที่ที่เซ็ตวันที่จากโค้ด (ปุ่ม วันนี้/สัปดาห์นี้, เปิด modal แก้ไข ฯลฯ) ต้องผ่านตัวนี้
+function setDateValue(id, val) {
+  const el = (typeof id === 'string') ? document.getElementById(id) : id;
+  if (!el) return;
+  el.value = val || '';
+  if (el._flatpickr) el._flatpickr.setDate(val || null, false); // false = ไม่ยิง onChange
+}
+
 function applyThaiDatePickers() {
   const dateInputs = document.querySelectorAll('input[type="date"]');
   dateInputs.forEach(input => {

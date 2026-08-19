@@ -693,6 +693,24 @@ Enforcement ก่อน handler ทุก request (ยกเว้น `PUBLIC_F
 **สตริง JSON** `'{}'` ไม่ใช่ object เพราะ frontend ทำ `JSON.parse(response)` แล้วอ่าน `.id`),
 `uploadSarabunFile` (ไม่รองรับ upload ใน web)
 
+### ช่องวันที่ — ต้องเซ็ตผ่าน `setDateValue()`
+
+`applyThaiDatePickers()` (`Scripts_Core.html`) ครอบ `input[type="date"]` ทุกช่องด้วย
+flatpickr แบบ `altInput: true` — flatpickr **ซ่อน input จริงแล้วสร้างช่องข้อความไทย
+(พ.ศ.) มาโชว์แทน**
+
+```js
+setDateValue('subFilterFrom', '2026-08-17');   // ✅
+document.getElementById('subFilterFrom').value = '2026-08-17';  // ❌ ช่องที่ครูเห็นไม่เปลี่ยน
+```
+
+เซ็ต `.value` ตรง ๆ ค่าจะเปลี่ยนจริง (logic ทำงานถูก) แต่ช่องที่ผู้ใช้เห็นยังโชว์ค่าเดิม —
+เคยหลุดพร้อมกัน 11 จุด: ปุ่ม วันนี้/สัปดาห์นี้/สัปดาห์หน้า ของหน้าจัดสอนแทน, modal
+เพิ่มคาบเอง, modal แก้ใบลา, ปฏิทิน, สารบรรณ
+
+`setDateValue(id, val)` เรียก `el._flatpickr.setDate(val, false)` ให้ด้วย
+(`false` = ไม่ยิง `onChange` — คนเรียกจัดการ reload เอง)
+
 ### ชื่อ RPC ต้องตรงกับ handlers map เป๊ะ
 
 `routes/gas.js` ตอบ `'<fn>' not implemented in web prototype yet` เมื่อไม่เจอชื่อ —

@@ -96,12 +96,12 @@ window.openCalendarModal = function(mode, start = '', end = '', eventObj = null)
 
     if (mode === 'add') {
         document.getElementById('calEventId').value = '';
-        if (start) document.getElementById('calStart').value = start;
+        if (start) setDateValue('calStart', start);
         // endStr ของ FullCalendar จะเกินมา 1 วัน เราต้องลบออก 1 วันถ้าไม่ใช่วันเดียวกันเป๊ะๆ
         if (end) {
             let endDate = new Date(end);
             endDate.setDate(endDate.getDate() - 1);
-            document.getElementById('calEnd').value = endDate.toISOString().split('T')[0];
+            setDateValue('calEnd', endDate.toISOString().split('T')[0]);
         }
         document.getElementById('btnDeleteEvent').classList.add('d-none');
 
@@ -118,12 +118,12 @@ window.openCalendarModal = function(mode, start = '', end = '', eventObj = null)
     } else if (mode === 'edit' && eventObj) {
         document.getElementById('calEventId').value = eventObj.id;
         document.getElementById('calTitle').value = eventObj.title;
-        document.getElementById('calStart').value = eventObj.startStr.split('T')[0];
+        setDateValue('calStart', eventObj.startStr.split('T')[0]);
         
         if (eventObj.endStr) {
             let endDate = new Date(eventObj.endStr);
             endDate.setDate(endDate.getDate() - 1); // หักออก 1 วันสำหรับการแสดงผลใน Input
-            document.getElementById('calEnd').value = endDate.toISOString().split('T')[0];
+            setDateValue('calEnd', endDate.toISOString().split('T')[0]);
         }
         
         document.getElementById('calColor').value = eventObj.backgroundColor || '#0d6efd';
