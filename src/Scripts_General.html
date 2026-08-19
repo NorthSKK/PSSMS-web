@@ -1370,11 +1370,25 @@ function subPrintDone() {
     document.body.appendChild(iframe);
   }
   iframe.style.display = 'block';
+
+  // ⚠️ Chrome ใช้ @page ของ "หน้าหลัก" ตอนสั่งพิมพ์จาก iframe — @page ที่อยู่ในเอกสาร
+  // ข้างใน iframe ถูกทิ้ง กระดาษเลยออกมาแนวตั้งแล้วตารางโดนตัดขอบขวา
+  // จึงต้องประกาศซ้ำที่ document ของ SPA ด้วย แล้วถอดออกตอนปิด overlay
+  var pageRule = document.getElementById('subPrintPageRule');
+  if (!pageRule) {
+    pageRule = document.createElement('style');
+    pageRule.id = 'subPrintPageRule';
+    pageRule.textContent = '@page{size:A4 landscape;margin:12mm;}';
+    document.head.appendChild(pageRule);
+  }
+
   var doc = iframe.contentWindow.document;
   doc.open(); doc.write(_subBuildPrintHtml(rows)); doc.close();
   window._closeSubPrintOverlay = function() {
     iframe.style.display = 'none';
     iframe.src = 'about:blank';
+    var r = document.getElementById('subPrintPageRule');
+    if (r) r.parentNode.removeChild(r);
   };
 }
 

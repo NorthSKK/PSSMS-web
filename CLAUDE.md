@@ -448,7 +448,15 @@ Buckets:  percent < 60  → critical
   **ห้ามเรียง period เป็น string** ไม่งั้นคาบ 10 มาก่อนคาบ 2
   ใช้ร่วมกับหน้าพิมพ์ (`_subBuildPrintHtml`) — ลำดับบนจอกับบนกระดาษจึงตรงกันเสมอ
 - `subPrintDone()` เขียน HTML ลง iframe overlay เต็มจอ (`#subPrintIframe`) แบบเดียวกับ
-  `tcPrintMembers` — ไม่ต้องสู้กับ layout ของ SPA. `_subBuildPrintHtml(rows)` แยกออกมา
+  `tcPrintMembers` — ไม่ต้องสู้กับ layout ของ SPA.
+  ⚠️ **`@page` ต้องประกาศที่ document ของ SPA ด้วย ไม่ใช่แค่ในเอกสารใน iframe** —
+  Chrome ใช้ page description ของ **main frame** ตอนสั่งพิมพ์จาก subframe แล้วทิ้ง `@page`
+  ของ frame ทิ้ง กระดาษเลยออกมาแนวตั้งและตารางโดนตัดขอบขวา ทั้งที่ CSS ข้างในสั่ง
+  `size:A4 landscape` ไว้ถูกแล้ว. `subPrintDone` จึง inject `<style id="subPrintPageRule">`
+  เข้า `document.head` ตอนเปิด overlay และถอดออกใน `_closeSubPrintOverlay`
+  (เทสได้ด้วย `chrome --headless --print-to-pdf` แล้วอ่านขนาดด้วย `pdfinfo` —
+  A4 landscape = `841.92 x 594.96 pts`)
+  ยังมีที่อื่นใช้ pattern เดิมและติดบั๊กเดียวกัน: `printRiskReport` ใน `src/Scripts_Teacher.html` `_subBuildPrintHtml(rows)` แยกออกมา
   เพื่อเทสได้โดยไม่ต้องเปิด print dialog. ชื่อโรงเรียนอ่านจาก `localStorage.pssms_school_name`
   (`_syncSchoolBrandingFromServer` ใน `Scripts_Core.html` เป็นคนเซ็ต)
 - ⚠️ **`</script>` ในสตริงต้องเขียนเป็น `<\/script>`** — `routes/assets.js` strip ด้วย
