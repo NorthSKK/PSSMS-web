@@ -442,8 +442,11 @@ Buckets:  percent < 60  → critical
 - **สลับมุมมองต้องอยู่ใน `_renderSubAdminTable()` ไม่ใช่ `subAdminShowTab()`** —
   `subAdminReload()` render ใหม่หลัง fetch โดยไม่ผ่าน tab switcher ถ้าไปสลับที่ switcher
   พอกดค้นหาซ้ำจะเห็นตารางเปล่าซ้อนกับมุมมองใหม่
-- เรียงด้วย `_subSortRows()` — วันก่อน แล้ว `Number(period)` **ห้ามเรียง period เป็น string**
-  ไม่งั้นคาบ 10 มาก่อนคาบ 2
+- เรียงด้วย `_subSortRows()` — **วัน → ชื่อครูที่ลา → `Number(period)`**
+  ชื่อครูมาก่อนคาบเพื่อให้คาบของครูคนเดียวกันอยู่ติดกันในการ์ดของวันนั้น (ครูลาทั้งวัน
+  มักมีหลายคาบ ถ้ากระจายอยู่คนละที่จะอ่านว่า "วันนี้ใครไม่อยู่บ้าง" ยาก)
+  **ห้ามเรียง period เป็น string** ไม่งั้นคาบ 10 มาก่อนคาบ 2
+  ใช้ร่วมกับหน้าพิมพ์ (`_subBuildPrintHtml`) — ลำดับบนจอกับบนกระดาษจึงตรงกันเสมอ
 - `subPrintDone()` เขียน HTML ลง iframe overlay เต็มจอ (`#subPrintIframe`) แบบเดียวกับ
   `tcPrintMembers` — ไม่ต้องสู้กับ layout ของ SPA. `_subBuildPrintHtml(rows)` แยกออกมา
   เพื่อเทสได้โดยไม่ต้องเปิด print dialog. ชื่อโรงเรียนอ่านจาก `localStorage.pssms_school_name`

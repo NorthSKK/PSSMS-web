@@ -1128,9 +1128,16 @@ function subAdminReload() {
 }
 
 // เรียงตามวัน แล้วตามคาบแบบตัวเลข — คาบเป็น string ถ้าเรียงตรง ๆ คาบ 10 จะมาก่อนคาบ 2
+// วัน → ชื่อครูที่ลา → คาบ
+// เรียงชื่อครูก่อนคาบเพื่อให้คาบของครูคนเดียวกันอยู่ติดกันในการ์ดของวันนั้น
+// (ครูลาทั้งวันมักมีหลายคาบ กระจายอยู่คนละที่ทำให้อ่านว่า "วันนี้ใครไม่อยู่บ้าง" ยาก)
+// ⚠️ คาบต้องเทียบเป็น Number — เรียงเป็น string แล้วคาบ 10 จะมาก่อนคาบ 2
 function _subSortRows(rows) {
   return rows.slice().sort(function(a, b) {
     if (a.date !== b.date) return String(a.date) < String(b.date) ? -1 : 1;
+    var na = String(a.originalTeacherName || '');
+    var nb = String(b.originalTeacherName || '');
+    if (na !== nb) return na.localeCompare(nb, 'th');
     return (Number(a.period) || 0) - (Number(b.period) || 0);
   });
 }
