@@ -26,6 +26,8 @@ const ADMIN_ONLY = new Set([
   'setHomeroomTeacher', 'setAllHomeroomTeachers',
   'findDuplicateTimetableRows', 'removeDuplicateTimetableRows',
   'approveLeave', 'rejectLeave', 'assignSubstitute', 'unassignSubstitute', 'manualCreateAffected',
+  'adminCreateLeave', 'deleteSubstituteAssignment',
+  'getAutoAssignPreview', 'applyAutoAssign',
   'saveSchoolInfo', 'savePrintConfigData', 'importCurriculumCSV',
   'addCurriculumItem', 'updateCurriculumItem', 'deleteCurriculumItem',
   'setupCalendarDatabase', 'setupClubDatabase', 'setupCurriculumDatabase',
@@ -57,6 +59,7 @@ const lessonRecords = require('../functions/lesson_records');
 const scores = require('../functions/scores');
 const morning = require('../functions/morning');
 const leaveWrite = require('../functions/leave');
+const substituteAuto = require('../functions/substituteAuto');
 const clubsWrite = require('../functions/clubs_write');
 const sarabun = require('../functions/sarabun');
 const budget = require('../functions/budget');
@@ -185,6 +188,8 @@ const handlers = {
   getPendingSubstitutes:           (args) => leaveBundle.getPendingSubstitutes(args),
   // Leave — writes
   saveLeaveRequest:                (args, user) => leaveWrite.saveLeaveRequest(args, user),
+  adminCreateLeave:                (args, user) => leaveWrite.adminCreateLeave(args, user),
+  deleteSubstituteAssignment:      (args) => leaveWrite.deleteSubstituteAssignment(args),
   approveLeave:                    (args, user) => leaveWrite.approveLeave(args, user),
   rejectLeave:                     (args, user) => leaveWrite.rejectLeave(args, user),
   reviewLeave:                     (args, user) => leaveWrite.reviewLeave(args, user),
@@ -194,6 +199,8 @@ const handlers = {
   unassignSubstitute:              (args) => leaveWrite.unassignSubstitute(args),
   manualCreateAffected:            (args) => leaveWrite.manualCreateAffected(args),
   saveSubstituteAssignment:        (args, user) => leaveWrite.saveSubstituteAssignment(args, user),
+  getAutoAssignPreview:            (args) => substituteAuto.getAutoAssignPreview(args),
+  applyAutoAssign:                 (args, user) => substituteAuto.applyAutoAssign(args, user),
   confirmSubstitute:               (args, user) => leaveWrite.confirmSubstitute(args, user),
 
   // Sarabun

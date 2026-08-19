@@ -83,6 +83,10 @@ DATABASE_URL=$(node -e "require('dotenv').config({path:'.env.prod'});process.std
   HR ครบ จันทร์-ศุกร์ period `'0'`, calendar event สีแดง `#dc3545` 1 อัน
   ถ้า seed ใช้ id เลขล้วน บั๊กตระกูล normID/cleanStdId จะไม่โผล่ตอนเทส
 - **เทสบน dev ไม่ต้องคืนค่าเดิม** — แต่ถ้ารันด้วย `.env.prod` ยังต้องคืนเหมือนเดิม
+- **seed มีครู 5 คนเพราะ scoring ต้องมีตัวเปรียบเทียบ** — `teacher3` สอน ว 5 คาบ (ถนัดวิทย์),
+  `teacher4` สอน ท อย่างเดียว + มีใบลาอนุมัติคร่อมคาบทดสอบ + มีประวัติสอนแทนย้อนหลัง 4 คาบ,
+  `teacher5` เป็นครูที่ปรึกษาร่วม ม.2/1 · `dept` จงใจใส่ "วิชาเอก" (`ฟิสิกส์` `พลศึกษา`)
+  ไม่ใช่ชื่อกลุ่มสาระ เพื่อล้อ production
 - `substitute_assignments` seed **ผูกกับสัปดาห์ปัจจุบันเสมอ** (`mondayOffset()`) เพราะหน้า
   จัดตารางสอนแทนเปิดมาด้วยตัวกรอง `_subWeekRange(0)` — ถ้า hardcode วัน พอเวลาผ่านไป
   จะเปิดหน้ามาเจอ "ไม่มีรายการ" ทุกแท็บ. ครบ 3 สถานะ (จัดแล้ว 4 / รอจัด 2 / ยกเลิก 1)
@@ -448,11 +452,113 @@ Buckets:  percent < 60  → critical
   `/<\/script>/gi` ตอนเสิร์ฟ ถ้าไม่ escape ไฟล์ทั้งไฟล์จะถูกตัดกลางคัน
 - ตัวกรองเปิดมา default = **วันนี้** (ไม่ใช่สัปดาห์นี้) — งานประจำวันคือ "วันนี้ใครไม่อยู่"
   อยากดูช่วงกว้างใช้ปุ่ม สัปดาห์นี้ / สัปดาห์หน้า. seed จึงต้องมีคาบของ `day 0` ด้วยเสมอ
+- ⚠️ **คนที่เพิ่งสร้างคาบสอนแทนต้องเลื่อนตัวกรองไปครอบช่วงที่สร้าง** — ใบลาเกือบทุกใบ
+  เป็นวันข้างหน้า พอ default เป็น "วันนี้" คาบที่เพิ่งสร้างถูกกรองทิ้งจนดูเหมือน
+  `manualCreateAffected` ไม่ทำงาน (ทั้งที่ DB มีแถวครบ)
+  · อนุมัติใบลา → `submitLeaveReview` ตั้ง `_subFocusRange = {from,to}` ก่อน `loadPage`
+    แล้ว `initSubstituteAdminPage()` หยิบไปใช้แทน "วันนี้" (ใช้ครั้งเดียวแล้วเคลียร์)
+  · เพิ่มคาบเอง → `submitManualCreate` เซ็ต `subFilterFrom/To` เป็น start/end ก่อน `subAdminReload()`
 - `getPendingSubstitutes` **LEFT JOIN `leave_records`** ผ่าน `leave_id` คืน `leaveType` /
   `leaveReason` เพิ่ม → `_subLeaveChip()` ทำป้าย (ลาป่วย=แดง ลากิจ=เหลือง reason อยู่ใน
   `title`) หน้าพิมพ์ใส่วงเล็บต่อท้ายชื่อครูเดิม
   ⚠️ ต้องเป็น LEFT JOIN — คาบที่กด "เพิ่มเอง" ไม่มี `leave_id` ถ้า INNER จะหายทั้งแถว
 - ครูเดิมแสดงเป็น**ตัวอักษรสีเทา ไม่ขีดฆ่า** — ครูไม่ได้ถูกยกเลิก แค่ไม่อยู่
+
+### จัดตารางสอนแทนอัตโนมัติ (auto substitute)
+
+`functions/substituteAuto.js` — **2 RPC แยกกันโดยตั้งใจ** ทั้งคู่ `ADMIN_ONLY`:
+
+| RPC | args | ทำอะไร |
+|---|---|---|
+| `getAutoAssignPreview([assignmentIds, term, year])` | arg แรกเป็น **array** | read-only ล้วน คืนข้อเสนอ + ตัวสำรอง 4 คน/คาบ |
+| `applyAutoAssign([picks], user)` | `[{assignmentId, subTeacherId, note}]` | เขียนจริง คืน partial success |
+
+ไม่ทำเป็นฟังก์ชันเดียวแล้วใส่ flag `dryRun` เพราะ `ADMIN_ONLY` / write-set ใน `routes/gas.js`
+key ด้วย **ชื่อฟังก์ชัน** — flag จะทำให้ "call นี้เขียนไหม" ตอบจาก request line ไม่ได้อีก
+
+#### คาบโฮมรูมไม่เข้าระบบสอนแทน
+
+`manualCreateAffected` กรอง `subject_code='HR'` ออกตั้งแต่ต้นทาง (ครูที่ปรึกษาอีกคนของห้อง
+ดูแลแทนอยู่แล้ว ทุกห้องบน prod มีที่ปรึกษา 2 คน) `getAutoAssignPreview` ผลัก HR เข้า
+`skipped` อีกชั้นเพื่อรองรับแถวเก่าที่สร้างไว้ก่อนหน้า — ใช้ `isHomeroomSubject()` จาก
+`lib/subjectGroup.js` ทั้งสองที่
+
+⚠️ เคยลองทำให้ **จัด** คาบ HR ได้ ต้องยกเว้น "แถว HR ห้องเดียวกันไม่นับเป็นคาบชน" ทั้งใน
+preview และ `_assertSubstituteFree` ไม่งั้น preview เสนอครูที่ปรึกษาร่วมแล้ว apply ปฏิเสธ
+(`ครูคนนี้มีคาบสอนของตัวเองอยู่แล้ว (HR) คาบ 0`) — ตัดคาบ HR ออกทั้งระบบแทน กติกาสองที่จึงตรงกัน
+
+#### Hard exclusion (ตัดก่อนให้คะแนน) — `_rejectReason()`
+
+| กฎ | หมายเหตุ |
+|---|---|
+| เป็นครูเจ้าของคาบเอง | ตรงกับ `_assertSubstituteFree` |
+| ติดคาบสอนตัวเองใน `timetable` (day, period, term, year) | ใช้คอลัมน์ `day_of_week` ที่เก็บไว้ **ห้ามคำนวณจาก `date` ใหม่** |
+| ถูกจัดสอนแทน หรือ **เป็นเจ้าของคาบที่ถูกจัดสอนแทน** ที่ date+period นั้น | ข้อหลังจับคาบ "เพิ่มเอง" ที่ไม่มี `leave_id` — ตาราง `leave_records` จับไม่ได้ |
+| **ตัวเองลาอยู่** (`leave_records status='อนุมัติ'` คร่อมวันนั้น) | ⚠️ `getAvailableSubstitutes` เดิม**ไม่เช็ค** ครูที่ไม่อยู่โรงเรียนจึงขึ้นว่า "ว่าง" |
+| ครบโควตา `MAX_PER_DAY` (2) คาบในวันนั้น | ตัวรับประกันการกระจายภาระ |
+
+#### คะแนน — `SCORE_WEIGHTS`
+
+```
+exactSubject 50 · strongPrefix 30 (>=3 คาบ) · weakPrefix 15 (1-2 คาบ)
+homeroom 25 · sameClass 8 · workloadPer -6 ต่อคาบใน 30 วัน
+tie-break: คะแนน desc → ภาระ asc → ชื่อ  (เทสพึ่งลำดับนี้)
+```
+
+⚠️ **ความถนัดดูจาก `timetable` ว่าครูสอน prefix ไหนกี่คาบ ไม่ใช่จาก `users.department`** —
+prod เก็บ department เป็น "วิชาเอก" (`ฟิสิกส์` `ดนตรีศึกษา` `นาฏศิลป์` `อุตสาหกรรม`)
+ไม่ตรงชื่อกลุ่มสาระ 9 ใน 12 คน และครูวิชาเอกเดียวกันก็สอนคนละกลุ่มได้
+seed จึงจงใจใส่วิชาเอกที่ไม่ตรงชื่อกลุ่มสาระ ถ้าใส่ตรงเป๊ะบั๊กนี้จะไม่โผล่ตอนเทส
+
+⚠️ `exactSubject` นับเฉพาะรหัสที่เป็นรายวิชาจริง (`subjectPrefixOf()` ต้องไม่คืน `''`) —
+`HR` / `-` / `CLUB_*` ใช้รหัสเดียวกันทั้งโรงเรียน ครูที่ปรึกษาห้องอื่นจะได้ +50 ฟรี
+
+**หน้าต่างนับภาระ = 30 วัน rolling ไม่ใช่ lifetime** — `substitute_assignments` ไม่มีคอลัมน์
+term/year จึงนับต่อภาคเรียนไม่ได้ และ lifetime ทำให้ลำดับแช่แข็งถาวรรอบคนที่เคยสอนแทนเยอะ
+เมื่อสองปีก่อน (ของเดิม `getAvailableSubstitutes` นับ lifetime)
+
+#### อัลกอริทึม
+
+โหลด context ครั้งเดียว ~6 query (timetable query เดียวรับใช้ 5 อย่าง) แล้ว greedy
+เรียงคาบแบบ **scarcity-first** (`eligibleCount` น้อยก่อน → วัน → `Number(period)`) —
+เรียงตามเวลาล้วนทำให้คาบเช้าง่าย ๆ กินครูเฉพาะทางคนเดียวที่ว่างไปแล้วคาบบ่ายค้าง
+เลือกแล้ว**จองใน `booked` map ทันที** (key `date|period`, seed จาก DB) ไม่งั้นคาบถัดไป
+ที่ date+period เดียวกันได้ครูคนเดิมซ้อน
+
+greedy ไม่ optimal และไม่ backtrack **โดยตั้งใจ** — แอดมินรีวิว preview อยู่แล้ว
+**อย่าสร้าง Hungarian / min-cost-flow** code ×3 เพื่อตารางที่คนจะแก้มืออยู่ดี
+
+#### apply — sequential เท่านั้น
+
+`_applyOne` ล็อกแถวด้วย `FOR UPDATE` → `_assertSubstituteFree` (export จาก `leave.js`
+ห้ามคัดลอก logic) → `UPDATE ... WHERE id=$5 AND status='รอจัด'`
+**ห้ามเรียก `leave.assignSubstitute` แทน** — UPDATE ของมันไม่มี status guard แอดมิน 2 คน
+ที่ preview แถวเดียวกันจะทับกันเงียบ ๆ
+
+⚠️ **วนด้วย `for...of` ห้ามเปลี่ยนเป็น `Promise.all`** — การกันจัดครูคนเดียวซ้อน 2 คาบใน
+batch เดียวพึ่งการที่แถว N-1 commit ก่อนที่แถว N จะอ่าน
+
+ไม่ห่อทั้งชุดใน transaction เดียว — preview เก่าไป 1 แถวไม่ควร rollback อีก 29 แถวที่ดี
+คืน `{status:'success', applied[], failed[]}` เสมอ (partial success ไม่ใช่ error)
+แล้วให้หน้าจอ `subAdminReload()` กลับมาตรงกับ DB
+
+#### Frontend
+
+- ติ๊กเลือกคาบด้วย checkbox ในแท็บ "รอจัด" → ปุ่ม `#subAutoBtn` → modal `#subAutoModal`
+- **toggle ปุ่ม/คอลัมน์ติ๊กอยู่ใน `_renderSubAdminTable()` ไม่ใช่ `subAdminShowTab()`**
+  (`subAdminReload()` render ใหม่โดยไม่ผ่าน tab switcher — ยอดบนปุ่มจะค้าง)
+- คอลัมน์ติ๊กทำให้ตารางเป็น 9 คอลัมน์ในแท็บนั้น → `colspan` ต้องใช้ `_subColCount()`
+- ช่องครูสอนแทนเป็น `<select>` มี `— ไม่จัด (คงไว้รอจัด) —` + ตัวสำรอง + `เลือกครูคนอื่น…`
+  (`__more__` ยิง `getAvailableSubstitutes` เดิมแล้วเขียนทับ options ในที่
+  — ไม่เปิดโมดัลซ้อนโมดัล เลี่ยงสงคราม z-index/focus-trap)
+- `_subAutoDupIdx()` ย้อมแดงและตัดออกจากยอดยืนยันเมื่อ override เลือกครูซ้ำในคาบเดียวกัน
+- `_subSelected` ต้องล้างทุกครั้งที่ `subAdminReload()` สำเร็จ (id อาจถูกจัด/ลบไปแล้ว)
+
+#### ยังไม่ทำ (follow-up)
+
+- `getAvailableSubstitutes` (`functions/missing.js`) ยังใช้กติกาเดิม — นับ lifetime,
+  ไม่เช็คใบลา, จับกลุ่มสาระจาก `users.department` ของครูที่ลา หน้าจัดมือกับ auto จึงเถียงกัน
+- ไม่มี unique constraint กันจองซ้อนระดับ DB (ตรวจ prod แล้วยังไม่มีข้อมูลซ้อน)
 
 ### คำศัพท์สถานะ — ต้องตรงกัน backend / frontend
 
@@ -486,6 +592,19 @@ saveLeaveRequest (teacher_id จาก JWT, status 'รอพิจารณา'
   `getAvailableSubstitutes` กรองให้บนหน้าจอแล้วก็จริง แต่ id มาจาก client ต้องเช็คฝั่ง server ด้วย
 - `deleteLeave` ลบคาบที่ยัง `รอจัด` ทิ้ง และตั้งคาบที่จัดครูไปแล้วเป็น `ยกเลิก` (`leave_id=NULL`)
   ในทรานแซกชันเดียวกับการลบใบลา — ครูสอนแทนที่รู้ตัวแล้วต้องเห็นว่าถูกยกเลิก ไม่ใช่แถวหายเฉย ๆ
+- `adminCreateLeave(payload)` — **ADMIN_ONLY** แอดมินบันทึกการลาแทนครู (ปุ่ม "เพิ่มการลา"
+  บนหน้า `Page_Leave_Admin`) ต่างจาก `saveLeaveRequest` ตรงที่ `teacher_id` มาจาก **payload**
+  ไม่ใช่ JWT จึงต้องยืนยันว่า username มีจริงก่อน INSERT และคืน `staff_name` จาก `users`
+  payload: `{teacherId, type, startDate, endDate, days, reason, status}`
+  `status` = `'อนุมัติ'` (default — แอดมินคือผู้พิจารณาอยู่แล้ว จึงเซ็ต `reviewed_by` ให้ด้วย)
+  หรือ `'รอพิจารณา'`. ถ้าอนุมัติ frontend ยิง `manualCreateAffected` ต่อทันทีเหมือน flow กดอนุมัติ
+  ⚠️ ช่อง "จำนวนวัน" นับจากช่วงวันที่ให้อัตโนมัติตอน submit — **ห้ามผูก `onchange` กับ
+  `input[type=date]`** เพราะ flatpickr เซ็ต `.value` เอง event ไม่ยิง (ใช้ flag `_leaveAddDaysTouched`
+  จาก `oninput` ของช่องตัวเลขแทน)
+- `deleteSubstituteAssignment(assignmentId)` — **ADMIN_ONLY** ลบคาบสอนแทนทิ้ง
+  **เฉพาะ status `รอจัด`** (คาบที่ generate มาเกิน เช่นวันที่ครูมาสอนเองอยู่แล้ว)
+  คาบที่จัดครูไปแล้วต้อง `unassignSubstitute` ก่อน — throw ถ้าไม่ใช่ `รอจัด`
+  ปุ่มถังขยะอยู่ข้างปุ่ม "จัด" ในแท็บ รอจัด
 - FK `substitute_assignments.leave_id` เป็น `ON DELETE SET NULL`
   (`db/migrations/2026-08-17-substitute-leave-fk.sql`) — ตาข่ายรองรับ path อื่น
   เดิมไม่มี `ON DELETE` ลบใบลาที่มีคาบผูกอยู่แล้วพังทั้งคำสั่ง
@@ -622,6 +741,7 @@ Frontend เช็ค `res.status === 'success'` ทุก write function. ค�
 ```js
 ADMIN_ONLY    = Set{ addUser, editUser, deleteUser, importCSV, saveSystemConfig,
                      timetable admin writes, approveLeave, assignSubstitute,
+                     getAutoAssignPreview, applyAutoAssign,
                      getAllUsers, promoteStudentsToNextYear, club admin, ... }
 TEACHER_OR_ADMIN = Set{ saveAttendanceBatch, saveMassiveAttendanceGrid,
                         saveSubjectConfig, saveAllInOneScores, saveAllInOneWithConfig,

@@ -10,6 +10,12 @@
       <button class="btn btn-sm btn-soft" onclick="subFilterPreset('thisWeek')">สัปดาห์นี้</button>
       <button class="btn btn-sm btn-soft" onclick="subFilterPreset('nextWeek')">สัปดาห์หน้า</button>
       <button class="btn btn-soft btn-sm" onclick="openManualCreateModal()"><i class="fas fa-plus me-1"></i>เพิ่มเอง</button>
+      <!-- โผล่เฉพาะแท็บ "รอจัด" — _renderSubAdminTable เป็นคนสลับ (ไม่ใช่ subAdminShowTab
+           เพราะ subAdminReload() render ใหม่โดยไม่ผ่าน tab switcher แล้วยอดบนปุ่มจะค้าง) -->
+      <button class="btn btn-accent btn-sm" id="subAutoBtn" style="display:none;" onclick="openAutoAssignPreview()">
+        <i class="fas fa-wand-magic-sparkles me-1"></i>จัดอัตโนมัติ
+        <span class="badge bg-light text-dark ms-1" id="subAutoCount">0</span>
+      </button>
       <!-- โผล่เฉพาะแท็บ "จัดแล้ว" — subAdminShowTab เป็นคนสลับ -->
       <button class="btn btn-soft btn-sm" id="subPrintBtn" style="display:none;" onclick="subPrintDone()"><i class="fas fa-print me-1"></i>พิมพ์</button>
     </div>
@@ -58,6 +64,9 @@
       <table class="pssms-table w-100">
         <thead>
           <tr>
+            <th id="subSelectTh" class="text-center" style="display:none;width:38px;">
+              <input type="checkbox" class="form-check-input" id="subSelectAll" onchange="subToggleSelectAll(this)" title="เลือกทั้งหมด">
+            </th>
             <th>วันที่</th>
             <th class="text-center">คาบ</th>
             <th>วิชา</th>
@@ -156,4 +165,42 @@
     </div>
   </div>
 </div>
- 
+
+<!-- Modal: ผลการจัดอัตโนมัติ — โมดัลแยกจาก #subAssignModal โดยตั้งใจ
+     (อันนั้นเป็น single-slot มี hidden input ผูก assignmentId เดียว ยัดสอง state machine
+      ลงโมดัลเดียวคือที่มาของบั๊กมุมมองซ้อนกัน) -->
+<div class="modal fade pssms-modal" id="subAutoModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-wand-magic-sparkles me-2" style="color:var(--p-accent);"></i>ผลการจัดอัตโนมัติ (ตรวจก่อนยืนยัน)</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="subAutoSummary" class="mb-3 p-3 rounded-2" style="background:var(--p-subtle);font-size:.9rem;"></div>
+        <div class="table-responsive">
+          <table class="pssms-table w-100">
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                <th class="text-center" style="width:52px;">คาบ</th>
+                <th>วิชา / ห้อง</th>
+                <th>ครูเดิม</th>
+                <th style="min-width:230px;">ครูสอนแทน</th>
+                <th>เหตุผล</th>
+              </tr>
+            </thead>
+            <tbody id="subAutoTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer gap-2">
+        <span class="me-auto small text-muted"><i class="fas fa-circle-info me-1"></i>ยังไม่บันทึกลงระบบจนกว่าจะกดยืนยัน</span>
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-sm btn-accent" id="subAutoConfirmBtn" onclick="confirmAutoAssign()">
+          <i class="fas fa-check me-1"></i>ยืนยันการจัด (<span id="subAutoConfirmCount">0</span> คาบ)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
+const { isHomeroomSubject } = require('../lib/subjectGroup');
 
 async function saveLeaveRequest([requestData], user) {
   const r = requestData || {};
@@ -19,6 +20,54 @@ async function saveLeaveRequest([requestData], user) {
     ]
   );
   return { status: 'success', message: 'ส่งคำขอลาสำเร็จ', id: rows[0].id };
+}
+
+// แอดมินบันทึกการลาแทนครู — teacher_id มาจาก payload (ไม่ใช่ JWT เหมือน saveLeaveRequest)
+// จึงต้องเป็น ADMIN_ONLY และต้องยืนยันว่า username นั้นมีจริงก่อนเขียน
+// status เลือกได้: อนุมัติทันที (แอดมินคือผู้พิจารณาอยู่แล้ว) หรือส่งเข้าคิวรอพิจารณา
+async function adminCreateLeave([data], user) {
+  const d = data || {};
+  const teacherId = String(d.teacherId || '').trim();
+  if (!teacherId) throw new Error('กรุณาเลือกครู');
+  if (!d.startDate || !d.endDate) throw new Error('กรุณาระบุวันที่เริ่มและวันที่สิ้นสุด');
+  if (String(d.endDate) < String(d.startDate)) throw new Error('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม');
+
+  const { rows: uRows } = await query(
+    `SELECT username, full_name FROM users WHERE LOWER(username)=LOWER($1)`, [teacherId]
+  );
+  if (!uRows.length) throw new Error('ไม่พบผู้ใช้นี้ในระบบ');
+
+  const approved = d.status !== LEAVE_PENDING;
+  const { rows: setting } = await query(
+    `SELECT value2 FROM system_settings WHERE key='Active' AND subkey='Term' LIMIT 1`
+  );
+  const year = d.year || (setting[0] ? setting[0].value2 : '');
+
+  const { rows } = await query(
+    `INSERT INTO leave_records(teacher_id,staff_name,type,start_date,end_date,days,reason,status,year,reviewed_by,admin_comment)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     RETURNING id`,
+    [
+      uRows[0].username,
+      uRows[0].full_name || '',
+      d.type || 'ลาป่วย',
+      d.startDate,
+      d.endDate,
+      parseFloat(d.days) || 1,
+      d.reason || '',
+      approved ? LEAVE_APPROVED : LEAVE_PENDING,
+      year,
+      approved ? String(user?.id || '') : null,
+      d.comment || '',
+    ]
+  );
+  return {
+    status: 'success',
+    message: approved ? 'บันทึกการลาสำเร็จ (อนุมัติแล้ว)' : 'บันทึกการลาสำเร็จ (รอพิจารณา)',
+    id: rows[0].id,
+    teacherId: uRows[0].username,
+    approved,
+  };
 }
 
 // สถานะใบลามี 3 ค่าเท่านั้น — ต้องตรงกับที่ frontend กรอง (leaveTabPending/Approved/Rejected)
@@ -142,6 +191,21 @@ async function unassignSubstitute([assignmentId]) {
   return { status: 'success', message: 'ยกเลิกการจัดแล้ว' };
 }
 
+// ลบคาบสอนแทนทิ้ง — ใช้กับคาบที่ยัง 'รอจัด' เท่านั้น (คาบที่ generate มาเกิน เช่น
+// วันที่ครูมาสอนเองอยู่แล้ว) คาบที่จัดครูไปแล้วต้อง unassignSubstitute ก่อน
+// ไม่งั้นครูสอนแทนที่รู้ตัวแล้วจะเห็นแถวหายเฉย ๆ โดยไม่รู้ว่าถูกยกเลิก
+async function deleteSubstituteAssignment([assignmentId]) {
+  const { rows } = await query(
+    `SELECT status FROM substitute_assignments WHERE id=$1`, [assignmentId]
+  );
+  if (!rows.length) throw new Error('ไม่พบคาบสอนแทนนี้');
+  if (rows[0].status !== 'รอจัด') {
+    throw new Error('ลบได้เฉพาะคาบที่ยังรอจัด — กรุณายกเลิกการจัดก่อน');
+  }
+  await query(`DELETE FROM substitute_assignments WHERE id=$1 AND status='รอจัด'`, [assignmentId]);
+  return { status: 'success', message: 'ลบคาบสอนแทนแล้ว' };
+}
+
 // Throws unless the JWT user owns this leave record (admin bypasses).
 async function _assertOwnsLeave(user, leaveId) {
   if (isAdmin(user)) return;
@@ -206,6 +270,10 @@ async function manualCreateAffected([teacherId, startDate, endDate, leaveId]) {
   );
   if (!timetable.length) return { status: 'success', message: 'ไม่พบตารางสอน', created: 0 };
 
+  // คาบโฮมรูมไม่ต้องจัดครูสอนแทน — ทุกห้องมีครูที่ปรึกษา 2 คน อีกคนดูแลแทนอยู่แล้ว
+  const teachingRows = timetable.filter(t => !isHomeroomSubject(t.subject_code));
+  if (!teachingRows.length) return { status: 'success', message: 'มีแต่คาบโฮมรูม ไม่ต้องจัดสอนแทน', created: 0 };
+
   const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 
   // Collect all (date, period, timetable-row) candidates first
@@ -215,7 +283,7 @@ async function manualCreateAffected([teacherId, startDate, endDate, leaveId]) {
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dayName = DAYS[d.getDay()];
     const dateStr = d.toISOString().slice(0, 10);
-    for (const tt of timetable.filter(t => t.day === dayName)) {
+    for (const tt of teachingRows.filter(t => t.day === dayName)) {
       candidates.push({ dateStr, period: tt.period, dayName, tt });
     }
   }
@@ -261,8 +329,10 @@ async function manualCreateAffected([teacherId, startDate, endDate, leaveId]) {
 }
 
 module.exports = {
-  saveLeaveRequest, approveLeave, rejectLeave, reviewLeave,
+  saveLeaveRequest, adminCreateLeave, approveLeave, rejectLeave, reviewLeave,
   updateLeave, deleteLeave,
   assignSubstitute, unassignSubstitute, manualCreateAffected,
-  saveSubstituteAssignment, confirmSubstitute,
+  saveSubstituteAssignment, confirmSubstitute, deleteSubstituteAssignment,
+  // functions/substituteAuto.js ใช้ต่อ — ห้ามคัดลอก logic ไปอีกชุด ไม่งั้นสองที่จะ drift
+  _assertSubstituteFree,
 };

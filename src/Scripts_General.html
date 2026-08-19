@@ -771,6 +771,8 @@ function submitLeaveReview(status) {
           sessionStorage.removeItem('pssms_pg_Page_Substitute_Admin');
           var leaveRec = _leaveAdminCurrentRows.find(function(r){ return String(r.leaveId || r.id) === String(id); });
           if (leaveRec && leaveRec.teacherId && leaveRec.startDate) {
+            // เปิดหน้าจัดสอนแทนที่ช่วงวันของใบลา ไม่ใช่ "วันนี้" — ใบลาส่วนใหญ่เป็นวันข้างหน้า
+            _subFocusRange = { from: leaveRec.startDate, to: leaveRec.endDate || leaveRec.startDate };
             google.script.run
               .withSuccessHandler(function() { loadPage('Page_Substitute_Admin'); })
               .withFailureHandler(function() { loadPage('Page_Substitute_Admin'); })
@@ -787,6 +789,124 @@ function submitLeaveReview(status) {
     })
     .withFailureHandler(function(err) { showLoader(false); showToast('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger', 5000); })
     .reviewLeave(id, status, comment, user.name);
+}
+
+// ── แอดมินบันทึกการลาแทนครู ────────────────────────────────
+var _leaveAddTeachers = [];
+var _leaveAddDaysTouched = false;
+
+function openLeaveAdd() {
+  var sel = document.getElementById('addLeaveTeacher');
+  if (!sel) return;
+  _leaveAddDaysTouched = false;
+  document.getElementById('addLeaveType').value = 'ลาป่วย';
+  setDateValue('addLeaveStartDate', '');
+  setDateValue('addLeaveEndDate', '');
+  document.getElementById('addLeaveDays').value = 1;
+  document.getElementById('addLeaveReason').value = '';
+  document.getElementById('addLeaveApprove').checked = true;
+  var st = document.getElementById('addLeaveStatus');
+  if (st) st.classList.add('d-none');
+
+  if (!_leaveAddTeachers.length) {
+    sel.innerHTML = '<option value="">กำลังโหลด...</option>';
+    google.script.run
+      .withSuccessHandler(function(users) {
+        _leaveAddTeachers = users || [];
+        _leaveAddFillTeachers(sel);
+      })
+      .withFailureHandler(function(err) {
+        sel.innerHTML = '<option value="">โหลดล้มเหลว: ' + (err.message||'') + '</option>';
+      })
+      .getAllUsers();
+  } else {
+    _leaveAddFillTeachers(sel);
+  }
+  new bootstrap.Modal(document.getElementById('leaveAddModal')).show();
+}
+
+// getAllUsers คืน raw row arrays: [0]Username [2]FullName [3]Role [4]Dept
+function _leaveAddFillTeachers(sel) {
+  var staff = _leaveAddTeachers.filter(function(u) {
+    var role = Array.isArray(u) ? String(u[3] || '') : String(u.role || '');
+    role = role.trim().toUpperCase();
+    return role === 'TEACHER' || role === 'ADMIN';
+  });
+  staff.sort(function(a, b) {
+    var na = Array.isArray(a) ? String(a[2]||'') : String(a.name||a.fullName||'');
+    var nb = Array.isArray(b) ? String(b[2]||'') : String(b.name||b.fullName||'');
+    return na.localeCompare(nb, 'th');
+  });
+  var opts = '<option value="">-- เลือกครู --</option>';
+  staff.forEach(function(u) {
+    var id   = Array.isArray(u) ? u[0] : (u.id || '');
+    var name = Array.isArray(u) ? u[2] : (u.name || u.fullName || '');
+    var dept = Array.isArray(u) ? u[4] : (u.dept || u.department || '');
+    opts += '<option value="' + _escH(id) + '">' + _escH(name) + ' (' + _escH(dept || '-') + ')</option>';
+  });
+  sel.innerHTML = opts;
+}
+
+function _leaveAddDayCount(start, end) {
+  var ms = new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00');
+  return Math.max(1, Math.round(ms / 86400000) + 1);
+}
+
+function submitLeaveAdd() {
+  var status = document.getElementById('addLeaveStatus');
+  var setMsg = function(msg, type) {
+    status.className = 'small p-2 rounded-2 mt-2 alert alert-' + type;
+    status.textContent = msg;
+    status.classList.remove('d-none');
+  };
+  var teacherId = document.getElementById('addLeaveTeacher').value;
+  var start     = document.getElementById('addLeaveStartDate').value;
+  var end       = document.getElementById('addLeaveEndDate').value;
+  if (!teacherId) { setMsg('กรุณาเลือกครู', 'warning'); return; }
+  if (!start)     { setMsg('กรุณาระบุวันที่เริ่ม', 'warning'); return; }
+  if (!end)       { setMsg('กรุณาระบุวันที่สิ้นสุด', 'warning'); return; }
+  if (end < start){ setMsg('วันสิ้นสุดต้องไม่ก่อนวันเริ่ม', 'danger'); return; }
+
+  // flatpickr เซ็ต .value เอง event onchange ของ input วันที่จึงไม่ยิง —
+  // นับจำนวนวันตอน submit แทน ยกเว้นแอดมินพิมพ์เอง (ลาครึ่งวัน ฯลฯ)
+  var days = _leaveAddDaysTouched
+    ? (parseFloat(document.getElementById('addLeaveDays').value) || 1)
+    : _leaveAddDayCount(start, end);
+
+  var approve = document.getElementById('addLeaveApprove').checked;
+  var payload = {
+    teacherId: teacherId,
+    type:      document.getElementById('addLeaveType').value,
+    startDate: start,
+    endDate:   end,
+    days:      days,
+    reason:    document.getElementById('addLeaveReason').value.trim(),
+    status:    approve ? 'อนุมัติ' : 'รอพิจารณา',
+  };
+  setMsg('กำลังบันทึก...', 'info');
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res || res.status !== 'success') {
+        setMsg('เกิดข้อผิดพลาด: ' + ((res && res.message) || ''), 'danger');
+        return;
+      }
+      bootstrap.Modal.getInstance(document.getElementById('leaveAddModal')).hide();
+      showToast('✅ ' + res.message, 'success');
+      _leaveAdminInvalidateCache();
+      if (!approve) {
+        if (_leaveAdminTab === 'pending') leaveAdminLoadPending(); else leaveAdminLoadAll();
+        return;
+      }
+      // อนุมัติแล้วต้องสร้างคาบสอนแทนต่อทันที เหมือน flow กดอนุมัติในหน้านี้
+      sessionStorage.removeItem('pssms_pg_Page_Substitute_Admin');
+      _subFocusRange = { from: start, to: end };
+      google.script.run
+        .withSuccessHandler(function() { loadPage('Page_Substitute_Admin'); })
+        .withFailureHandler(function() { loadPage('Page_Substitute_Admin'); })
+        .manualCreateAffected(teacherId, start, end, res.id);
+    })
+    .withFailureHandler(function(err) { setMsg('เกิดข้อผิดพลาด: ' + (err.message || ''), 'danger'); })
+    .adminCreateLeave(payload);
 }
 
 function openLeaveEdit(leaveId) {
@@ -870,6 +990,11 @@ function _leaveAdminInvalidateCache() {
 // ============================================================
 var _subAdminTab = 'รอจัด';
 var _subAdminData = [];
+// ช่วงวันที่ต้องเปิดหน้ามาเห็นแทน "วันนี้" — ตั้งโดยคนที่เพิ่งสร้างคาบสอนแทน
+// (อนุมัติใบลา / เพิ่มคาบเอง) ไม่งั้นคาบของวันข้างหน้าถูกกรองทิ้งจนดูเหมือนไม่ถูกสร้าง
+var _subFocusRange = null;
+// assignmentId ที่ติ๊กไว้ในแท็บ "รอจัด" — ต้องล้างทุกครั้งที่ reload เพราะ id อาจถูกจัด/ลบไปแล้ว
+var _subSelected = [];
 var _subAvailableTeachers = [];
 var _subAllUsersForManual = [];
 
@@ -906,8 +1031,14 @@ function initSubstituteAdminPage() {
   // เปิดมาเห็นของวันนี้ก่อน — งานประจำวันคือ "วันนี้ใครไม่อยู่ ใครสอนแทน"
   // อยากดูช่วงกว้างค่อยกดปุ่ม สัปดาห์นี้ / สัปดาห์หน้า
   var today = _subFmtDate(new Date());
-  setDateValue('subFilterFrom', today);
-  setDateValue('subFilterTo', today);
+  var from = today, to = today;
+  if (_subFocusRange) {
+    from = _subFocusRange.from || today;
+    to   = _subFocusRange.to   || from;
+    _subFocusRange = null;
+  }
+  setDateValue('subFilterFrom', from);
+  setDateValue('subFilterTo', to);
   subUpdateFilterDayLabel();
   subAdminReload();
 }
@@ -984,13 +1115,14 @@ function subAdminReload() {
   google.script.run
     .withSuccessHandler(function(rows) {
       _subAdminData = rows || [];
+      _subSelected = [];
       var pendingN = _subAdminData.filter(function(r){ return r.status === 'รอจัด'; }).length;
       var pc = document.getElementById('subPendingCount');
       if (pc) { pc.textContent = pendingN; pc.style.display = pendingN ? '' : 'none'; }
       _renderSubAdminTable();
     })
     .withFailureHandler(function(err) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">โหลดข้อมูลล้มเหลว: ' + (err.message||'') + '</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="' + _subColCount() + '" class="text-center text-danger py-4">โหลดข้อมูลล้มเหลว: ' + (err.message||'') + '</td></tr>';
     })
     .getPendingSubstitutes(from, to);
 }
@@ -1080,10 +1212,20 @@ function _renderSubAdminTable() {
   var done = document.getElementById('subDoneView');
   if (card) card.style.display = isDone ? 'none' : '';
   if (done) done.style.display = isDone ? '' : 'none';
+
+  // ช่องติ๊ก + ปุ่มจัดอัตโนมัติ มีเฉพาะแท็บ "รอจัด" — สลับที่นี่ไม่ใช่ subAdminShowTab
+  var canAuto = (_subAdminTab === 'รอจัด');
+  var th = document.getElementById('subSelectTh');
+  if (th) th.style.display = canAuto ? '' : 'none';
+  var autoBtn = document.getElementById('subAutoBtn');
+  if (autoBtn) autoBtn.style.display = (canAuto && rows.length) ? '' : 'none';
+  if (!canAuto) _subSelected = [];
+  _subSyncSelectUI();
+
   if (isDone) { _renderSubDoneView(rows); return; }
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">ไม่มีรายการในแท็บนี้</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + _subColCount() + '" class="text-center text-muted py-4">ไม่มีรายการในแท็บนี้</td></tr>';
     return;
   }
   var html = '';
@@ -1095,13 +1237,21 @@ function _renderSubAdminTable() {
       : '<span class="badge" style="background:var(--p-accent-soft);color:var(--p-accent);">⏳ รอจัด</span>';
     var action = '';
     if (r.status === 'รอจัด') {
-      action = '<button class="btn btn-sm btn-accent" onclick="openAssignModal(\''+_escH(r.assignmentId)+'\')"><i class="fas fa-user-plus me-1"></i>จัด</button>';
+      action = '<div class="d-inline-flex gap-1">' +
+        '<button class="btn btn-sm btn-accent" onclick="openAssignModal(\''+_escH(r.assignmentId)+'\')"><i class="fas fa-user-plus me-1"></i>จัด</button>' +
+        '<button class="btn btn-sm btn-outline-danger" title="ลบคาบนี้" onclick="confirmDeleteSubstitute(\''+_escH(r.assignmentId)+'\')"><i class="fas fa-trash"></i></button>' +
+        '</div>';
     } else if (r.status === 'จัดแล้ว') {
       action = '<button class="btn btn-sm btn-outline-danger" onclick="doUnassignSubstitute(\''+_escH(r.assignmentId)+'\')"><i class="fas fa-undo me-1"></i>ยกเลิกการจัด</button>';
     } else {
       action = '<span class="text-muted small">—</span>';
     }
     html += '<tr>' +
+      (canAuto
+        ? '<td class="text-center"><input type="checkbox" class="form-check-input sub-pick" value="' + _escH(r.assignmentId) + '"' +
+          (_subSelected.indexOf(r.assignmentId) >= 0 ? ' checked' : '') +
+          ' onchange="subToggleSelect(this)"></td>'
+        : '') +
       '<td class="small">' + _subThaiDate(r.date) + ' <span class="text-muted">(' + _escH(r.dayOfWeek) + ')</span></td>' +
       '<td class="text-center">' + _escH(r.period) + '</td>' +
       '<td class="small"><div class="fw-medium">' + _escH(r.subjectName) + '</div><div class="text-muted" style="font-size:.75rem;">' + _escH(r.className) + '</div></td>' +
@@ -1307,6 +1457,263 @@ function doUnassignSubstitute(assignmentId) {
   });
 }
 
+// ลบคาบสอนแทนที่ยัง 'รอจัด' — คาบที่ auto-generate มาเกิน (ครูมาสอนเองบางคาบ)
+// ต้องเอาออกได้ ไม่งั้นค้างเป็น "รอจัด" ตลอดจนตัวเลขบนแท็บผิด
+function confirmDeleteSubstitute(assignmentId) {
+  Swal.fire({
+    title: 'ลบคาบสอนแทนนี้?',
+    html: '<span class="text-muted small">คาบนี้จะหายไปจากรายการ ไม่สามารถกู้คืนได้</span>',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    confirmButtonText: 'ลบ',
+    cancelButtonText: 'ยกเลิก',
+  }).then(function(r) {
+    if (!r.isConfirmed) return;
+    showLoader(true);
+    google.script.run
+      .withSuccessHandler(function(res) {
+        showLoader(false);
+        if (res && res.status === 'success') {
+          showToast('ลบคาบแล้ว', 'info');
+          subAdminReload();
+        } else {
+          showToast('เกิดข้อผิดพลาด: ' + ((res && res.message) || ''), 'danger', 5000);
+        }
+      })
+      .withFailureHandler(function(err) { showLoader(false); showToast('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger', 5000); })
+      .deleteSubstituteAssignment(assignmentId);
+  });
+}
+
+// ── จัดตารางสอนแทนอัตโนมัติ ────────────────────────────────
+var _subAutoPreview = null;   // ผลดิบจาก getAutoAssignPreview
+var _subAutoPicks   = [];     // ครูที่เลือกต่อแถว ('' = คงไว้รอจัด) index ตรงกับ suggestions
+
+// ตารางแท็บ "รอจัด" มีคอลัมน์ติ๊กเพิ่มมา 1 ช่อง — colspan ของแถวว่าง/แถว error ต้องตามด้วย
+function _subColCount() {
+  return (_subAdminTab === 'รอจัด') ? 9 : 8;
+}
+
+function _subSyncSelectUI() {
+  var cnt = document.getElementById('subAutoCount');
+  if (cnt) cnt.textContent = _subSelected.length;
+  var all = document.getElementById('subSelectAll');
+  if (all) {
+    var pending = _subAdminData.filter(function(r){ return r.status === 'รอจัด'; });
+    all.checked = pending.length > 0 && _subSelected.length === pending.length;
+  }
+}
+
+function subToggleSelect(el) {
+  var id = el.value;
+  var i = _subSelected.indexOf(id);
+  if (el.checked && i < 0) _subSelected.push(id);
+  else if (!el.checked && i >= 0) _subSelected.splice(i, 1);
+  _subSyncSelectUI();
+}
+
+function subToggleSelectAll(el) {
+  _subSelected = el.checked
+    ? _subAdminData.filter(function(r){ return r.status === 'รอจัด'; })
+                   .map(function(r){ return r.assignmentId; })
+    : [];
+  Array.prototype.forEach.call(document.querySelectorAll('.sub-pick'), function(cb) {
+    cb.checked = el.checked;
+  });
+  _subSyncSelectUI();
+}
+
+function openAutoAssignPreview() {
+  if (!_subSelected.length) { showToast('กรุณาติ๊กเลือกคาบที่ต้องการจัดก่อน', 'warning'); return; }
+  var user = getSessionUser() || {};
+  showLoader(true);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      showLoader(false);
+      _subAutoPreview = res || null;
+      if (!_subAutoPreview) { showToast('ไม่ได้ผลลัพธ์จากระบบ', 'danger'); return; }
+      _subAutoPicks = (_subAutoPreview.suggestions || []).map(function(s){ return s.subTeacherId; });
+      _renderAutoPreview();
+      new bootstrap.Modal(document.getElementById('subAutoModal')).show();
+    })
+    .withFailureHandler(function(err) {
+      showLoader(false);
+      showToast('จัดอัตโนมัติไม่สำเร็จ: ' + (err.message || ''), 'danger', 5000);
+    })
+    .getAutoAssignPreview(_subSelected, user.currentTerm || '', user.currentYear || '');
+}
+
+function _subAutoChip(text) {
+  var t = String(text || '');
+  var bg = 'var(--p-subtle)', fg = 'var(--p-text-muted, #6b7280)';
+  if (t.indexOf('สอนวิชานี้') === 0)        { bg = '#f0fdf4'; fg = '#166534'; }
+  else if (t.indexOf('สอน') === 0 && t.indexOf('คาบ') > 0) { bg = '#fef3c7'; fg = '#92400e'; }
+  else if (t.indexOf('ครูที่ปรึกษา') === 0)  { bg = 'var(--p-accent-soft)'; fg = 'var(--p-accent)'; }
+  return '<span class="badge me-1" style="background:' + bg + ';color:' + fg + ';font-weight:500;font-size:.7rem;">' + _escH(t) + '</span>';
+}
+
+// ครูที่ถูกเลือกซ้ำในวัน+คาบเดียวกัน — server ปฏิเสธแน่ ๆ กันไว้ตั้งแต่บนจอ
+function _subAutoDupIdx() {
+  var seen = {}, dup = {};
+  (_subAutoPreview.suggestions || []).forEach(function(s, i) {
+    var tid = _subAutoPicks[i];
+    if (!tid) return;
+    var k = s.date + '|' + s.period + '|' + tid;
+    if (seen[k] !== undefined) { dup[i] = true; dup[seen[k]] = true; }
+    else seen[k] = i;
+  });
+  return dup;
+}
+
+function _renderAutoPreview() {
+  var body = document.getElementById('subAutoTableBody');
+  if (!body || !_subAutoPreview) return;
+  var sug = _subAutoPreview.suggestions || [];
+  var un  = _subAutoPreview.unassigned  || [];
+  var skp = _subAutoPreview.skipped     || [];
+  var dup = _subAutoDupIdx();
+
+  var html = '';
+  sug.forEach(function(s, i) {
+    var opts = '<option value=""' + (_subAutoPicks[i] ? '' : ' selected') + '>— ไม่จัด (คงไว้รอจัด) —</option>';
+    var pool = [{ teacherId: s.subTeacherId, name: s.subTeacherName, department: s.subTeacherDept, score: s.score }]
+      .concat(s.alternatives || []);
+    pool.forEach(function(t) {
+      opts += '<option value="' + _escH(t.teacherId) + '"' + (_subAutoPicks[i] === t.teacherId ? ' selected' : '') + '>' +
+        _escH(t.name) + ' · ' + t.score + ' คะแนน</option>';
+    });
+    opts += '<option value="__more__">เลือกครูคนอื่น…</option>';
+
+    var warn = dup[i] ? ' style="background:#fef2f2;"' : '';
+    html += '<tr' + warn + ' id="subAutoRow' + i + '">' +
+      '<td class="small">' + _subThaiDate(s.date) + ' <span class="text-muted">(' + _escH(s.dayOfWeek) + ')</span></td>' +
+      '<td class="text-center">' + _escH(s.period) + '</td>' +
+      '<td class="small"><div class="fw-medium">' + _escH(s.subjectName) + '</div>' +
+        '<div class="text-muted" style="font-size:.75rem;">' + _escH(s.className) + (s.room ? ' · ' + _escH(s.room) : '') + '</div></td>' +
+      '<td class="small text-muted">' + _escH(s.originalTeacherName) + '</td>' +
+      '<td><select class="form-select form-select-sm" id="subAutoSel' + i + '" onchange="subAutoPick(' + i + ', this.value)">' + opts + '</select></td>' +
+      '<td class="small">' + (dup[i]
+        ? '<span class="badge" style="background:#fef2f2;color:#991b1b;">ครูซ้ำในคาบเดียวกัน</span>'
+        : (s.reasons || []).map(_subAutoChip).join('')) + '</td>' +
+      '</tr>';
+  });
+
+  un.forEach(function(u) {
+    html += '<tr class="text-muted" style="opacity:.7;">' +
+      '<td class="small">' + _subThaiDate(u.date) + ' <span class="text-muted">(' + _escH(u.dayOfWeek) + ')</span></td>' +
+      '<td class="text-center">' + _escH(u.period) + '</td>' +
+      '<td class="small"><div class="fw-medium">' + _escH(u.subjectName) + '</div>' +
+        '<div style="font-size:.75rem;">' + _escH(u.className) + '</div></td>' +
+      '<td class="small">' + _escH(u.originalTeacherName) + '</td>' +
+      '<td class="small fst-italic">คงไว้รอจัด</td>' +
+      '<td class="small"><span class="badge" style="background:#fef3c7;color:#92400e;font-weight:500;">' + _escH(u.reason) + '</span></td>' +
+      '</tr>';
+  });
+  body.innerHTML = html || '<tr><td colspan="6" class="text-center text-muted py-4">ไม่มีคาบให้จัด</td></tr>';
+
+  var sum = _subAutoPreview.summary || {};
+  var per = (sum.perTeacher || []).map(function(t){ return _escH(t.name) + ' ' + t.count + ' คาบ'; }).join(' · ');
+  var info = document.getElementById('subAutoSummary');
+  if (info) {
+    info.innerHTML =
+      '<div class="fw-medium mb-1">เสนอจัดได้ ' + (sum.assigned || 0) + ' คาบ' +
+        (sum.unassigned ? ' · คงไว้รอจัด ' + sum.unassigned + ' คาบ' : '') +
+        (skp.length ? ' · ข้าม ' + skp.length + ' คาบ' : '') + '</div>' +
+      (per ? '<div class="small text-muted">ภาระที่จะเพิ่ม: ' + per + '</div>' : '') +
+      (skp.length ? '<div class="small text-muted mt-1">' + skp.map(function(k){ return _escH(k.reason); }).join(' · ') + '</div>' : '');
+  }
+  _subAutoSyncCount();
+}
+
+function _subAutoSyncCount() {
+  var dup = _subAutoDupIdx();
+  var n = _subAutoPicks.filter(function(t, i){ return t && !dup[i]; }).length;
+  var el = document.getElementById('subAutoConfirmCount');
+  if (el) el.textContent = n;
+  var btn = document.getElementById('subAutoConfirmBtn');
+  if (btn) btn.disabled = (n === 0);
+}
+
+function subAutoPick(idx, teacherId) {
+  if (teacherId === '__more__') { subAutoLoadMoreTeachers(idx); return; }
+  _subAutoPicks[idx] = teacherId;
+  _renderAutoPreview();
+}
+
+// เติมครูทุกคนที่ไม่ติดคาบลงใน select ของแถวนั้น — ใช้ endpoint เดิม ไม่เปิดโมดัลซ้อนโมดัล
+function subAutoLoadMoreTeachers(idx) {
+  var s = (_subAutoPreview.suggestions || [])[idx];
+  var sel = document.getElementById('subAutoSel' + idx);
+  if (!s || !sel) return;
+  var user = getSessionUser() || {};
+  sel.disabled = true;
+  google.script.run
+    .withSuccessHandler(function(list) {
+      sel.disabled = false;
+      var free = (list || []).filter(function(t){ return !t.hasConflict; });
+      var opts = '<option value="">— ไม่จัด (คงไว้รอจัด) —</option>';
+      free.forEach(function(t) {
+        opts += '<option value="' + _escH(t.teacherId) + '"' + (_subAutoPicks[idx] === t.teacherId ? ' selected' : '') + '>' +
+          _escH(t.name) + (t.department ? ' (' + _escH(t.department) + ')' : '') + '</option>';
+      });
+      sel.innerHTML = opts;
+      if (free.every(function(t){ return t.teacherId !== _subAutoPicks[idx]; })) {
+        _subAutoPicks[idx] = '';
+        _subAutoSyncCount();
+      }
+    })
+    .withFailureHandler(function(err) {
+      sel.disabled = false;
+      showToast('โหลดรายชื่อครูไม่สำเร็จ: ' + (err.message || ''), 'danger');
+    })
+    .getAvailableSubstitutes(s.date, s.period, s.subjectCode, s.originalTeacherId,
+                             _subAutoPreview.term || user.currentTerm || '',
+                             _subAutoPreview.year || user.currentYear || '');
+}
+
+function confirmAutoAssign() {
+  if (!_subAutoPreview) return;
+  var dup = _subAutoDupIdx();
+  var picks = [];
+  (_subAutoPreview.suggestions || []).forEach(function(s, i) {
+    if (_subAutoPicks[i] && !dup[i]) {
+      picks.push({ assignmentId: s.assignmentId, subTeacherId: _subAutoPicks[i], note: 'จัดอัตโนมัติ' });
+    }
+  });
+  if (!picks.length) { showToast('ยังไม่ได้เลือกครูสำหรับคาบใดเลย', 'warning'); return; }
+
+  showLoader(true);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      showLoader(false);
+      var m = bootstrap.Modal.getInstance(document.getElementById('subAutoModal'));
+      if (m) m.hide();
+      if (!res || res.status !== 'success') {
+        showToast('เกิดข้อผิดพลาด: ' + ((res && res.message) || ''), 'danger', 5000);
+        return;
+      }
+      showToast('✅ ' + res.message, res.failed && res.failed.length ? 'warning' : 'success', 4000);
+      if (res.failed && res.failed.length) {
+        Swal.fire({
+          title: 'บางคาบจัดไม่สำเร็จ',
+          html: '<div class="text-start small">' +
+                res.failed.map(function(f){ return '• ' + _escH(f.error); }).join('<br>') + '</div>',
+          icon: 'warning',
+          confirmButtonText: 'เข้าใจแล้ว',
+        });
+      }
+      _subAutoPreview = null;
+      _subAutoPicks = [];
+      subAdminReload();
+    })
+    .withFailureHandler(function(err) {
+      showLoader(false);
+      showToast('บันทึกไม่สำเร็จ: ' + (err.message || ''), 'danger', 5000);
+    })
+    .applyAutoAssign(picks);
+}
+
 function openManualCreateModal() {
   var sel = document.getElementById('subManualTeacher');
   var wk = _subWeekRange(0);
@@ -1365,6 +1772,10 @@ function submitManualCreate() {
     .withSuccessHandler(function(res) {
       bootstrap.Modal.getInstance(document.getElementById('subManualModal')).hide();
       showToast('✅ สร้าง ' + (res.created||0) + ' คาบ', 'success');
+      // เลื่อนตัวกรองไปครอบช่วงที่เพิ่งสร้าง ไม่งั้นคาบวันข้างหน้าไม่โผล่
+      setDateValue('subFilterFrom', start);
+      setDateValue('subFilterTo', end);
+      subUpdateFilterDayLabel();
       subAdminReload();
     })
     .withFailureHandler(function(err) { setMsg('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger'); })

@@ -4,6 +4,9 @@
       <h4><i class="fas fa-clipboard-check me-2" style="color:var(--p-accent);"></i>จัดการการลา</h4>
       <p class="pssms-subtitle">อนุมัติหรือปฏิเสธคำร้องลา</p>
     </div>
+    <button class="btn btn-accent btn-sm" onclick="openLeaveAdd()">
+      <i class="fas fa-plus me-1"></i>เพิ่มการลา
+    </button>
   </div>
 
   <!-- Tabs -->
@@ -70,6 +73,64 @@
           <tr><td colspan="7" class="py-2"><div class="pssms-skel mb-2" style="height:14px;width:85%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel mb-2" style="height:14px;width:70%;border-radius:4px;margin:0 .75rem 8px;"></div><div class="pssms-skel" style="height:14px;width:60%;border-radius:4px;margin:0 .75rem;"></div></td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Leave (admin บันทึกแทนครู) -->
+<div class="modal fade pssms-modal" id="leaveAddModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="fas fa-plus me-2" style="color:var(--p-accent);"></i>เพิ่มการลาแทนครู</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">ครูที่ลา</label>
+          <select class="form-select form-select-sm" id="addLeaveTeacher">
+            <option value="">-- เลือกครู --</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">ประเภทการลา</label>
+          <select class="form-select form-select-sm" id="addLeaveType">
+            <option>ลาป่วย</option><option>ลากิจ</option><option>ลาพักร้อน</option>
+            <option>ลาคลอด</option><option>ลาบวช</option><option>ลาไปช่วยราชการ</option>
+          </select>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันที่เริ่ม</label>
+            <input type="date" class="form-control form-control-sm" id="addLeaveStartDate">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-medium text-muted">วันที่สิ้นสุด</label>
+            <input type="date" class="form-control form-control-sm" id="addLeaveEndDate">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">จำนวนวัน <span class="text-muted" style="font-weight:400;">(เว้นไว้ = นับจากช่วงวันที่)</span></label>
+          <input type="number" class="form-control form-control-sm" id="addLeaveDays" min="0.5" step="0.5" value="1" oninput="_leaveAddDaysTouched=true">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">เหตุผล</label>
+          <textarea class="form-control form-control-sm" id="addLeaveReason" rows="2"></textarea>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="addLeaveApprove" checked>
+          <label class="form-check-label small" for="addLeaveApprove">
+            อนุมัติทันทีและสร้างคาบสอนแทน
+          </label>
+        </div>
+        <div id="addLeaveStatus" class="small p-2 rounded-2 mt-2 d-none"></div>
+      </div>
+      <div class="modal-footer gap-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button class="btn btn-sm btn-accent" onclick="submitLeaveAdd()">
+          <i class="fas fa-save me-1"></i>บันทึก
+        </button>
+      </div>
     </div>
   </div>
 </div>
