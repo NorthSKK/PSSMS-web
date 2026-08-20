@@ -398,18 +398,17 @@ function renderTeacherTodaySchedule(timetable) {
     const encodedItem = encodeURIComponent(JSON.stringify(r));
     const isSub = !!r[8];
     const subBadge = isSub ? '<span class="badge me-1" style="font-size:0.7rem;background:#0f766e;">สอนแทน</span>' : '';
-    const subLine = isSub ? `<div class="small" style="color:#0f766e;"><i class="fas fa-user-friends me-1"></i>แทน ${r[9] || '-'}</div>` : '';
+    const subLine = isSub ? ` | <span style="color:#0f766e;"><i class="fas fa-user-friends me-1"></i>แทน ${r[9] || '-'}</span>` : '';
     
     html += `<tr class="${isTeaching ? 'table-primary' : ''}" style="cursor: pointer; transition: background-color 0.2s;${isSub ? 'border-left:4px solid #14b8a6;' : ''}" onmouseover="this.style.backgroundColor='#f1f3f5'" onmouseout="this.style.backgroundColor=''" onclick="jumpToAttendance('${encodedItem}')" title="👆 คลิกเพื่อไปหน้าเช็คชื่อวิชานี้">
       <td class="ps-3 fw-bold align-middle">คาบ ${p}</td>
       <td class="align-middle">
         <div class="fw-bold text-primary">${subBadge}${String(r[0]).indexOf('CLUB_') === 0 ? '<span class="badge me-1" style="font-size:0.7rem;background:#0f766e;">ชุมนุม</span>' + r[1] : r[0] + ' - ' + r[1]}</div>
-        <div class="small text-muted"><i class="fas fa-door-open me-1"></i>ห้อง ${r[2]} (${r[4]}) | <i class="fas fa-clock me-1"></i>${timeRange} น.</div>
-        ${subLine}
+        <div class="small text-muted"><i class="fas fa-door-open me-1"></i>ห้อง ${r[2]} (${r[4]}) | <i class="fas fa-clock me-1"></i>${timeRange} น.${subLine}</div>
       </td>
       <td class="text-center align-middle">
-        ${isTeaching ? '<span class="badge bg-danger pulse mb-1">กำลังสอน</span>' : (startTotalMinutes > currentMinutes ? '<span class="badge bg-light text-dark border mb-1">รอสอน</span>' : '<span class="badge bg-success mb-1">สอนเสร็จแล้ว</span>')}
-        <br>${r[7]
+        ${isTeaching ? '<span class="badge bg-danger pulse">กำลังสอน</span>' : (startTotalMinutes > currentMinutes ? '<span class="badge bg-light text-dark border">รอสอน</span>' : '<span class="badge bg-success">สอนเสร็จแล้ว</span>')}
+        ${r[7]
           ? '<span class="badge bg-success rounded-pill" style="font-size:0.65rem;"><i class="fas fa-check-circle me-1"></i>เช็คชื่อแล้ว</span>'
           : '<span class="badge bg-primary rounded-pill" style="font-size:0.65rem;"><i class="fas fa-hand-pointer me-1"></i>คลิกเช็คชื่อ</span>'}
       </td>
