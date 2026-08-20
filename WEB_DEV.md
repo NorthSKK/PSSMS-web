@@ -108,6 +108,8 @@ web/
 ├── lib/
 │   ├── db.js                    PostgreSQL pool + query() helper
 │   ├── cache.js                 In-memory TTL cache { get, set, del, delPrefix }
+│   ├── permissions.js           isAdmin / adminOnly / verify*Owner / normalizeKey
+│   ├── subjectGroup.js          subject_code → กลุ่มสาระ + isHomeroomSubject
 │   └── sheets.js                Legacy Sheets client (migration เท่านั้น)
 │
 ├── middleware/
@@ -119,9 +121,14 @@ web/
 │
 ├── functions/                   Business logic (1 domain = 1 ไฟล์)
 │   ├── checkLogin.js
-│   ├── leave.js                 updateLeave, deleteLeave, reviewLeave, ...
+│   ├── leave.js                 ใบลา + คาบสอนแทน (assign/unassign/manualCreateAffected)
+│   ├── substituteAuto.js        จัดสอนแทนอัตโนมัติ (preview + apply)
 │   ├── missing.js               Catch-all สำหรับ functions เล็กๆ เยอะ
 │   └── ... (ดูรายการครบด้านล่าง)
+│
+├── test/                        node:test — ยิงผ่าน HTTP layer จริง (ดูหัวข้อ Testing)
+│   ├── helpers/api.js           boot app in-process + call/ok/denied + tokens
+│   └── helpers/fixtures.js      ค่าคงที่ที่ต้องตรงกับ db/seed-dev.js
 │
 ├── public/
 │   ├── index.html               SPA shell (compiled จาก GAS HTML)
@@ -129,6 +136,8 @@ web/
 │
 └── db/
     ├── schema.sql               Full PostgreSQL schema (24 tables)
+    ├── seed-dev.js              ข้อมูลปลอมสำหรับ dev (ปฏิเสธรันถ้าไม่ได้ชี้ localhost)
+    ├── migrations/              raw SQL ที่รันไปแล้ว (ไม่มี framework)
     └── migrate-from-sheets.js   Migration script จาก Google Sheets (legacy)
 ```
 
@@ -206,29 +215,45 @@ saveMyData:  (args) => myDomain.saveMyData(args),
 
 ### Step 3 — ทดสอบ
 
-```bash
-node -e "
-require('dotenv').config();
-const jwt = require('jsonwebtoken');
-const token = jwt.sign({id:'admin',role:'Admin'}, process.env.JWT_SECRET, {expiresIn:'1d'});
-const http = require('http');
-const body = JSON.stringify({ args: ['T001','1','2568'] });
-const req = http.request({
-  hostname: 'localhost', port: 3000,
-  path: '/api/gas/getMyData', method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body),
-    'Authorization': 'Bearer ' + token,
-  }
-}, res => {
-  let d = '';
-  res.on('data', c => d += c);
-  res.on('end', () => { console.log(JSON.parse(d)); process.exit(); });
-});
-req.end(body);
-"
+ยิงเร็ว ๆ ผ่าน dev server ที่รันอยู่ (สร้าง admin JWT ให้เอง):
+
 ```
+/test-fn getMyData T001 1 2568
+```
+
+เขียนเทสจริงเมื่อ endpoint มีเรื่องสิทธิ์หรือ business rule — ดูหัวข้อ **Testing** ข้างล่าง
+
+---
+
+## 5.5 Testing
+
+`node:test` (built-in ไม่มี dependency เพิ่ม) — เทสยิงผ่าน **HTTP layer จริง**
+เลยครอบ JWT verify, role check, ownership check ไปด้วยในตัว
+
+```bash
+npm test                          # pretest reseed dev DB → รันทุกไฟล์ใน test/
+npm run test:only test/scores.test.js
+```
+
+```js
+const { ok, denied, stop } = require('./helpers/api');
+after(stop);                                      // ไม่ปิด pool → process ค้าง
+
+test('ครูเรียก ADMIN_ONLY ไม่ได้', async () => {
+  const err = await denied('addUser', [{}], 'teacher1');
+  assert.match(err, /ผู้ดูแลระบบ/);
+});
+```
+
+**กติกา**
+
+- `npm test` **reseed dev DB ทุกครั้ง** — ข้อมูลที่กดเทสมือไว้บนหน้าเว็บหายหมด
+- `test/helpers/api.js` ปฏิเสธรันถ้า `DATABASE_URL` ไม่ได้ชี้ localhost (parse hostname
+  ไม่ใช่ regex) — เทสเขียน DB จริง
+- `--test-concurrency=1` เพราะทุกไฟล์ใช้ DB เดียวกัน
+- แก้ `db/seed-dev.js` → แก้ `test/helpers/fixtures.js` ตาม
+- seed ต้องคงรูปทรงข้อมูลจริง (รหัสนักเรียนมี 0 นำหน้า, ห้อง `ม.X/Y`, HR ครบ จ.-ศ.)
+  ไม่งั้นบั๊กตระกูล normID จะไม่โผล่ตอนเทส
 
 ---
 
@@ -326,13 +351,13 @@ require('./lib/db').query(\`
 ### Reset ข้อมูล (dev เท่านั้น)
 
 ```bash
-node -e "
-require('dotenv').config();
-const { query } = require('./lib/db');
-query('TRUNCATE TABLE attendance RESTART IDENTITY CASCADE')
-  .then(() => { console.log('Cleared'); process.exit(); });
-"
+node db/seed-dev.js      # ล้างตารางข้อมูลแล้วใส่ของปลอมชุดเดิม
 ```
+
+`system_settings` / `curriculum` / `print_config` ไม่ถูกล้าง — ก๊อปมาจาก prod ตอน setup
+(ไม่มี PII และ **massive grid auto-generate ตายถ้าไม่มี TermData**)
+
+⚠️ **ห้ามก๊อปข้อมูลนักเรียนจริงลง dev** — seed ปฏิเสธรันถ้า `DATABASE_URL` ไม่ได้ชี้ localhost
 
 ---
 
@@ -432,7 +457,18 @@ function initMyPage() {
 
 ## 11. Deploy (Railway)
 
-Railway auto-deploy จาก GitHub เมื่อ push ไปที่ branch ที่กำหนด
+**push ขึ้น `main` = deploy production ทันที** — Railway auto-deploy จาก GitHub
+https://pssms-web-production.up.railway.app · ครูใช้จริง ไม่มี staging
+
+รอ build ~1-2 นาที แล้วเช็คว่าโค้ดใหม่ขึ้นจริงด้วยการ grep asset ที่เสิร์ฟอยู่:
+
+```bash
+until curl -s https://pssms-web-production.up.railway.app/api/assets/script/Scripts_General \
+  | grep -q "<ชื่อฟังก์ชันใหม่>"; do sleep 10; done; echo DEPLOYED
+```
+
+⚠️ `.env.prod` มีแค่ `DATABASE_URL` ที่ตรงกับ production — **`JWT_SECRET` ไม่ตรง**
+กับที่ตั้งไว้บน Railway จึงใช้ mint token ยิง API production ไม่ได้
 
 ### Environment Variables ที่ต้องตั้งใน Railway
 | Key | หมาย |
@@ -445,11 +481,8 @@ Railway auto-deploy จาก GitHub เมื่อ push ไปที่ branch
 Railway ใช้ HTTP check — server.js ตอบ `200` ทุก GET request (SPA fallback)
 
 ### Database Connection
-PostgreSQL ใน Railway ต้อง SSL:
-```javascript
-// lib/db.js — already configured
-ssl: { rejectUnauthorized: false }
-```
+`lib/db.js` เลือก SSL อัตโนมัติจาก hostname — `localhost` → ปิด, ที่เหลือ → เปิด
+(`ssl: { rejectUnauthorized: false }`) จึงใช้ไฟล์เดียวได้ทั้ง dev และ prod
 
 ---
 
@@ -464,6 +497,9 @@ ssl: { rejectUnauthorized: false }
 | Role compare | `String(role).trim().toUpperCase()` |
 | ภาษา UI | ภาษาไทยทั้งหมด |
 | Field names | `teacherName` ไม่ใช่ `staffName`, `leaveId` ไม่ใช่ `id` (ดู getLeaveBundle.js) |
+| Identity | ใช้ `user.id` จาก JWT เท่านั้น — **ห้ามเชื่อ teacherId ที่มากับ payload** |
+| Permission | `ADMIN_ONLY` / `TEACHER_OR_ADMIN` ใน `routes/gas.js` + ownership รายแถวใน `lib/permissions.js` |
+| Doc | แก้ code → แก้ `CLAUDE.md` **ใน commit เดียวกัน** (กัน doc drift) |
 
 ---
 
@@ -486,6 +522,12 @@ ssl: { rejectUnauthorized: false }
 | ปุ่มกดแล้วเงียบ ไม่มี error | `querySelector` หาปุ่มด้วย class ที่เปลี่ยนไปตอน restyle → `null` → throw ใน callback | อ้างปุ่มด้วย `id` ตายตัว ไม่ใช่ class ที่เป็นสไตล์ |
 | Handler ไม่รู้ว่าใครเรียก | ลงทะเบียนเป็น `(args) => fn(args)` ทิ้ง `user` | ต้องเป็น `(args, user) => fn(args, user)` ทุก write ที่ต้องเช็คสิทธิ์ |
 | `subjectCode='HR'` ผ่าน permission ทุกครู | `verifyTeacherOwnsSubject` ปล่อย HR ผ่านโดยตั้งใจ | HR ต้องเช็ค ownership ระดับแถวเอง (`verifyMorningBatchOwner`) |
+| **`'<fn>' not implemented in web prototype yet`** | ชื่อ RPC ที่ frontend เรียก ไม่ตรง key ใน handlers map — ไม่มีอะไรจับตอน build | ไล่ chain `google.script.run` เทียบกับ handlers map (ตัวปิด chain คือ method แรกที่ไม่ขึ้นต้นด้วย `with`) |
+| **ตั้งค่าช่องวันที่แล้วช่องที่ผู้ใช้เห็นไม่เปลี่ยน** | flatpickr ครอบ `input[type=date]` แบบ `altInput` — ซ่อน input จริงแล้วโชว์ช่องไทยแทน | ใช้ `setDateValue(id, val)` เสมอ. inline `onchange` ของ date input ก็ **ไม่ยิง** เพราะ flatpickr เซ็ต `.value` เอง |
+| **ไฟล์ `src/*.html` ถูกตัดกลางคัน** | มี `</script>` อยู่ในสตริง JS — `routes/assets.js` strip ด้วย regex | เขียนเป็น `<\/script>` |
+| **พิมพ์ออกมาผิดทิศ / โดนตัดขอบ** | `@page` อยู่ในเอกสารใน iframe — Chrome ใช้ page description ของ **main frame** ตอนพิมพ์จาก subframe | ประกาศ `@page` ที่ `document.head` ของ SPA ด้วย แล้วถอดออกตอนปิด (ดู `subPrintDone`) |
+| **batch write เขียนทับกันเอง** | `Promise.all` ทำให้ทุกแถวอ่านสถานะก่อนที่แถวก่อนหน้าจะ commit | วน `for...of` ตามลำดับ + guard `WHERE ... AND status='<เดิม>'` |
+| **ตัวเลือกใน dropdown เปลี่ยน แต่แถวเก่ากรองไม่เจอ** | คอลัมน์เก็บ label เป็นสตริงตรง ๆ (เช่น `leave_records.type`) | เปลี่ยน option แล้วต้อง UPDATE แถวเก่าใน DB ด้วย |
 
 ---
 
@@ -506,4 +548,20 @@ node -e "require('dotenv').config(); require('./lib/db').query(\"SELECT column_n
 
 # Generate JWT token สำหรับ test
 node -e "require('dotenv').config(); const jwt=require('jsonwebtoken'); console.log(jwt.sign({id:'admin',role:'Admin',name:'Admin'},process.env.JWT_SECRET,{expiresIn:'1d'}))"
+
+# รันเทสทั้งหมด (reseed dev DB ให้เอง)
+npm test
+
+# reseed dev DB อย่างเดียว
+node db/seed-dev.js
+
+# รันคำสั่งเดียวกับ production (opt-in ต่อคำสั่ง — .env ชี้ localhost เสมอ)
+DATABASE_URL=$(node -e "require('dotenv').config({path:'.env.prod'});process.stdout.write(process.env.DATABASE_URL)") node db/backfill-grade-summary.js
+
+# เช็คว่าโค้ดใหม่ขึ้น production แล้วหรือยัง (Railway auto-deploy จาก main)
+curl -s https://pssms-web-production.up.railway.app/api/assets/script/Scripts_General | grep -c "<ชื่อฟังก์ชันใหม่>"
+
+# ตรวจหน้าพิมพ์ว่าออกเป็น A4 แนวนอนจริง (A4 landscape = 841.92 x 594.96 pts)
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --no-pdf-header-footer \
+  --print-to-pdf=/tmp/out.pdf "http://localhost:3000/<หน้าพิมพ์>" && pdfinfo /tmp/out.pdf | grep -i "page size"
 ```
