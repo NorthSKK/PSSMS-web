@@ -25,6 +25,7 @@ function _renderAdminDashboard(bundle) {
   if (cfg) {
     var sub = document.getElementById('adminDashSubtitle');
     if (sub) sub.textContent = 'ภาคเรียนที่ ' + cfg.term + ' ปีการศึกษา ' + cfg.year;
+    if (typeof renderTermProgressBar === 'function') renderTermProgressBar('adminTermProgress', cfg);
   }
 
   // Today students KPI (from morning activity)

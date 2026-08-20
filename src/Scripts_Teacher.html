@@ -177,6 +177,7 @@ function initTeacherDashboard() {
 
   if(document.getElementById('dashTeacherName')) document.getElementById('dashTeacherName').innerText = user.name;
   if(document.getElementById('dashTodayDate')) document.getElementById('dashTodayDate').innerText = new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  if (typeof renderTermProgressBar === 'function') renderTermProgressBar('dashTermProgress');
 
   // Bundle 4 calls into 1 GAS round-trip (Phase 5).
   // Falls back to legacy per-call loaders ถ้า bundle fail.

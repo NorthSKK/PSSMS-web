@@ -29,7 +29,7 @@ window.initCalendarPage = function() {
     calendarEl.innerHTML = '<div class="text-center py-5 text-muted"><div class="spinner-border text-danger mb-3"></div><br>กำลังโหลดปฏิทิน...</div>';
 
     // โหลด term progress bar คู่ขนานไปกับ event list
-    _loadTermProgressBar();
+    renderTermProgressBar('termProgressWrap');
 
     safeRun().withSuccessHandler(function(events) {
         calendarEl.innerHTML = ''; // ล้างตัวโหลด
@@ -311,22 +311,25 @@ window.previewCalendarCSV = function(input) {
     reader.readAsText(file, 'UTF-8');
 };
 
-function _loadTermProgressBar() {
-    const wrap = document.getElementById('termProgressWrap');
+// แถบความคืบหน้าภาคเรียน — ใช้ร่วมกันระหว่างหน้าปฏิทินปฏิบัติงานกับการ์ด
+// "กิจกรรมที่กำลังจะมาถึง" บนแดชบอร์ดครู/แอดมิน
+// ส่ง cfg เข้ามาได้ถ้ามีอยู่แล้ว (เช่น systemConfig จาก dashboard bundle) จะได้ไม่ยิง getSystemConfig ซ้ำ
+window.renderTermProgressBar = function(wrapId, cfg) {
+    const wrap = document.getElementById(wrapId);
     if (!wrap) return;
-    safeRun().withSuccessHandler(function(cfg) {
-        if (!cfg || !cfg.termStart || !cfg.termEnd) { wrap.classList.add('d-none'); return; }
-        _renderTermProgress(cfg);
+    if (cfg) { _paintTermProgress(wrap, cfg); return; }
+    safeRun().withSuccessHandler(function(c) {
+        _paintTermProgress(wrap, c);
     }).getSystemConfig();
-}
+};
 
-function _renderTermProgress(cfg) {
-    const wrap = document.getElementById('termProgressWrap');
+function _paintTermProgress(wrap, cfg) {
+    const hide = function() { wrap.classList.add('d-none'); wrap.innerHTML = ''; };
+    if (!cfg || !cfg.termStart || !cfg.termEnd) { hide(); return; }
     const start = new Date(cfg.termStart);
     const end = new Date(cfg.termEnd);
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
-        wrap.classList.add('d-none'); return;
-    }
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) { hide(); return; }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -336,24 +339,27 @@ function _renderTermProgress(cfg) {
     const elapsedDays = Math.round(elapsedMs / 86400000) + (today >= start ? 1 : 0);
     const pct = Math.max(0, Math.min(100, Math.round((elapsedMs / totalMs) * 100)));
 
-    document.getElementById('termProgressLabel').textContent = `ภาคเรียนที่ ${cfg.term}/${cfg.year}`;
-    document.getElementById('termProgressDates').textContent = `${_fmtThaiDate(start)} → ${_fmtThaiDate(end)}`;
-    document.getElementById('termProgressDay').textContent = today < start ? '0' : Math.min(elapsedDays, totalDays);
-    document.getElementById('termProgressTotal').textContent = totalDays;
-    document.getElementById('termProgressPct').textContent = pct + '%';
+    let barColor = 'var(--p-accent)';
+    let pctLabel = pct + '%';
+    if (today < start) { barColor = '#9aa0a6'; pctLabel = 'ยังไม่เปิดเทอม'; }
+    else if (today > end) { barColor = '#198754'; pctLabel = 'ปิดเทอมแล้ว'; }
 
-    const bar = document.getElementById('termProgressBar');
-    bar.style.width = pct + '%';
-    if (today < start) {
-        bar.style.background = '#9aa0a6';
-        document.getElementById('termProgressPct').textContent = 'ยังไม่เปิดเทอม';
-    } else if (today > end) {
-        bar.style.background = '#198754';
-        document.getElementById('termProgressPct').textContent = 'ปิดเทอมแล้ว';
-    } else {
-        bar.style.background = 'var(--p-accent)';
-    }
+    const dayNow = today < start ? 0 : Math.min(elapsedDays, totalDays);
 
+    wrap.innerHTML =
+        '<div class="d-flex justify-content-between align-items-center mb-1 small gap-2 flex-wrap">'
+      +   '<div>'
+      +     '<span class="fw-semibold">ภาคเรียนที่ ' + cfg.term + '/' + cfg.year + '</span>'
+      +     '<span class="text-muted ms-2">' + _fmtThaiDate(start) + ' → ' + _fmtThaiDate(end) + '</span>'
+      +   '</div>'
+      +   '<div class="text-muted text-nowrap">'
+      +     '<span class="fw-semibold">' + dayNow + '</span> / ' + totalDays + ' วัน'
+      +     '<span class="badge ms-2" style="background:var(--p-subtle);color:var(--p-text-muted);">' + pctLabel + '</span>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="progress" style="height:6px;border-radius:999px;background:var(--p-subtle);">'
+      +   '<div class="progress-bar" role="progressbar" style="width:' + pct + '%;background:' + barColor + ';border-radius:999px;transition:width .6s ease;"></div>'
+      + '</div>';
     wrap.classList.remove('d-none');
 }
 
