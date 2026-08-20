@@ -351,19 +351,25 @@ function _paintTermProgress(wrap, cfg) {
     // ช่วงวันจริงยาวกว่านั้นเพราะรวมสัปดาห์สอบ/หยุด จึงตัดที่ 20
     const weekNow = today < start ? 0 : Math.min(TERM_WEEKS, Math.floor((dayNow - 1) / 7) + 1);
 
+    // คั่นด้วยจุดกลางที่มองเห็นจริง ไม่ใช่ margin ล้วน — ตัวเลขติดกันจนอ่านเป็นก้อนเดียว
+    const dot = '<span class="mx-2" style="opacity:.35;">·</span>';
+
     wrap.innerHTML =
-        '<div class="d-flex justify-content-between align-items-center mb-1 small gap-2 flex-wrap">'
-      +   '<div>'
+        '<div class="d-flex justify-content-between align-items-baseline mb-2 small gap-2 flex-wrap">'
+      +   '<div class="text-nowrap">'
       +     '<span class="fw-semibold">ภาคเรียนที่ ' + cfg.term + '/' + cfg.year + '</span>'
-      +     '<span class="text-muted ms-2">' + _fmtThaiDate(start) + ' → ' + _fmtThaiDate(end) + '</span>'
+      +     dot
+      +     '<span class="text-muted">' + _fmtThaiDate(start) + ' → ' + _fmtThaiDate(end) + '</span>'
       +   '</div>'
-      +   '<div class="text-muted text-nowrap">'
-      +     'สัปดาห์ที่ <span class="fw-semibold">' + weekNow + '</span> / ' + TERM_WEEKS
-      +     '<span class="ms-2">' + dayNow + ' / ' + totalDays + ' วัน</span>'
-      +     '<span class="badge ms-2" style="background:var(--p-subtle);color:var(--p-text-muted);">' + pctLabel + '</span>'
+      +   '<div class="text-nowrap d-flex align-items-baseline">'
+      +     '<span class="fw-semibold">สัปดาห์ที่ ' + weekNow + '</span>'
+      +     '<span class="text-muted">&nbsp;/ ' + TERM_WEEKS + '</span>'
+      +     dot
+      +     '<span class="text-muted">' + dayNow + ' / ' + totalDays + ' วัน</span>'
+      +     '<span class="badge ms-2" style="background:' + barColor + ';color:#fff;">' + pctLabel + '</span>'
       +   '</div>'
       + '</div>'
-      + '<div class="progress" style="height:6px;border-radius:999px;background:var(--p-subtle);">'
+      + '<div class="progress" style="height:8px;border-radius:999px;background:var(--p-subtle);border:1px solid var(--p-border);">'
       +   '<div class="progress-bar" role="progressbar" style="width:' + pct + '%;background:' + barColor + ';border-radius:999px;transition:width .6s ease;"></div>'
       + '</div>';
     wrap.classList.remove('d-none');
