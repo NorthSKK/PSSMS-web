@@ -453,6 +453,22 @@ function initMyPage() {
 { label: 'หน้าใหม่', icon: 'fa-file', page: 'Page_MyPage', roles: ['Admin'] }
 ```
 
+### Shared UI helper — แถบความคืบหน้าภาคเรียน
+
+อยากได้แถบ "ภาคเรียนที่ 1/2569 · สัปดาห์ที่ 15/20 · 66%" บนหน้าไหน ใส่ div เปล่า
+แล้วเรียกตัว render — สร้าง markup ให้เองทั้งหมด:
+
+```html
+<div id="myTermProgress" class="mb-3 d-none"></div>
+```
+```javascript
+renderTermProgressBar('myTermProgress');        // ยิง getSystemConfig เอง
+renderTermProgressBar('myTermProgress', cfg);   // มี systemConfig จาก bundle แล้ว
+```
+
+นิยามอยู่ใน `src/Scripts_Calendar.html` (โหลดทุก role) — รายละเอียดกติกาดู
+`CLAUDE.md` หัวข้อ "แถบความคืบหน้าภาคเรียน"
+
 ---
 
 ## 11. Deploy (Railway)
@@ -528,6 +544,8 @@ Railway ใช้ HTTP check — server.js ตอบ `200` ทุก GET request
 | **พิมพ์ออกมาผิดทิศ / โดนตัดขอบ** | `@page` อยู่ในเอกสารใน iframe — Chrome ใช้ page description ของ **main frame** ตอนพิมพ์จาก subframe | ประกาศ `@page` ที่ `document.head` ของ SPA ด้วย แล้วถอดออกตอนปิด (ดู `subPrintDone`) |
 | **batch write เขียนทับกันเอง** | `Promise.all` ทำให้ทุกแถวอ่านสถานะก่อนที่แถวก่อนหน้าจะ commit | วน `for...of` ตามลำดับ + guard `WHERE ... AND status='<เดิม>'` |
 | **ตัวเลือกใน dropdown เปลี่ยน แต่แถวเก่ากรองไม่เจอ** | คอลัมน์เก็บ label เป็นสตริงตรง ๆ (เช่น `leave_records.type`) | เปลี่ยน option แล้วต้อง UPDATE แถวเก่าใน DB ด้วย |
+| **การ์ดหายทั้งใบทั้งที่ render สำเร็จ** | ไป render ลง container ที่ตัวอื่นสั่ง `d-none` ตอนไม่มีข้อมูล (เช่น `#dashCalendarStrip`) | วาง container ของตัวเองไว้นอก strip ที่ถูก toggle |
+| **ตัวเลขบนบรรทัดเดียวกันชนกันจนอ่านไม่ออก** | คั่นด้วย margin utility (`ms-2`) ล้วน ไม่มีตัวอักษรคั่น | ใส่ separator จริง (`·`) — margin หายตอน copy และช่องไฟบางเกินบนจอ |
 
 ---
 

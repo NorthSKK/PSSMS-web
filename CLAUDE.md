@@ -725,6 +725,40 @@ function section(fn) {
 ### `getAdminDashboardBundle()` — 5 sections (stats, summary, calendar, terms, config)
 ### `getExecutiveDashboardBundle(dept)` — dept-scoped KPI + alerts
 
+### แถบความคืบหน้าภาคเรียน — `renderTermProgressBar(wrapId, cfg)`
+
+อยู่ใน `src/Scripts_Calendar.html` แต่ใช้ **3 ที่**: หน้าปฏิทินปฏิบัติงาน
+(`#termProgressWrap`), dashboard ครู (`#dashTermProgress`), dashboard แอดมิน
+(`#adminTermProgress`) — ตัว render สร้าง markup เองทั้งหมด container เป็น div เปล่า
+
+```
+ภาคเรียนที่ 1/2569 · 11 พ.ค. 2569 → 10 ต.ค. 2569   สัปดาห์ที่ 15 / 20 · 102 / 153 วัน  [66%]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+- `cfg` optional — แอดมินส่ง `systemConfig` จาก bundle มาเลย (ไม่มี RPC เพิ่ม),
+  ครู/ปฏิทินไม่ส่ง → ยิง `getSystemConfig` เอง (PUBLIC + cache 300s)
+- ไม่มี `termStart`/`termEnd` หรือ `end <= start` → `d-none` + ล้าง innerHTML
+  (`system_settings` TermData ของเทอมที่ active เป็นคนกำหนด)
+- `TERM_WEEKS = 20` — ตัวหารเดียวกับ `totalCoursePeriods = periodsPerWeek × 20`
+  ใน `attendanceReport.js`. ช่วงวันจริงยาวกว่า (153 วัน ≈ 22 สัปดาห์ เพราะรวม
+  สัปดาห์สอบ/หยุด) จึง `Math.min` ไว้ที่ 20 ไม่งั้นขึ้น "22/20"
+- สีแถบ+badge: ก่อนเปิดเทอม `#9aa0a6` "ยังไม่เปิดเทอม" · ระหว่างเทอม `var(--p-accent)` ·
+  หลังปิดเทอม `#198754` "ปิดเทอมแล้ว"
+- ⚠️ **บน dashboard ครู container ต้องอยู่นอก `#dashCalendarStrip`** —
+  `renderDashboardCalendarEvents()` สั่ง `d-none` ทั้ง strip เมื่อไม่มีกิจกรรม
+  ใน 14 วันข้างหน้า แถบจะหายไปด้วย
+- ⚠️ **ตัวเลขต้องคั่นด้วยตัวอักษรจริง (`·`) ไม่ใช่ margin ล้วน** — เดิมใช้ `ms-2`
+  อย่างเดียว ตัวเลขชนกันอ่านเป็น `15 / 20102 / 153 วัน66%`
+
+### ป้ายบนตาราง "จัดการเรียนรู้วันนี้" (dashboard ครู)
+
+`renderTeacherTodaySchedule()` — **teal `#0f766e` = ประเภทคาบ** (สอนแทน / ชุมนุม,
+ล้อการ์ด "คาบสอนแทนของฉัน" ที่ใช้ teal ทั้งใบ), **`bg-success` = สถานะ**
+(สอนเสร็จแล้ว / เช็คชื่อแล้ว) ชุมนุมเคยเป็น `bg-success` แล้วชนกับป้ายสถานะ
+จนอ่านเป็นเขียว 2 เฉดที่เพี้ยนกัน
+
+
 ---
 
 ## Historical Roster Fallback (`getStudentsByClass`)
