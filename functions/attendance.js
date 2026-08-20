@@ -6,7 +6,8 @@ async function saveAttendanceBatch([list], user) {
 
   const teacherId = String(user?.id || '');
   const first = list[0];
-  await verifyTeacherOwnsSubject(user, first.subjectCode, first.className, first.term, first.year);
+  await verifyTeacherOwnsSubject(user, first.subjectCode, first.className, first.term, first.year,
+    { date: first.date, period: first.period });
   const sessionId = `${first.date}|${first.subjectCode}|${first.className}|${first.period}`;
   const { pool } = require('../lib/db');
   const client = await pool.connect();
@@ -34,7 +35,8 @@ async function saveAttendanceBatch([list], user) {
 
 async function saveLessonRecord([record], user) {
   const r = record || {};
-  await verifyTeacherOwnsSubject(user, r.subjectCode, r.className, r.term, r.year);
+  await verifyTeacherOwnsSubject(user, r.subjectCode, r.className, r.term, r.year,
+    { date: r.date, period: r.period });
   await query(
     `INSERT INTO academic_records(date,term,year,subject_code,subject_name,class,period,topic,present,absent,leave,teacher_id,session_id)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)

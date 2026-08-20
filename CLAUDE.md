@@ -658,15 +658,47 @@ const normalize = (s) => String(s||'').replace(/[^a-zA-Z0-9ก-๙]/g, '');
 ### `getTeacherDashboardBundle([teacherId, term, year])`
 Return:
 ```js
-{ ts, timetable, calendarEvents, riskDashboard, atRiskDashboard }
+{ ts, timetable, calendarEvents, riskDashboard, atRiskDashboard, substitutes }
 ```
-- `timetable` — today schedule (จาก `getTeacherTimetableWithStatus`)
+- `timetable` — today schedule (จาก `getTeacherTimetableWithStatus`) **รวมคาบสอนแทนของวันนี้แล้ว**
+- `substitutes` — คาบสอนแทน 7 วันข้างหน้า (`getMySubstituteSlots`) → การ์ด
+  "คาบสอนแทนของฉัน" (`renderDashboardSubstitutes` มีอยู่ก่อนแล้วแต่ bundle ไม่เคยส่ง data มาให้)
 - `calendarEvents` — 14-day strip
 - `riskDashboard` — grade-based (0, ร, มส.) จาก `grade_summary` table — แสดงในการ์ด "นักเรียนกลุ่มเสี่ยง"
   - `LEFT JOIN users` (ไม่ใช่ INNER) — นักเรียนที่ promote/ลบไปแล้วต้องยังขึ้นการ์ด
   - ห้องเรียนเอาจาก `attendance.class` ของเทอมนั้น → snapshot ใน `user_history` → `users.department`
     (department ถูกทับตอน promote ใช้ได้เฉพาะปีปัจจุบัน)
 - `atRiskDashboard` — attendance-based จาก `attendanceReport.getTeacherAtRiskDashboard` — แสดงใน "กระดานแจ้งเตือนกลุ่มเสี่ยง"
+
+### คาบสอนแทนในตารางสอนของครู
+
+`_substituteRows()` (`functions/timetable.js`) เป็นตัวเดียวที่ดึงคาบสอนแทนมาต่อท้าย
+ตารางสอน ใช้ร่วมกันทั้ง `getTeacherTimetableByDate` (หน้าเช็คชื่อ) และ
+`getTeacherTimetableWithStatus` (แดชบอร์ด) — เดิมมีแต่ตัวแรกที่ดึง แดชบอร์ดจึงไม่เคย
+โชว์คาบสอนแทนเลย
+
+- รูปแถวต่อจาก timetable ปกติ: `[7]=hasRecord` `[8]=isSubstitute` `[9]=originalTeacherName`
+  (เดิม `ByDate` ใช้ `[7]` เป็น isSubstitute — ไม่มีใครอ่าน เลยย้ายให้ตรงกับ `WithStatus`)
+- กรอง `status IN ('จัดแล้ว','ยืนยันแล้ว')` — ตัด `ยืนยันแล้ว` ทิ้งไม่ได้ ครูกด
+  `confirmSubstitute` แล้วคาบจะหายจากตารางตัวเอง
+- ⚠️ วันที่ต้องคิดแบบ local (`_localDateStr`) **ห้าม `toISOString()`** — TZ ไทย +07
+  ทำให้ช่วงเที่ยงคืนถึง 07:00 ได้วันก่อนหน้า แล้วเถียงกับ `getDay()` ที่เป็น local
+  (ครูเปิดแดชบอร์ดตอนเช้ามืดจะไม่เห็นคาบสอนแทนของวันนั้น)
+- คาบสอนแทนเข้า cache `tt_date_` / `tt_status_` เดียวกับตารางสอน → ชื่อฟังก์ชันที่
+  แก้คาบสอนแทน (`assignSubstitute` `applyAutoAssign` `confirmSubstitute` `manualCreateAffected`
+  `deleteLeave` ฯลฯ) ต้องอยู่ใน `TIMETABLE_WRITE_FNS`
+
+#### สิทธิ์เช็คชื่อของครูสอนแทน
+
+`verifyTeacherOwnsSubject(user, code, class, term, year, opts)` — arg ที่ 6 เป็น optional
+`{date, period}` ถ้าส่งมาและ timetable ไม่ผ่าน จะ fallback ไปหาแถวใน
+`substitute_assignments` ที่ **date + period + subject + class ตรงกันเป๊ะ**
+
+- caller ที่ระบุวันไม่ได้ (`saveAllInOneScores`, `saveSubjectConfig`, remark) **ไม่ส่ง `opts`**
+  → ไม่มี substitute path เลย สอนแทน 1 คาบไม่ใช่การเป็นเจ้าของรายวิชา
+- ห้ามผ่อนเป็น subject+class เฉย ๆ โดยไม่ดูวัน — เทสใน `test/permissions.test.js`
+  ที่ใช้ teacher2 เป็น "ครูที่ไม่ได้สอน ว30205" จะกลายเป็นผ่าน เพราะ seed ให้ teacher2
+  สอนแทนวิชานั้นอยู่
 
 ### ปุ่มคัดลอกรายชื่อส่ง LINE / Facebook
 
@@ -942,6 +974,7 @@ test/
 ├── helpers/api.js       boot app in-process (port 0) + call/ok/denied + tokens
 ├── helpers/fixtures.js  ค่าคงที่ที่ต้องตรงกับ db/seed-dev.js
 ├── permissions.test.js  auth, ADMIN_ONLY, ownership, admin bypass
+├── substitute_timetable.test.js  คาบสอนแทนในตารางวันนี้ + สิทธิ์เช็คชื่อของครูสอนแทน
 ├── scores.test.js       ล้างคะแนน=ลบแถว, completeness gate, remark, leading zero
 └── attendance.test.js   session overwrite, teacher_id จาก JWT, getSemesterReport
 ```

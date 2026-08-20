@@ -1,6 +1,6 @@
 const getSystemConfig = require('./getSystemConfig');
 const getCalendarEvents = require('./getCalendarEvents');
-const { getTeacherTimetableWithStatus } = require('./timetable');
+const { getTeacherTimetableWithStatus, getMySubstituteSlots } = require('./timetable');
 const { getTeacherAtRiskDashboard } = require('./attendanceReport');
 const { getTeacherRiskDashboard } = require('./missing');
 
@@ -13,12 +13,13 @@ module.exports = async function getTeacherDashboardBundle([teacherId, term, year
   const t = term || config.term;
   const y = year || config.year;
 
-  const [timetable, calendarEvents, riskDashboard, atRiskDashboard] = await Promise.all([
+  const [timetable, calendarEvents, riskDashboard, atRiskDashboard, substitutes] = await Promise.all([
     section(() => getTeacherTimetableWithStatus([teacherId])),
     section(() => getCalendarEvents(teacherId)),
     section(() => getTeacherRiskDashboard([teacherId, t, y])),
     section(() => getTeacherAtRiskDashboard([teacherId, t, y])),
+    section(() => getMySubstituteSlots([teacherId, 7])),
   ]);
 
-  return { ts: Date.now(), timetable, calendarEvents, riskDashboard, atRiskDashboard };
+  return { ts: Date.now(), timetable, calendarEvents, riskDashboard, atRiskDashboard, substitutes };
 };

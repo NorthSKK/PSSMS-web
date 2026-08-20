@@ -24,9 +24,39 @@ function _applyClubOverride(arr, club) {
   return ['CLUB_' + club.clubId, club.clubName, 'ชุมนุม', arr[3], arr[4], arr[5], arr[6], arr[7]];
 }
 
+// Local (Asia/Bangkok) date string — toISOString() shifts midnight-to-07:00 back a day,
+// which would disagree with getDay() below and drop the whole day's substitute slots.
+function _localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Slots this teacher covers for someone else on the given date, shaped like a timetable row.
+// 'ยืนยันแล้ว' must be included — the slot stays theirs after they confirm it.
+async function _substituteRows(teacherId, dateStr, term, year) {
+  const { rows } = await query(
+    `SELECT s.subject_code, s.subject_name, s.class, s.room, s.period, s.day_of_week,
+            EXISTS(
+              SELECT 1 FROM attendance a
+              WHERE a.teacher_id=$1 AND a.date=$2
+                AND a.subject_code=s.subject_code AND a.class=s.class
+                AND a.term=$3 AND a.year=$4
+            ) AS has_record,
+            s.original_teacher_name
+     FROM substitute_assignments s
+     WHERE s.sub_teacher_id=$1 AND s.date=$2 AND s.status IN ('จัดแล้ว', 'ยืนยันแล้ว')
+     ORDER BY s.period::int`,
+    [teacherId, dateStr, String(term), String(year)]
+  );
+  return rows.map(r => [
+    r.subject_code || '', r.subject_name || '', r.class || '', r.room || '', '',
+    r.period || '', r.day_of_week || '', r.has_record || false,
+    true, r.original_teacher_name || '',
+  ]);
+}
+
 async function getTeacherTimetableByDate([teacherId, dateStr]) {
   const targetDate = dateStr ? new Date(dateStr) : new Date();
-  const targetDateOnly = targetDate.toISOString().slice(0, 10);
+  const targetDateOnly = _localDateStr(targetDate);
   const cacheKey = `tt_date_${teacherId}_${targetDateOnly}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
@@ -52,20 +82,7 @@ async function getTeacherTimetableByDate([teacherId, dateStr]) {
     );
   });
 
-  try {
-    const subRes = await query(
-      `SELECT * FROM substitute_assignments
-       WHERE sub_teacher_id=$1 AND date=$2 AND status='จัดแล้ว'`,
-      [teacherId, targetDateOnly]
-    );
-    for (const r of subRes.rows) {
-      rows.push([
-        r.subject_code || '', r.subject_name || '', r.class || '',
-        r.room || '', '', r.period || '', r.day_of_week || '',
-        true, r.original_teacher_name || '', r.original_teacher_id || '',
-      ]);
-    }
-  } catch {}
+  rows.push(...await _substituteRows(teacherId, targetDateOnly, term, year));
 
   cache.set(cacheKey, rows, 60);
   return rows;
@@ -77,7 +94,7 @@ async function getTeacherTimetable([teacherId]) {
 
 async function getTeacherTimetableWithStatus([teacherId]) {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = _localDateStr(now);
   const cacheKey = `tt_status_${teacherId}_${todayStr}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
@@ -128,8 +145,51 @@ async function getTeacherTimetableWithStatus([teacherId]) {
     return { ...base, hasRecord: r.has_record || false, date: todayStr };
   });
 
+  for (const row of await _substituteRows(teacherId, todayStr, term, year)) {
+    result.push({
+      ...row,
+      hasRecord: row[7],
+      date: todayStr,
+      isSubstitute: true,
+      originalTeacherName: row[9],
+    });
+  }
+  result.sort((a, b) => Number(a[5]) - Number(b[5]));
+
   cache.set(cacheKey, result, 60);
   return result;
 }
 
-module.exports = { getTeacherTimetableByDate, getTeacherTimetable, getTeacherTimetableWithStatus };
+// Slots this teacher covers over the next `days` days, for the dashboard strip.
+async function getMySubstituteSlots([teacherId, days]) {
+  const span = Number(days) || 7;
+  const from = new Date();
+  const to = new Date();
+  to.setDate(to.getDate() + span);
+  const { rows } = await query(
+    `SELECT date, period, subject_code, subject_name, class, room,
+            original_teacher_name, status
+     FROM substitute_assignments
+     WHERE sub_teacher_id=$1 AND date BETWEEN $2 AND $3
+       AND status IN ('จัดแล้ว', 'ยืนยันแล้ว')
+     ORDER BY date, period::int`,
+    [teacherId, _localDateStr(from), _localDateStr(to)]
+  );
+  return rows.map(r => ({
+    date: _localDateStr(new Date(r.date)),
+    period: r.period,
+    subjectCode: r.subject_code,
+    subjectName: r.subject_name,
+    className: r.class,
+    room: r.room,
+    originalTeacherName: r.original_teacher_name,
+    status: r.status,
+  }));
+}
+
+module.exports = {
+  getTeacherTimetableByDate,
+  getTeacherTimetable,
+  getTeacherTimetableWithStatus,
+  getMySubstituteSlots,
+};

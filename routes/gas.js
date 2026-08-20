@@ -9,6 +9,9 @@ const TIMETABLE_WRITE_FNS = new Set([
   'updateTimetableRow', 'deleteTimetableRow', 'importTimetableCSV',
   'swapTimetableTeacher', 'setHomeroomTeacher', 'setAllHomeroomTeachers',
   'teacherUpdateTimetableRow', 'removeDuplicateTimetableRows',
+  // substitute slots show up in the teacher's own timetable, so they share its caches
+  'assignSubstitute', 'unassignSubstitute', 'confirmSubstitute', 'saveSubstituteAssignment',
+  'applyAutoAssign', 'manualCreateAffected', 'deleteSubstituteAssignment', 'deleteLeave',
 ]);
 // Functions that invalidate student-list caches on success
 const USER_WRITE_FNS = new Set([
