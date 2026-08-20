@@ -314,6 +314,8 @@ window.previewCalendarCSV = function(input) {
 // แถบความคืบหน้าภาคเรียน — ใช้ร่วมกันระหว่างหน้าปฏิทินปฏิบัติงานกับการ์ด
 // "กิจกรรมที่กำลังจะมาถึง" บนแดชบอร์ดครู/แอดมิน
 // ส่ง cfg เข้ามาได้ถ้ามีอยู่แล้ว (เช่น systemConfig จาก dashboard bundle) จะได้ไม่ยิง getSystemConfig ซ้ำ
+const TERM_WEEKS = 20;
+
 window.renderTermProgressBar = function(wrapId, cfg) {
     const wrap = document.getElementById(wrapId);
     if (!wrap) return;
@@ -345,6 +347,9 @@ function _paintTermProgress(wrap, cfg) {
     else if (today > end) { barColor = '#198754'; pctLabel = 'ปิดเทอมแล้ว'; }
 
     const dayNow = today < start ? 0 : Math.min(elapsedDays, totalDays);
+    // 1 เทอม = 20 สัปดาห์เรียนตามแผน (ตัวหารเดียวกับ totalCoursePeriods ใน attendanceReport.js)
+    // ช่วงวันจริงยาวกว่านั้นเพราะรวมสัปดาห์สอบ/หยุด จึงตัดที่ 20
+    const weekNow = today < start ? 0 : Math.min(TERM_WEEKS, Math.floor((dayNow - 1) / 7) + 1);
 
     wrap.innerHTML =
         '<div class="d-flex justify-content-between align-items-center mb-1 small gap-2 flex-wrap">'
@@ -353,7 +358,8 @@ function _paintTermProgress(wrap, cfg) {
       +     '<span class="text-muted ms-2">' + _fmtThaiDate(start) + ' → ' + _fmtThaiDate(end) + '</span>'
       +   '</div>'
       +   '<div class="text-muted text-nowrap">'
-      +     '<span class="fw-semibold">' + dayNow + '</span> / ' + totalDays + ' วัน'
+      +     'สัปดาห์ที่ <span class="fw-semibold">' + weekNow + '</span> / ' + TERM_WEEKS
+      +     '<span class="ms-2">' + dayNow + ' / ' + totalDays + ' วัน</span>'
       +     '<span class="badge ms-2" style="background:var(--p-subtle);color:var(--p-text-muted);">' + pctLabel + '</span>'
       +   '</div>'
       + '</div>'
