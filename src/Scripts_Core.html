@@ -513,6 +513,7 @@ function renderApp(user) {
     startPage = 'Page_Dashboard_Student';
     menuHTML += `<li class="mb-3"><a href="javascript:void(0)" class="nav-link-custom active" onclick="loadPage('Page_Dashboard_Student')"><i class="fas fa-home me-2"></i>หน้าแรกนักเรียน</a></li>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #9c27b0 !important;" onclick="loadPage('Page_Student_Clubs')"><i class="fas fa-flag-checkered" style="color: #9c27b0;"></i> <span>ลงทะเบียนชุมนุม</span></a></li>`;
+    menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #00897b !important;" onclick="loadPage('Page_Teaching_Media')"><i class="fas fa-book-open-reader" style="color: #00897b;"></i> <span>สื่อการสอน</span></a></li>`;
   } else if (role === 'EXECUTIVE') {
     startPage = 'Page_Dashboard_Executive';
     const dept = (user.dept || '').trim();
@@ -550,6 +551,7 @@ function renderApp(user) {
         menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: var(--p-accent);" onclick="loadPage('Page_Admin_Timetable')"><i class="fas fa-calendar-alt me-2" style="font-size: 0.7rem;"></i>ตารางสอน</a></li>`;
         menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #2ecc71;" onclick="loadPage('Page_Admin_Curriculum')"><i class="fas fa-layer-group me-2" style="font-size: 0.7rem;"></i>คลังตัวชี้วัด/ผลการเรียนรู้</a></li>`;
         menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #9c27b0;" onclick="loadPage('Page_Admin_Clubs')"><i class="fas fa-users-cog me-2" style="font-size: 0.7rem;"></i>จัดการชุมนุม</a></li>`;
+        menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #00897b;" onclick="loadPage('Page_Teaching_Media')"><i class="fas fa-book-open-reader me-2" style="font-size: 0.7rem;"></i>สื่อการสอน</a></li>`;
     } else {
         // ของครู: ฝ่ายวิชาการเป็น label, เช็คเวลาเรียน + sub-items
         menuHTML += `<li class="mb-1"><div class="dept-btn academic"><i class="fas fa-graduation-cap"></i> <span>ฝ่ายวิชาการ</span></div></li>`;
@@ -560,6 +562,7 @@ function renderApp(user) {
         menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub text-success py-1" style="font-size: 0.85rem;" onclick="loadPage('Page_Lesson_History')"><i class="fas fa-book-reader me-2" style="font-size: 0.7rem;"></i>แฟ้มบันทึกหลังสอน</a></li>`;
         menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #9c27b0;" onclick="loadPage('Page_Teacher_Clubs')"><i class="fas fa-users me-2" style="font-size: 0.7rem;"></i>ชุมนุมที่ดูแล</a></li>`;
         menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: var(--p-accent);" onclick="loadPage('Page_Teacher_Timetable')"><i class="fas fa-calendar-week me-2" style="font-size: 0.7rem;"></i>ตารางสอนของฉัน</a></li>`;
+        menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #00897b;" onclick="loadPage('Page_Teaching_Media')"><i class="fas fa-book-open-reader me-2" style="font-size: 0.7rem;"></i>สื่อการสอน</a></li>`;
     }
 
     // เมนูของฝ่ายอื่นๆ (เห็นเหมือนกันทั้งแอดมินและครู)
@@ -716,7 +719,8 @@ var PAGE_DEPT = {
   Page_Leave_Request:'personnel', Page_Substitute_Admin:'personnel', Page_Admin_Users:'personnel',
   Page_Homeroom:'personnel',
   Page_General:'general',
-  Page_Savings:'general'
+  Page_Savings:'general',
+  Page_Teaching_Media:'academic'
 };
 var _DEPT_CLASSES = ['dept-academic','dept-budget','dept-personnel','dept-general'];
 function _setBodyDept(pageName) {
@@ -819,6 +823,7 @@ function setupPageContent(pageName, html) {
   if(pageName === 'Page_Leave_Request') initLeaveRequestPage();
   if(pageName === 'Page_Leave_Admin')   initLeaveAdminPage();
   if(pageName === 'Page_Substitute_Admin') initSubstituteAdminPage();
+  if(pageName === 'Page_Teaching_Media') initTeachingMediaPage();
 }
 
 // ==========================================

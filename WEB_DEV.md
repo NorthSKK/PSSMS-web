@@ -448,10 +448,21 @@ function initMyPage() {
 
 ### Step 4 — เพิ่มใน Sidebar
 
-ใน `../src/Scripts_Core.html` ฟังก์ชัน `buildMenu`:
+ใน `../src/Scripts_Core.html` ฟังก์ชัน `renderApp(user)` — **ไม่มีฟังก์ชัน `buildMenu` และไม่มี array config
+ของเมนู** เมนูสร้างด้วย template string ต่อกันเข้า `menuHTML` แล้วยัดเข้า `#menu-list` ตอนท้าย
+role gating คือ `if (role === ...)` ธรรมดา ให้เพิ่ม `<li>` ในสาขา role ที่ควรเห็นเมนูนั้น:
+
 ```javascript
-{ label: 'หน้าใหม่', icon: 'fa-file', page: 'Page_MyPage', roles: ['Admin'] }
+menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #00897b !important;" onclick="loadPage('Page_MyPage')"><i class="fas fa-file" style="color: #00897b;"></i> <span>หน้าใหม่</span></a></li>`;
 ```
+
+รูปแบบ markup ที่ใช้อยู่มี 3 ระดับ:
+- **เมนูหลัก** — `<li class="mb-3"><a class="nav-link-custom active" onclick="loadPage('X')">`
+- **หัวข้อฝ่าย** — `<div class="menu-divider">ชื่อกลุ่ม</div>` และ `<div class="dept-btn academic">` (คลิกไม่ได้)
+- **เมนูย่อย** — `<li class="mb-1"><a class="nav-link-sub py-1" style="font-size:0.85rem;color:#...">`
+
+อย่าลืมเพิ่ม `PAGE_DEPT['Page_MyPage']` ถ้าต้องการให้หน้าใช้ธีมสีของฝ่าย และเพิ่ม
+`if(pageName === 'Page_MyPage') initMyPage();` ใน `setupPageContent` เพราะ `innerHTML` ไม่รัน `<script>` ในไฟล์ page
 
 ### Shared UI helper — แถบความคืบหน้าภาคเรียน
 

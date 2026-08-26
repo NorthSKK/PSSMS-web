@@ -1,0 +1,121 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header d-flex flex-wrap align-items-start justify-content-between gap-2">
+    <div>
+      <h4><i class="fas fa-book-open-reader me-2" style="color: var(--p-accent);"></i>สื่อการสอน</h4>
+      <p class="pssms-subtitle">เว็บสื่อการเรียนการสอนแยกตามรายวิชา · เปิดในแท็บใหม่ ใช้ได้ทั้งครูและนักเรียน</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="button" id="mediaTrashToggle" class="btn btn-outline-secondary btn-sm d-none">
+        <i class="fas fa-trash me-1"></i>ถังขยะ
+      </button>
+      <button type="button" id="mediaAddBtn" class="btn btn-primary btn-sm d-none">
+        <i class="fas fa-plus me-1"></i>เพิ่มการ์ดสื่อ
+      </button>
+    </div>
+  </div>
+
+  <div id="mediaFallbackWarn" class="d-none mb-3 p-2 rounded-2 small"
+       style="background:#fffbeb;color:#92400e;border:1px solid #fde68a;">
+    <i class="fas fa-triangle-exclamation me-1"></i>
+    โหลดรายการสื่อล่าสุดไม่สำเร็จ กำลังแสดงรายการสำรอง — การ์ดที่ครูเพิ่มไว้จะยังไม่ปรากฏ
+  </div>
+
+  <div class="row g-2 mb-3">
+    <div class="col-md-4">
+      <div class="input-group input-group-sm">
+        <span class="input-group-text"><i class="fas fa-magnifying-glass"></i></span>
+        <input type="text" id="mediaSearchInput" class="form-control" placeholder="ค้นหาชื่อสื่อ">
+      </div>
+    </div>
+    <div class="col-md-8 d-flex align-items-center flex-wrap" id="mediaFilterChips"></div>
+  </div>
+
+  <div id="mediaSubjectGrid" class="row g-3"></div>
+
+  <div class="pssms-card mt-3">
+    <div class="p-3 small" style="color: var(--p-text-muted);">
+      <i class="fas fa-circle-info me-1"></i>
+      สื่อแต่ละวิชาเป็นเว็บแยกต่างหาก มีเนื้อหารายหน่วย แบบทดสอบท้ายหน่วย โหมดนำเสนอสำหรับสอนหน้าห้อง
+      และแผนการสอนสำหรับครู · ความคืบหน้าการเรียนเก็บไว้ในเบราว์เซอร์ของผู้ใช้แต่ละคน
+    </div>
+  </div>
+</div>
+
+<!-- ฟอร์มเพิ่ม/แก้การ์ด — ตัวเลือกไอคอน สี กลุ่มสาระ เติมจาก getMediaCardOptions
+     (allowlist ชุดเดียวกับที่ server ใช้ validate) -->
+<div class="modal fade pssms-modal" id="mediaCardModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="mcModalTitle">เพิ่มการ์ดสื่อ</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="mcId">
+
+        <div class="mb-3">
+          <label class="form-label" for="mcTitle">ชื่อสื่อ <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="mcTitle" maxlength="120"
+                 placeholder="เช่น สุขศึกษาและพลศึกษา ม.2">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="mcUrl">ลิงก์ <span class="text-danger">*</span></label>
+          <input type="url" class="form-control" id="mcUrl" maxlength="2000" placeholder="https://...">
+          <div class="form-text">
+            ใส่ได้ทั้งลิงก์เว็บสื่อ ลิงก์ Google Classroom ไฟล์ใน Google Drive หรือคลิป YouTube
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label" for="mcGroup">กลุ่มสาระ</label>
+            <select class="form-select" id="mcGroup"></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="mcMeta">ป้ายกำกับสั้น</label>
+            <input type="text" class="form-control" id="mcMeta" maxlength="60"
+                   placeholder="เช่น 14 หน่วยการเรียนรู้">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="mcDesc">คำอธิบาย</label>
+          <textarea class="form-control" id="mcDesc" rows="2" maxlength="300"
+                    placeholder="อธิบายสั้น ๆ ว่าสื่อนี้ใช้ทำอะไร"></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">ไอคอน</label>
+          <div id="mcIconGrid" class="d-flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">สี</label>
+          <div id="mcColorGrid" class="d-flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">ให้นักเรียนระดับชั้นไหนเห็น</label>
+          <div id="mcLevels"></div>
+          <div class="form-text">
+            ไม่เลือกเลย = เห็นเฉพาะครูและผู้ดูแลระบบ (ใช้กับเฉลย ข้อสอบ หรือแผนการสอน)
+          </div>
+        </div>
+
+        <div class="form-check d-none" id="mcFeaturedWrap">
+          <input class="form-check-input" type="checkbox" id="mcFeatured">
+          <label class="form-check-label" for="mcFeatured">
+            ปักหมุดไว้บนสุด (สื่อหลักของโรงเรียน)
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" id="mcSaveBtn" onclick="saveMediaCardForm()">
+          <i class="fas fa-floppy-disk me-1"></i>บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
