@@ -380,8 +380,18 @@ async function saveStudentRemarkDirectly([studentId, subjectCode, term, year, re
   );
   return { success: true, val, status: 'success', message: 'บันทึกหมายเหตุสำเร็จ' };
 }
-async function uploadSarabunFile([id, base64Data, filename, docNum]) {
-  return { status: 'success', message: 'ไม่รองรับอัปโหลดไฟล์ใน web prototype', fileURL: '' };
+/**
+ * ยังไม่รองรับการแนบไฟล์งานสารบรรณ — ระบบยังไม่มีที่เก็บไฟล์ถาวร
+ *
+ * ⚠️ เดิมฟังก์ชันนี้คืน status 'success' ทั้งที่ไม่ได้เก็บไฟล์เลย ฝั่ง client จึงขึ้น
+ *    "สำเร็จ!" ให้ครูดู แล้วไฟล์หายไปเฉย ๆ ไม่มีใครรู้ว่าแนบไม่ติดมาตลอด
+ *    ห้ามเปลี่ยนกลับไปคืน success จนกว่าจะเก็บไฟล์ได้จริง
+ *
+ * เปิดใช้เมื่อไหร่: ใช้ lib/fileStore.js ตัวเดียวกับสื่อการสอน (ตอนนี้พักไว้เพราะ
+ * ยังไม่มีที่เก็บถาวรบน production — ดู WEB_DEV.md)
+ */
+async function uploadSarabunFile() {
+  throw new Error('ยังไม่เปิดให้แนบไฟล์งานสารบรรณ — ระบบยังไม่มีที่เก็บไฟล์');
 }
 async function getTeacherListForDropdown() {
   const teachers = await require('./getTeachersForTimetable')();

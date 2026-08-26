@@ -220,12 +220,17 @@ window.renderSarabunTable = function(dataList) {
 
             let dateStr = _thaiDate(row.targetDate);
 
-            const btnStyle = 'style="width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;"';
+            const btnCss = 'width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;';
+            const btnStyle = `style="${btnCss}"`;
+            const disabledBtnStyle = `style="${btnCss}opacity:.4;cursor:not-allowed;"`;
             let fileHtml = '<div class="d-flex gap-1 justify-content-center">';
             if (row.fileUrl && row.fileUrl !== "") {
                 fileHtml += `<a href="${row.fileUrl}" target="_blank" class="btn btn-sm btn-success rounded-circle" title="ดูไฟล์" ${btnStyle}><i class="fas fa-search" style="font-size:.75rem;"></i></a>`;
             } else {
-                fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" title="แนบไฟล์" ${btnStyle} onclick="document.getElementById('uploadTargetId').value='${row.id}'; document.getElementById('uploadTargetDocNum').value='${row.docNumber}'; document.getElementById('sarabunFileInput').click();"><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
+                // แนบไฟล์ยังทำไม่ได้จริง — uploadSarabunFile เป็น stub ที่ไม่เก็บไฟล์
+                // เดิมปุ่มนี้กดได้แล้วขึ้น "สำเร็จ!" ทั้งที่ไฟล์หายไปเฉย ๆ ครูจึงเข้าใจผิดมาตลอด
+                // ปิดปุ่มไว้จนกว่าจะมีที่เก็บไฟล์จริง (ดู lib/fileStore.js — พักไว้เหมือนกัน)
+                fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" disabled title="ยังไม่เปิดให้แนบไฟล์" ${disabledBtnStyle}><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
             }
             if (isAdmin) {
                 fileHtml += `<button class="btn btn-sm btn-outline-primary rounded-circle" title="แก้ไข" ${btnStyle} onclick="editSarabunRecord(${row.id})"><i class="fas fa-pen" style="font-size:.75rem;"></i></button>`;
@@ -356,40 +361,10 @@ window.filterSarabunData = (typeof debounce === 'function') ? debounce(_filterSa
 
 // 🌟 7. ฟังก์ชันจัดการการอัปโหลดไฟล์ (ทำงานซ่อนหลังบ้าน)
 window.handleSarabunFileUpload = function(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) { 
-        if(typeof showToast === 'function') showToast('ขนาดไฟล์ใหญ่เกินไป (จำกัดไม่เกิน 5 MB)', 'error');
-        event.target.value = '';
-        return;
-    }
-
-    const id = document.getElementById('uploadTargetId').value;
-    const docNum = document.getElementById('uploadTargetDocNum').value;
-
-    Swal.fire({
-        title: 'กำลังอัปโหลดไฟล์...',
-        html: `เอกสารเลขที่: <b>${docNum}</b><br><small class="text-muted">${file.name}</small>`,
-        allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
-    });
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const base64Data = e.target.result;
-        
-        safeRun().withSuccessHandler(function(res) {
-            if (res.status === 'success') {
-                Swal.fire('สำเร็จ!', 'แนบไฟล์เอกสารเรียบร้อยแล้ว', 'success');
-                loadSarabunHistory(); 
-            } else {
-                Swal.fire('เกิดข้อผิดพลาด', res.message, 'error');
-            }
-            document.getElementById('sarabunFileInput').value = '';
-        }).uploadSarabunFile(id, base64Data, file.name, docNum);
-    };
-    reader.readAsDataURL(file);
+    // ปุ่มแนบไฟล์ถูกปิดไว้แล้ว ฟังก์ชันนี้จึงไม่ควรถูกเรียก — กันไว้ไม่ให้กลับไปหลอกว่าสำเร็จ
+    event.target.value = '';
+    Swal.fire('ยังแนบไฟล์ไม่ได้',
+      'ระบบยังไม่มีที่เก็บไฟล์ งานสารบรรณจึงยังแนบไฟล์ไม่ได้ — แจ้งผู้ดูแลระบบ', 'info');
 };
 
 // ============================================================
