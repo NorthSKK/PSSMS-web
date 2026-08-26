@@ -80,6 +80,13 @@ router.post('/upload', requireAuth, (req, res) => {
     return res.status(403).json({ __error: e.message });
   }
 
+  // ไม่มีที่เก็บถาวร = ไม่รับไฟล์ ดีกว่ารับแล้วหายตอน deploy รอบหน้า
+  if (!store.isConfigured()) {
+    return res.status(503).json({
+      __error: 'ยังไม่เปิดให้อัปโหลด PDF — แจ้งผู้ดูแลระบบ (การ์ดแบบลิงก์ยังใช้ได้ปกติ)',
+    });
+  }
+
   rateLimit(req, res, () => {
     upload.single('file')(req, res, async (err) => {
       if (err) {

@@ -1934,19 +1934,13 @@ function _mediaLoadStorageStatus() {
       box.className = 'mb-3 p-2 rounded-2 small';
       if (!st || !st.connected) {
         box.style.cssText = 'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;';
-        box.textContent = 'ที่เก็บไฟล์: ใช้งานไม่ได้ — อัปโหลด PDF ไม่ได้ (การ์ดแบบลิงก์ยังใช้ได้) · '
-          + (st && st.reason ? st.reason : '');
+        box.textContent = 'อัปโหลด PDF: ปิดอยู่ · ' + (st && st.reason ? st.reason : '');
         return;
       }
       var mb = function(b) { return (Number(b || 0) / (1024*1024)).toFixed(1); };
       var gb = function(b) { return (Number(b || 0) / (1024*1024*1024)).toFixed(1); };
-      // ยังไม่ได้ mount Volume = ไฟล์หายทุกครั้งที่ deploy ต้องเตือนให้ดังกว่าเรื่องพื้นที่
-      box.style.cssText = st.ephemeral
-        ? 'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;'
-        : 'background:var(--p-accent-soft);color:var(--p-accent);';
-      box.textContent = (st.ephemeral
-          ? '⚠️ ยังไม่ได้ตั้ง MEDIA_STORAGE_DIR — ไฟล์ที่อัปโหลดจะหายตอน deploy รอบหน้า · '
-          : 'ที่เก็บไฟล์: ปกติ · ')
+      box.style.cssText = 'background:var(--p-accent-soft);color:var(--p-accent);';
+      box.textContent = 'ที่เก็บไฟล์: ปกติ · '
         + st.files + ' ไฟล์ · ใช้ไป ' + mb(st.usage) + ' MB'
         + (st.free ? ' · พื้นที่ว่าง ' + gb(st.free) + ' GB' : '')
         + (st.trashed ? ' · ถังขยะ ' + st.trashed + ' ไฟล์' : '');

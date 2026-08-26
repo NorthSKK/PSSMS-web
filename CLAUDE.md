@@ -803,8 +803,13 @@ function section(fn) {
   เคยทำเป็น Google Drive แต่ publish OAuth เป็น production ต้องยืนยันโดเมน
   ซึ่ง `*.up.railway.app` เป็นของ Railway ไม่ใช่ของโรงเรียน (ค้างโหมด Testing ก็ไม่ได้
   เพราะ refresh token หมดอายุ 7 วัน) — ประวัติเต็มอยู่ในหัว `lib/fileStore.js`
-- ⚠️ **ไม่ตั้ง `MEDIA_STORAGE_DIR` = ไฟล์หายทุก deploy** — `getMediaStorageStatus()` คืน
-  `ephemeral: true` และหน้า Admin ขึ้นแถบแดง วิธี mount Volume อยู่ใน `WEB_DEV.md`
+- ⚠️ **ตอนนี้ฟีเจอร์นี้ปิดอยู่บน production** — `MEDIA_STORAGE_DIR` ยังไม่ได้ตั้ง
+  `isConfigured()` จึงเป็น false: ฟอร์มปิดตัวเลือกอัปโหลด, endpoint ตอบ 503,
+  Admin เห็นแถบ "อัปโหลด PDF: ปิดอยู่" **ปิดโดยตั้งใจ** เพราะ filesystem ของ Railway
+  หายทุก deploy — เปิดทิ้งไว้ = ครูอัปได้แล้วไฟล์หายเงียบ ๆ
+  วิธีเปิด (Volume / object storage / bytea) อยู่ใน `WEB_DEV.md`
+  **การ์ดแบบลิงก์ไม่กระทบ** และเทสต์ตั้ง `MEDIA_STORAGE_DIR` เองใน `test/helpers/api.js`
+  จึงยังครอบ flow อัปโหลดครบ
 - อัปโหลดผ่าน `POST /api/media/upload` (`routes/media.js`) ไม่ใช่ `/api/gas`
   **เส้นแบ่งคือ binary ไป REST ที่เหลือไป `/api/gas`** — ยัด base64 เข้า shim จะต้องดัน
   `express.json` limit ที่เป็น global ขึ้นหลายสิบ MB ซึ่งเปิดช่อง DoS ให้ทุก endpoint

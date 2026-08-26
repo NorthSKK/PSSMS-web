@@ -177,11 +177,10 @@ test('นักเรียนที่ไม่ได้อยู่ในร�
   assert.match(allowed.url, /^\/api\/media\/file\/\d+\?t=/);
 });
 
-test('สถานะที่เก็บไฟล์เป็นของ Admin และเตือนเมื่อยังไม่ได้ mount Volume', async () => {
+test('สถานะที่เก็บไฟล์เป็นของ Admin', async () => {
   await denied('getMediaStorageStatus', [], 'teacher1');
   const st = await ok('getMediaStorageStatus', [], 'admin');
   assert.equal(st.connected, true);
-  assert.equal(st.ephemeral, true, 'dev ไม่ได้ตั้ง MEDIA_STORAGE_DIR → ต้องรายงานว่า ephemeral');
   assert.ok(st.files >= 1);
 });
 

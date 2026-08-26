@@ -497,32 +497,41 @@ until curl -s https://pssms-web-production.up.railway.app/api/assets/script/Scri
 ⚠️ `.env.prod` มีแค่ `DATABASE_URL` ที่ตรงกับ production — **`JWT_SECRET` ไม่ตรง**
 กับที่ตั้งไว้บน Railway จึงใช้ mint token ยิง API production ไม่ได้
 
-### ที่เก็บไฟล์สื่อการสอน (อัปโหลด PDF)
+### ที่เก็บไฟล์สื่อการสอน (อัปโหลด PDF) — **พักไว้**
 
-ไฟล์ PDF ที่ครูอัปโหลดเก็บบน **ดิสก์ของ Railway Volume** ไม่ใช่ Google Drive
+โค้ดอัปโหลด PDF เขียนเสร็จและมีเทสต์ครบ แต่ **ปิดอยู่บน production** เพราะยังไม่มีที่เก็บถาวร
 
-เคยทำเป็น Google Drive แล้วติดตาย: publish OAuth consent screen เป็น production
-ต้องยืนยันความเป็นเจ้าของโดเมนใน Authorized domains แต่โฮสต์คือ `*.up.railway.app`
-ซึ่งเป็นของ Railway ไม่ใช่ของโรงเรียน จึงเพิ่มไม่ได้ และถ้าค้างโหมด Testing ไว้
-refresh token จะหมดอายุทุก 7 วัน
+`lib/fileStore.js` เขียนไฟล์ลงดิสก์ที่ `MEDIA_STORAGE_DIR` **ไม่ตั้งตัวแปรนี้ = ฟีเจอร์ปิด**
+(`isConfigured()` เป็น false → ฟอร์มปิดตัวเลือก, endpoint ตอบ 503, Admin เห็นแถบ "อัปโหลด PDF: ปิดอยู่")
+ปิดโดยตั้งใจ ไม่ใช่ตั้งค่าตกหล่น — filesystem ของ Railway หายทุก deploy
+ถ้าเปิดทิ้งไว้ครูจะอัปได้แล้วไฟล์หายเงียบ ๆ
 
-**ตั้งครั้งเดียวบน Railway:**
+**การ์ดแบบลิงก์ไม่ได้รับผลกระทบ ใช้งานได้ตามปกติ**
 
-1. หน้าโปรเจกต์ → service → **Variables** → เพิ่ม `MEDIA_STORAGE_DIR=/data/media`
-2. แท็บ **Volumes** → **New Volume** → mount path `/data`
-3. Redeploy
+ทำไมไม่ใช้ Google Drive: publish OAuth consent screen เป็น production ต้องยืนยันความเป็น
+เจ้าของโดเมนใน Authorized domains แต่โฮสต์คือ `*.up.railway.app` ซึ่งเป็นของ Railway
+และถ้าค้างโหมด Testing refresh token จะหมดอายุทุก 7 วัน
 
-**ถ้าไม่ตั้ง `MEDIA_STORAGE_DIR`** ระบบยังอัปโหลดได้ แต่เขียนลง filesystem ชั่วคราวของ
-container → **ไฟล์หายทุกครั้งที่ deploy** หน้าสื่อการสอนจะขึ้นแถบแดงเตือน Admin ไว้ให้
+**วิธีเปิดใช้งาน** — เลือกทางใดทางหนึ่ง:
 
-**เช็คสถานะ**: ล็อกอินเป็น Admin → หน้าสื่อการสอน มีแถบบอกจำนวนไฟล์ พื้นที่ที่ใช้
-พื้นที่ว่าง และจำนวนไฟล์ในถังขยะ
+1. **Railway Volume** (ตรงกับโค้ดปัจจุบัน ไม่ต้องแก้อะไร)
+   - canvas ของโปรเจกต์ → คลิกขวาที่ service `PSSMS-web` หรือ `Cmd+K` → Attach Volume
+     → mount path `/data` (ตอนเขียนเอกสารนี้ยังหาเมนูไม่เจอ อาจติดที่แพลน)
+   - Variables → `MEDIA_STORAGE_DIR=/data/media`
+   - Redeploy แล้วเช็คแถบสถานะบนหน้าสื่อการสอนว่าเป็น "ที่เก็บไฟล์: ปกติ"
 
-**ไฟล์ไม่ได้เปิดสาธารณะ** — เสิร์ฟผ่าน `GET /api/media/file/:id?t=<ticket>` โดยตั๋วอายุ 10 นาที
-ออกให้เฉพาะคนที่มีสิทธิ์เห็นการ์ดใบนั้น (`getMediaFileTicket`)
+2. **Object storage** (Vercel Blob / Cloudflare R2 / S3) — เขียน adapter ใหม่แทน
+   `lib/fileStore.js` โดยคง interface เดิม (`savePdf` / `statSync` / `readStream` /
+   `trashFile` / `untrashFile` / `status` / `isConfigured`) ที่เหลือไม่ต้องแตะ
 
-**ถังขยะ**: ลบการ์ด → ไฟล์ย้ายเข้า `<MEDIA_STORAGE_DIR>/trash/` เก็บ 30 วันแล้วลบเอง
-(กวาดตอนมีการลบครั้งถัดไป ไม่ต้องมี cron)
+3. **Postgres `bytea`** — DB มี volume ถาวรอยู่แล้ว แลกกับ backup/restore ที่ช้าลง
+
+⚠️ **อย่าย้ายทั้งแอปไป Vercel เพื่อแก้เรื่องนี้** — Vercel ไม่มีดิสก์ถาวรเลย และ Serverless
+Functions รับ body ได้สูงสุด 4.5MB ซึ่งเล็กกว่าลิมิตอัปโหลด 25MB ของฟีเจอร์นี้
+
+**ที่ทำไว้แล้วและใช้ได้ทันทีเมื่อเปิด**: 25MB/ไฟล์, ตรวจ magic bytes `%PDF-`,
+rate limit 20 ไฟล์/ชม./คน, ถังขยะ 30 วันพร้อมกวาดอัตโนมัติ, และไฟล์ไม่เปิดสาธารณะ —
+เสิร์ฟผ่าน `GET /api/media/file/:id?t=<ticket>` ตั๋วอายุ 10 นาทีผูกกับการ์ดใบเดียว
 
 ### Environment Variables ที่ต้องตั้งใน Railway
 | Key | หมาย |

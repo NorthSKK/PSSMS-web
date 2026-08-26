@@ -15,6 +15,10 @@
  *   node db/seed-dev.js           # ล้างข้อมูลเดิม (ยกเว้น config) แล้วใส่ใหม่
  */
 require('dotenv').config();
+// seed เขียนไฟล์ PDF ตัวอย่างลงที่เก็บ — ตั้งค่าให้เหมือนตอนรันเทส
+if (!process.env.MEDIA_STORAGE_DIR) {
+  process.env.MEDIA_STORAGE_DIR = require('path').join(__dirname, '../storage/media');
+}
 const { query } = require('../lib/db');
 
 // parse hostname จริง อย่าใช้ regex — URL ของ dev ไม่มี user:pass เลยไม่มี '@'
