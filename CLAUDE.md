@@ -751,6 +751,55 @@ function section(fn) {
 - ⚠️ **ตัวเลขต้องคั่นด้วยตัวอักษรจริง (`·`) ไม่ใช่ margin ล้วน** — เดิมใช้ `ms-2`
   อย่างเดียว ตัวเลขชนกันอ่านเป็น `15 / 20102 / 153 วัน66%`
 
+### เมนู "สื่อการสอน" — `Page_Teaching_Media`
+
+หน้ารวมการ์ดสื่อการเรียนการสอน คลิกแล้วเปิดในแท็บใหม่
+(`window.open(url, '_blank', 'noopener')`) **ครูเพิ่ม/แก้/ลบการ์ดเองได้จากในหน้า**
+
+- `src/Page_Teaching_Media.html` — toolbar (ค้นหา + ชิปกรองกลุ่มสาระ + ปุ่มเพิ่ม/ถังขยะ),
+  `#mediaSubjectGrid`, และ modal `#mediaCardModal` (ฟอร์มการ์ด)
+- `src/Scripts_General.html` — `initTeachingMediaPage()` + `_mediaRender()` +
+  `openMediaCardForm()` / `saveMediaCardForm()` / `deleteMediaCardPrompt()`
+- `functions/mediaCards.js` — CRUD + กติกาการมองเห็น + allowlist ของ icon/สี/กลุ่มสาระ
+- ตาราง `media_cards` (migration `db/migrations/2026-08-25-media-cards.sql`)
+- `src/Scripts_Core.html` — `<li>` ในเมนู 3 จุด: ครูและแอดมินเป็น **เมนูย่อยท้ายกลุ่ม
+  "ฝ่ายวิชาการ"** (`nav-link-sub`, สี `#00897b`) ส่วนนักเรียนเป็น `dept-btn` ระดับบน
+  เพราะเมนูนักเรียนไม่มีกลุ่มฝ่าย · `PAGE_DEPT.Page_Teaching_Media = 'academic'` ·
+  dispatch ใน `setupPageContent`
+
+**กติกาการมองเห็น** (เทสต์อยู่ที่ `test/media_cards.test.js`):
+
+- ครูและ Admin เห็นทุกใบ · นักเรียนเห็นเฉพาะใบที่ระดับชั้นตัวเองอยู่ใน `visible_levels`
+- `visible_levels` ว่าง = **ครูเท่านั้น** และเป็นค่า default ตอนสร้างการ์ด — กันเฉลย
+  กับข้อสอบหลุด ฟอร์มจะเตือนก่อนบันทึกถ้าครูไม่เลือกชั้น
+- ⚠️ **กรองที่ SQL เสมอ** ห้ามส่งการ์ดที่นักเรียนไม่ควรเห็นออกไปแล้วซ่อนฝั่ง client
+- ⚠️ **ระดับชั้นต้อง query สดจาก `users.department` ห้ามใช้ `user.dept` ใน JWT** —
+  token อายุ 90 วัน เด็กเลื่อนชั้นแล้ว dept ค้างชั้นเก่าเกือบ 3 เดือน
+
+**ความปลอดภัยของค่าที่ครูกรอก**:
+
+- `icon` / `color` / `subject_group` ตรวจด้วย allowlist ใน `functions/mediaCards.js`
+  ตัวเดียวกับที่ `getMediaCardOptions` ส่งไปสร้างฟอร์ม — เพิ่มตัวเลือกแก้ที่เดียว
+- `url` รับเฉพาะ `http:` / `https:` (บล็อก `javascript:` และ `data:` ที่การ escape
+  ฝั่ง client ช่วยอะไรไม่ได้)
+- `_mediaCardEl()` สร้างการ์ดด้วย `createElement` + `textContent` ล้วน
+  **ห้ามเปลี่ยนกลับไปต่อ HTML string** เพราะเนื้อหาการ์ดมาจากครูคนอื่น
+- ปักหมุด (`is_featured`) เป็นของ Admin เท่านั้น ครูตั้งเองไม่ได้แม้ในการ์ดตัวเอง
+- ครูแก้/ลบได้เฉพาะการ์ดที่ `created_by` เป็นตัวเอง · การกู้คืนจากถังขยะเป็น ADMIN_ONLY
+- ลบเป็น soft delete (`deleted_at`) ไม่ใช่ลบจริง
+
+`MEDIA_SUBJECTS` ใน `Scripts_General.html` **ไม่ใช่แหล่งความจริงแล้ว** — เหลือหน้าที่เดียว
+คือรายการสำรองตอน `getMediaCards` ล้มเหลว (ขึ้นแถบเตือน `#mediaFallbackWarn` คู่กัน
+ไม่แสดงเงียบ ๆ เหมือนของจริง) แก้การ์ดจริงทำในหน้าเว็บ ไม่ต้อง deploy
+
+- เว็บวิชาเป็น static site แยกโปรเจกต์ ไม่ได้อยู่ใน repo นี้ — อยู่ที่
+  `../สื่อการสอน/<วิชา>/` deploy แยกบน Vercel เพราะ push `main` ของ repo นี้
+  = deploy production ทันที ไม่ควรเอาเนื้อหาเรียนกับ PDF หลายสิบ MB มาปน
+- ไอคอนในการ์ดใช้ `background: <สีวิชา>; color:#fff` ไม่ใช่สีอ่อน + ตัวอักษรสีเดียวกัน
+  เพราะบน dark mode พื้นอ่อน 13% กับตัวอักษรสีเดิม contrast ต่ำจนอ่านไม่ออก
+- **เฟส 2 (ยังไม่ทำ)**: อัปโหลด PDF ขึ้น Google Drive — คอลัมน์ `card_type` รองรับ
+  ค่า `'pdf'` ไว้แล้ว ตอนนี้เขียนเป็น `'link'` อย่างเดียว
+
 ### ป้ายบนตาราง "จัดการเรียนรู้วันนี้" (dashboard ครู)
 
 `renderTeacherTodaySchedule()` — **teal `#0f766e` = ประเภทคาบ** (สอนแทน / ชุมนุม,

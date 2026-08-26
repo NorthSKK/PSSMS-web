@@ -160,7 +160,7 @@ async function main() {
     'attendance', 'academic_records', 'detailed_lesson_records', 'morning_activity',
     'club_members', 'club_advisors', 'clubs',
     'substitute_assignments', 'leave_records', 'sarabun', 'budgets',
-    'calendar_events', 'timetable', 'user_history', 'users',
+    'calendar_events', 'timetable', 'media_cards', 'user_history', 'users',
   ];
   for (const t of wipe) {
     await query(`DELETE FROM ${t}`).catch(e => console.warn(`  ข้าม ${t}: ${e.message}`));
@@ -179,6 +179,27 @@ async function main() {
       `INSERT INTO users(username,password,full_name,role,department,email,year,status)
        VALUES($1,'1234',$2,'Student',$3,$4,$5,'ปกติ')`,
       [s.id, s.name, s.cls, `${s.id}@dev.local`, YEAR]
+    );
+  }
+
+  // สื่อการสอน — 3 ใบครอบทุกกรณีของกติกาการมองเห็น:
+  // ปักหมุด+ทุกชั้น / เฉพาะ ม.2 / ไม่ระบุชั้นเลย (= ครูเท่านั้น เช่นเฉลยข้อสอบ)
+  const MEDIA_CARDS = [
+    ['สุขศึกษาและพลศึกษา ม.2', 'สุขศึกษาและพลศึกษา', 'fa-heart-pulse', '#00897b',
+     '14 หน่วยการเรียนรู้', 'เนื้อหาครบทุกหน่วยตามตัวชี้วัด',
+     'https://health-m2.vercel.app', ['ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'], true, ''],
+    ['ใบงานสุขศึกษา ม.2', 'สุขศึกษาและพลศึกษา', 'fa-book', '#00897b',
+     'ใบงาน', 'ใบงานประกอบหน่วยที่ 1',
+     'https://example.com/worksheet', ['ม.2'], false, 'teacher2'],
+    ['เฉลยข้อสอบกลางภาค', 'สุขศึกษาและพลศึกษา', 'fa-file-pdf', '#c62828',
+     'เฉลย', 'เฉลยข้อสอบ ห้ามให้นักเรียนเห็น',
+     'https://example.com/answers', [], false, 'teacher2'],
+  ];
+  for (const m of MEDIA_CARDS) {
+    await query(
+      `INSERT INTO media_cards(title,subject_group,icon,color,meta,description,url,
+                               visible_levels,is_featured,created_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, m
     );
   }
 

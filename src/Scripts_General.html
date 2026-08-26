@@ -608,8 +608,12 @@ function _leaveStatus(msg, type) {
   el.classList.remove('d-none');
 }
 
+// escape สำหรับ attribute context ด้วย — " และ ' หลุดออกจาก attribute ได้
+// (ต้องเหมือน _escH ใน Scripts_Admin.html ตัวไหนโหลดทีหลังทับตัวก่อนหน้า)
 function _escH(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
 }
 function _thaiDate(iso) {
   if (!iso) return '';
@@ -1828,5 +1832,510 @@ function submitManualCreate() {
     })
     .withFailureHandler(function(err) { setMsg('เกิดข้อผิดพลาด: ' + (err.message||''), 'danger'); })
     .manualCreateAffected(tid, start, end);
+}
+
+// ==========================================
+// สื่อการสอน (Page_Teaching_Media)
+// ==========================================
+
+// รายการสำรอง — ใช้เฉพาะตอนเรียก getMediaCards ไม่สำเร็จเท่านั้น
+// แหล่งความจริงคือตาราง media_cards ใน DB (แก้การ์ดทำในหน้าเว็บ ไม่ต้อง deploy)
+// อัปเดตที่นี่ก็ต่อเมื่อการ์ดหลักของโรงเรียนเปลี่ยน จะได้ไม่แสดงของผิดตอน backend ล่ม
+var MEDIA_SUBJECTS = [
+  {
+    title: 'สุขศึกษาและพลศึกษา ม.2',
+    group: 'สุขศึกษาและพลศึกษา',
+    icon: 'fa-heart-pulse',
+    color: '#00897b',
+    meta: '14 หน่วยการเรียนรู้',
+    desc: 'เนื้อหาครบทุกหน่วยตามตัวชี้วัด พร้อมแบบทดสอบท้ายหน่วย โหมดนำเสนอ และแผนการสอน',
+    url: 'https://health-m2.vercel.app'
+  },
+  {
+    title: 'ป้องกันทุจริตศึกษา',
+    group: 'สังคมศึกษา ศาสนา และวัฒนธรรม',
+    icon: 'fa-scale-balanced',
+    color: '#8a3324',
+    meta: '34 บทเรียน',
+    desc: 'สรุปรัฐธรรมนูญ 2560 และประมวลกฎหมายอาญา พร้อมเควิซท้ายบท',
+    url: 'https://thai-law-learning.vercel.app'
+  }
+];
+
+var _mediaState = {
+  cards: [], options: null, group: '', search: '',
+  trash: false, fallback: false, modal: null
+};
+
+function _mediaUser() {
+  if (window.currentUser) return window.currentUser;
+  try { return JSON.parse(localStorage.getItem('pssms_user') || 'null'); } catch (e) { return null; }
+}
+
+function _mediaRole() {
+  var u = _mediaUser();
+  return String((u && u.role) || '').trim().toUpperCase();
+}
+
+function _mediaIsAdmin() { return _mediaRole() === 'ADMIN'; }
+function _mediaIsStaff() { var r = _mediaRole(); return r === 'ADMIN' || r === 'TEACHER'; }
+
+function initTeachingMediaPage() {
+  var grid = document.getElementById('mediaSubjectGrid');
+  if (!grid) return;
+
+  _mediaState.group = '';
+  _mediaState.search = '';
+  _mediaState.trash = false;
+
+  var addBtn = document.getElementById('mediaAddBtn');
+  if (addBtn) {
+    addBtn.classList.toggle('d-none', !_mediaIsStaff());
+    addBtn.onclick = function() { openMediaCardForm(null); };
+  }
+  var trashBtn = document.getElementById('mediaTrashToggle');
+  if (trashBtn) {
+    trashBtn.classList.toggle('d-none', !_mediaIsAdmin());
+    trashBtn.onclick = _mediaToggleTrash;
+  }
+  var search = document.getElementById('mediaSearchInput');
+  if (search) {
+    search.value = '';
+    search.oninput = function() { _mediaState.search = this.value; _mediaRender(); };
+  }
+
+  grid.innerHTML = '<div class="col-12"><div class="pssms-empty">กำลังโหลด...</div></div>';
+
+  _mediaLoadOptions();
+  _mediaLoad();
+}
+
+// ตัวเลือกของฟอร์มมาจาก server เพื่อให้ allowlist ตรงกับที่ใช้ validate เสมอ
+// cb มีไว้ให้ปุ่ม "เพิ่มการ์ด" ที่กดก่อน options โหลดเสร็จ ยังเปิดฟอร์มได้
+function _mediaLoadOptions(cb) {
+  if (_mediaState.options) { if (cb) cb(); return; }
+  google.script.run
+    .withSuccessHandler(function(opts) { _mediaState.options = opts; if (cb) cb(); })
+    .withFailureHandler(function(err) {
+      if (cb) showAlert('โหลดตัวเลือกของฟอร์มไม่สำเร็จ: ' + (err.message || err));
+    })
+    .getMediaCardOptions();
+}
+
+function _mediaLoad() {
+  google.script.run
+    .withSuccessHandler(function(cards) {
+      _mediaState.cards = cards || [];
+      _mediaState.fallback = false;
+      _mediaRenderFilters();
+      _mediaRender();
+    })
+    .withFailureHandler(function(err) {
+      // โหลดไม่ได้ = แสดงรายการสำรอง แต่ต้องบอกให้รู้ ไม่ใช่แสดงเงียบ ๆ เหมือนของจริง
+      _mediaState.cards = MEDIA_SUBJECTS.map(function(m, i) {
+        return {
+          id: 'fallback' + i, title: m.title, group: m.group, icon: m.icon, color: m.color,
+          meta: m.meta, desc: m.desc, url: m.url, visibleLevels: [], isFeatured: true,
+          canEdit: false
+        };
+      });
+      _mediaState.fallback = true;
+      _mediaRenderFilters();
+      _mediaRender();
+    })
+    .getMediaCards();
+}
+
+function _mediaToggleTrash() {
+  _mediaState.trash = !_mediaState.trash;
+  var btn = document.getElementById('mediaTrashToggle');
+  if (btn) btn.classList.toggle('active', _mediaState.trash);
+  if (_mediaState.trash) _mediaLoadTrash(); else _mediaLoad();
+}
+
+function _mediaLoadTrash() {
+  google.script.run
+    .withSuccessHandler(function(cards) {
+      _mediaState.cards = cards || [];
+      _mediaState.fallback = false;
+      _mediaRenderFilters();
+      _mediaRender();
+    })
+    .withFailureHandler(function(err) { showAlert('โหลดถังขยะไม่สำเร็จ: ' + (err.message || err)); })
+    .getDeletedMediaCards();
+}
+
+function _mediaRenderFilters() {
+  var box = document.getElementById('mediaFilterChips');
+  if (!box) return;
+  box.innerHTML = '';
+
+  var groups = [];
+  _mediaState.cards.forEach(function(c) {
+    if (c.group && groups.indexOf(c.group) === -1) groups.push(c.group);
+  });
+  if (groups.length < 2) return; // ชิปตัวเดียวไม่ช่วยอะไร
+
+  [''].concat(groups).forEach(function(g) {
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'pssms-chip border-0 me-1 mb-1' +
+      (_mediaState.group === g ? ' pssms-chip-active' : '');
+    chip.style.cursor = 'pointer';
+    chip.textContent = g || 'ทั้งหมด';
+    chip.addEventListener('click', function() {
+      _mediaState.group = g;
+      _mediaRenderFilters();
+      _mediaRender();
+    });
+    box.appendChild(chip);
+  });
+}
+
+function _mediaMatches(c) {
+  if (_mediaState.group && c.group !== _mediaState.group) return false;
+  var q = String(_mediaState.search || '').trim().toLowerCase();
+  if (!q) return true;
+  return [c.title, c.desc, c.group, c.meta].join(' ').toLowerCase().indexOf(q) !== -1;
+}
+
+// สร้างด้วย createElement ทั้งหมด — การ์ดพวกนี้มีข้อความที่ครูคนอื่นกรอก
+// ต่อ HTML string ตรงนี้เมื่อไหร่คือเปิดช่อง stored XSS ใส่ทุกคนที่เปิดหน้านี้
+function _mediaRender() {
+  var grid = document.getElementById('mediaSubjectGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  var warn = document.getElementById('mediaFallbackWarn');
+  if (warn) warn.classList.toggle('d-none', !_mediaState.fallback);
+
+  var list = _mediaState.cards.filter(_mediaMatches);
+  if (!list.length) {
+    var empty = document.createElement('div');
+    empty.className = 'col-12';
+    var inner = document.createElement('div');
+    inner.className = 'pssms-empty';
+    inner.textContent = _mediaState.trash ? 'ถังขยะว่าง'
+      : (_mediaState.search || _mediaState.group) ? 'ไม่พบสื่อที่ค้นหา' : 'ยังไม่มีสื่อการสอน';
+    empty.appendChild(inner);
+    grid.appendChild(empty);
+    return;
+  }
+
+  list.forEach(function(c) { grid.appendChild(_mediaCardEl(c)); });
+}
+
+function _mediaCardEl(c) {
+  var col = document.createElement('div');
+  col.className = 'col-md-6 col-lg-4';
+
+  var card = document.createElement('div');
+  card.className = 'pssms-card h-100 d-flex flex-column';
+  if (_mediaState.trash) card.style.opacity = '.6';
+
+  var head = document.createElement('div');
+  head.className = 'd-flex align-items-start gap-3 mb-2';
+
+  var circle = document.createElement('div');
+  circle.className = 'pssms-icon-circle d-flex align-items-center justify-content-center flex-shrink-0';
+  circle.style.background = c.color || '#00897b';
+  circle.style.color = '#fff';
+  var ic = document.createElement('i');
+  ic.className = 'fas ' + (c.icon || 'fa-book-open-reader');
+  circle.appendChild(ic);
+  head.appendChild(circle);
+
+  var titleBox = document.createElement('div');
+  titleBox.className = 'flex-grow-1 min-width-0';
+  var t = document.createElement('div');
+  t.className = 'fw-bold text-truncate';
+  t.textContent = c.title || '';
+  var g = document.createElement('div');
+  g.className = 'small text-truncate';
+  g.style.color = 'var(--p-text-muted)';
+  g.textContent = c.group || '';
+  titleBox.appendChild(t);
+  titleBox.appendChild(g);
+  head.appendChild(titleBox);
+  card.appendChild(head);
+
+  var chips = document.createElement('div');
+  chips.className = 'mb-2 d-flex flex-wrap gap-1';
+  if (c.meta) {
+    var meta = document.createElement('span');
+    meta.className = 'pssms-chip';
+    meta.textContent = c.meta;
+    chips.appendChild(meta);
+  }
+  // ครู/Admin ต้องเห็นว่าการ์ดใบนี้ใครเห็นบ้าง ไม่งั้นครูจะงงว่าทำไมเด็กหาไม่เจอ
+  if (_mediaIsStaff() && !_mediaState.fallback) {
+    var vis = document.createElement('span');
+    vis.className = 'pssms-chip';
+    var levels = c.visibleLevels || [];
+    if (!levels.length) {
+      vis.textContent = 'ครูเท่านั้น';
+      vis.style.color = '#92400e';
+      vis.style.background = '#fffbeb';
+    } else if (levels.length === 6) {
+      vis.textContent = 'ทุกระดับชั้น';
+    } else {
+      vis.textContent = levels.join(' ');
+    }
+    chips.appendChild(vis);
+  }
+  if (chips.children.length) card.appendChild(chips);
+
+  var desc = document.createElement('div');
+  desc.className = 'small mb-3 flex-grow-1';
+  desc.style.color = 'var(--p-text-muted)';
+  desc.textContent = c.desc || '';
+  card.appendChild(desc);
+
+  var foot = document.createElement('div');
+  foot.className = 'd-flex align-items-center justify-content-between gap-2';
+
+  if (_mediaState.trash) {
+    var restore = document.createElement('button');
+    restore.type = 'button';
+    restore.className = 'btn btn-sm btn-outline-secondary';
+    restore.innerHTML = '<i class="fas fa-rotate-left me-1"></i>กู้คืน';
+    restore.addEventListener('click', function() { restoreMediaCardById(c.id); });
+    foot.appendChild(restore);
+  } else {
+    var open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'btn btn-sm btn-link p-0 text-decoration-none';
+    open.style.color = 'var(--p-accent)';
+    open.innerHTML = 'เปิดสื่อการสอน <i class="fas fa-arrow-up-right-from-square ms-1"></i>';
+    open.addEventListener('click', function() { openTeachingMedia(c.url); });
+    foot.appendChild(open);
+
+    if (c.canEdit) {
+      var actions = document.createElement('div');
+      actions.className = 'd-flex gap-1';
+      var edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-sm btn-outline-secondary';
+      edit.title = 'แก้ไข';
+      edit.innerHTML = '<i class="fas fa-pen"></i>';
+      edit.addEventListener('click', function() { openMediaCardForm(c.id); });
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-sm btn-outline-danger';
+      del.title = 'ลบ';
+      del.innerHTML = '<i class="fas fa-trash"></i>';
+      del.addEventListener('click', function() { deleteMediaCardPrompt(c); });
+      actions.appendChild(edit);
+      actions.appendChild(del);
+      foot.appendChild(actions);
+    }
+  }
+  card.appendChild(foot);
+
+  col.appendChild(card);
+  return col;
+}
+
+function openTeachingMedia(url) {
+  if (!url) return;
+  window.open(url, '_blank', 'noopener');
+}
+
+// ---------- ฟอร์มเพิ่ม/แก้การ์ด ----------
+
+function openMediaCardForm(id) {
+  var opts = _mediaState.options;
+  if (!opts) { _mediaLoadOptions(function() { openMediaCardForm(id); }); return; }
+
+  var card = null;
+  if (id != null) {
+    _mediaState.cards.forEach(function(c) { if (c.id === id) card = c; });
+    if (!card) { showAlert('ไม่พบการ์ดนี้'); return; }
+  }
+
+  document.getElementById('mcId').value = card ? card.id : '';
+  document.getElementById('mcModalTitle').textContent = card ? 'แก้ไขการ์ดสื่อ' : 'เพิ่มการ์ดสื่อ';
+  document.getElementById('mcTitle').value = card ? card.title : '';
+  document.getElementById('mcUrl').value = card ? card.url : '';
+  document.getElementById('mcMeta').value = card ? card.meta : '';
+  document.getElementById('mcDesc').value = card ? card.desc : '';
+
+  var sel = document.getElementById('mcGroup');
+  sel.innerHTML = '<option value="">— ไม่ระบุกลุ่มสาระ —</option>';
+  opts.groups.forEach(function(g) {
+    var o = document.createElement('option');
+    o.value = g; o.textContent = g;
+    sel.appendChild(o);
+  });
+  sel.value = card ? card.group : '';
+  sel.onchange = function() { _mediaApplyGroupDefaults(this.value); };
+
+  _mediaBuildIconGrid(opts.icons, card ? card.icon : 'fa-book-open-reader');
+  _mediaBuildColorGrid(opts.colors, card ? card.color : '#00897b');
+  _mediaBuildLevels(opts.levels, card ? card.visibleLevels : []);
+
+  var featWrap = document.getElementById('mcFeaturedWrap');
+  featWrap.classList.toggle('d-none', !_mediaIsAdmin());
+  document.getElementById('mcFeatured').checked = !!(card && card.isFeatured);
+
+  if (!card) _mediaApplyGroupDefaults('');
+
+  var el = document.getElementById('mediaCardModal');
+  _mediaState.modal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+  _mediaState.modal.show();
+}
+
+function _mediaApplyGroupDefaults(group) {
+  var d = _mediaState.options && _mediaState.options.groupDefaults[group];
+  if (!d) return;
+  _mediaSelectSwatch('mcIconGrid', d.icon);
+  _mediaSelectSwatch('mcColorGrid', d.color);
+}
+
+function _mediaSelectSwatch(gridId, value) {
+  var grid = document.getElementById(gridId);
+  if (!grid) return;
+  grid.dataset.value = value;
+  Array.prototype.forEach.call(grid.children, function(b) {
+    b.classList.toggle('mc-swatch-active', b.dataset.value === value);
+  });
+}
+
+function _mediaBuildIconGrid(icons, current) {
+  var grid = document.getElementById('mcIconGrid');
+  grid.innerHTML = '';
+  icons.forEach(function(name) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-sm btn-outline-secondary mc-swatch';
+    b.dataset.value = name;
+    b.innerHTML = '<i class="fas ' + name + '"></i>';
+    b.addEventListener('click', function() { _mediaSelectSwatch('mcIconGrid', name); });
+    grid.appendChild(b);
+  });
+  _mediaSelectSwatch('mcIconGrid', current);
+}
+
+function _mediaBuildColorGrid(colors, current) {
+  var grid = document.getElementById('mcColorGrid');
+  grid.innerHTML = '';
+  colors.forEach(function(hex) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-sm mc-swatch';
+    b.dataset.value = hex;
+    b.style.background = hex;
+    b.style.width = '32px';
+    b.style.height = '32px';
+    b.addEventListener('click', function() { _mediaSelectSwatch('mcColorGrid', hex); });
+    grid.appendChild(b);
+  });
+  _mediaSelectSwatch('mcColorGrid', current);
+}
+
+function _mediaBuildLevels(levels, picked) {
+  var box = document.getElementById('mcLevels');
+  box.innerHTML = '';
+  (levels || []).forEach(function(lv) {
+    var id = 'mcLevel_' + lv.replace('.', '');
+    var wrap = document.createElement('div');
+    wrap.className = 'form-check form-check-inline';
+    var input = document.createElement('input');
+    input.className = 'form-check-input';
+    input.type = 'checkbox';
+    input.id = id;
+    input.value = lv;
+    input.checked = (picked || []).indexOf(lv) !== -1;
+    var label = document.createElement('label');
+    label.className = 'form-check-label';
+    label.htmlFor = id;
+    label.textContent = lv;
+    wrap.appendChild(input);
+    wrap.appendChild(label);
+    box.appendChild(wrap);
+  });
+}
+
+function saveMediaCardForm() {
+  var levels = [];
+  Array.prototype.forEach.call(
+    document.querySelectorAll('#mcLevels input:checked'),
+    function(i) { levels.push(i.value); }
+  );
+
+  var payload = {
+    id: document.getElementById('mcId').value || null,
+    title: document.getElementById('mcTitle').value,
+    group: document.getElementById('mcGroup').value,
+    url: document.getElementById('mcUrl').value,
+    meta: document.getElementById('mcMeta').value,
+    desc: document.getElementById('mcDesc').value,
+    icon: document.getElementById('mcIconGrid').dataset.value,
+    color: document.getElementById('mcColorGrid').dataset.value,
+    visibleLevels: levels,
+    isFeatured: document.getElementById('mcFeatured').checked
+  };
+
+  var send = function() {
+    var btn = document.getElementById('mcSaveBtn');
+    if (btn) btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (btn) btn.disabled = false;
+        if (_mediaState.modal) _mediaState.modal.hide();
+        Swal.fire({ icon: 'success', title: res.message, timer: 1400, showConfirmButton: false });
+        _mediaLoad();
+      })
+      .withFailureHandler(function(err) {
+        if (btn) btn.disabled = false;
+        Swal.fire('บันทึกไม่สำเร็จ', err.message || String(err), 'error');
+      })
+      .saveMediaCard(payload);
+  };
+
+  // ไม่เลือกชั้นเลย = นักเรียนไม่เห็น ซึ่งเป็นค่า default โดยตั้งใจ แต่ต้องบอกให้ครูรู้ตัว
+  if (!levels.length) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'นักเรียนจะไม่เห็นการ์ดนี้',
+      text: 'ยังไม่ได้เลือกระดับชั้น การ์ดนี้จะเห็นได้เฉพาะครูและผู้ดูแลระบบ',
+      showCancelButton: true,
+      confirmButtonText: 'บันทึกแบบนี้',
+      cancelButtonText: 'กลับไปเลือกชั้น'
+    }).then(function(r) { if (r.isConfirmed) send(); });
+    return;
+  }
+  send();
+}
+
+function deleteMediaCardPrompt(card) {
+  Swal.fire({
+    icon: 'warning',
+    title: 'ลบการ์ดนี้?',
+    text: card.title,
+    showCancelButton: true,
+    confirmButtonText: 'ลบ',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#c62828'
+  }).then(function(r) {
+    if (!r.isConfirmed) return;
+    google.script.run
+      .withSuccessHandler(function(res) {
+        Swal.fire({ icon: 'success', title: res.message, timer: 1600, showConfirmButton: false });
+        _mediaLoad();
+      })
+      .withFailureHandler(function(err) { Swal.fire('ลบไม่สำเร็จ', err.message || String(err), 'error'); })
+      .deleteMediaCard(card.id);
+  });
+}
+
+function restoreMediaCardById(id) {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      Swal.fire({ icon: 'success', title: res.message, timer: 1400, showConfirmButton: false });
+      _mediaLoadTrash();
+    })
+    .withFailureHandler(function(err) { Swal.fire('กู้คืนไม่สำเร็จ', err.message || String(err), 'error'); })
+    .restoreMediaCard(id);
 }
 </script>

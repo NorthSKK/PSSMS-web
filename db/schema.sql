@@ -391,3 +391,32 @@ CREATE TABLE IF NOT EXISTS maintenance (
   status      TEXT DEFAULT 'รอดำเนินการ',
   technician  TEXT
 );
+
+-- ============================================================
+-- TEACHING MEDIA CARDS
+-- ============================================================
+
+-- การ์ดสื่อการสอนบนหน้า Page_Teaching_Media — ครูเพิ่ม/แก้/ลบเองได้
+-- created_by ไม่มี FK ไป users โดยตั้งใจ: การ์ดต้องอยู่รอดเมื่อครูย้ายออกจากระบบ
+-- (เหมือน attendance.teacher_id / sarabun.requester)
+-- visible_levels ว่าง = ครูและ Admin เท่านั้นที่เห็น — เป็นค่า default เจตนา
+CREATE TABLE IF NOT EXISTS media_cards (
+  id             SERIAL PRIMARY KEY,
+  title          TEXT NOT NULL,
+  subject_group  TEXT NOT NULL DEFAULT '',
+  icon           TEXT NOT NULL DEFAULT 'fa-book-open-reader',
+  color          TEXT NOT NULL DEFAULT '#00897b',
+  meta           TEXT NOT NULL DEFAULT '',
+  description    TEXT NOT NULL DEFAULT '',
+  url            TEXT NOT NULL DEFAULT '',
+  card_type      TEXT NOT NULL DEFAULT 'link' CHECK (card_type IN ('link', 'pdf')),
+  visible_levels TEXT[] NOT NULL DEFAULT '{}',
+  is_featured    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_by     TEXT NOT NULL DEFAULT '',
+  created_at     TIMESTAMPTZ DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ DEFAULT NOW(),
+  deleted_at     TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_cards_live
+  ON media_cards (is_featured DESC, created_at DESC) WHERE deleted_at IS NULL;

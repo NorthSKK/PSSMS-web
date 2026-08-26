@@ -39,6 +39,8 @@ const ADMIN_ONLY = new Set([
   'deleteSavingsTransaction', 'importSavingsCSV',
   // ครูสร้าง/แก้สารบรรณได้ แต่ลบเป็นของ Admin — sarabun ไม่มีคอลัมน์เจ้าของให้ตรวจสิทธิ์รายแถว
   'deleteSarabun',
+  // ถังขยะสื่อการสอน — ครูลบการ์ดตัวเองได้ แต่การกู้คืนเป็นของ Admin
+  'restoreMediaCard', 'getDeletedMediaCards',
 ]);
 
 const TEACHER_OR_ADMIN = new Set([
@@ -50,6 +52,7 @@ const TEACHER_OR_ADMIN = new Set([
   'saveSubstituteAssignment', 'confirmSubstitute', 'saveBudget', 'saveSarabun',
   'requestSarabunNumber', 'updateTaskStatus', 'uploadSarabunFile',
   'saveSavingsTransaction',
+  'saveMediaCard', 'deleteMediaCard',
 ]);
 
 const leaveBundle = require('../functions/getLeaveBundle');
@@ -68,6 +71,7 @@ const sarabun = require('../functions/sarabun');
 const budget = require('../functions/budget');
 const missing = require('../functions/missing');
 const pp5 = require('../functions/generatePP5Template');
+const mediaCards = require('../functions/mediaCards');
 const savings = require('../functions/savings');
 
 const handlers = {
@@ -262,6 +266,14 @@ const handlers = {
   deleteSavingsTransaction:        (args) => savings.deleteSavingsTransaction(args),
   importSavingsCSV:                (args) => savings.importSavingsCSV(args),
   getClassListForSavings:          () => savings.getClassListForSavings(),
+
+  // สื่อการสอน
+  getMediaCards:                   (args, user) => mediaCards.getMediaCards(args, user),
+  getMediaCardOptions:             () => mediaCards.getMediaCardOptions(),
+  saveMediaCard:                   (args, user) => mediaCards.saveMediaCard(args, user),
+  deleteMediaCard:                 (args, user) => mediaCards.deleteMediaCard(args, user),
+  restoreMediaCard:                (args, user) => mediaCards.restoreMediaCard(args, user),
+  getDeletedMediaCards:            (args, user) => mediaCards.getDeletedMediaCards(args, user),
 
   // Todo (in-memory)
   getTodoList:                     require('../functions/getTodoList'),
