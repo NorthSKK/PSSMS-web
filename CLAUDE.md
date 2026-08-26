@@ -797,8 +797,25 @@ function section(fn) {
   = deploy production ทันที ไม่ควรเอาเนื้อหาเรียนกับ PDF หลายสิบ MB มาปน
 - ไอคอนในการ์ดใช้ `background: <สีวิชา>; color:#fff` ไม่ใช่สีอ่อน + ตัวอักษรสีเดียวกัน
   เพราะบน dark mode พื้นอ่อน 13% กับตัวอักษรสีเดิม contrast ต่ำจนอ่านไม่ออก
-- **เฟส 2 (ยังไม่ทำ)**: อัปโหลด PDF ขึ้น Google Drive — คอลัมน์ `card_type` รองรับ
-  ค่า `'pdf'` ไว้แล้ว ตอนนี้เขียนเป็น `'link'` อย่างเดียว
+**การ์ดแบบ PDF (`card_type = 'pdf'`)**:
+
+- ไฟล์อยู่ใน Google Drive ของบัญชี OAuth บัญชีเดียว (`lib/drive.js`) ไม่ใช่ service account
+  เพราะไม่มี Workspace → ไม่มี Shared Drive → service account ไม่มีโควตา อัปโหลดไม่ได้
+- อัปโหลดผ่าน `POST /api/media/upload` (`routes/media.js`) ไม่ใช่ `/api/gas`
+  **เส้นแบ่งคือ binary ไป REST ที่เหลือไป `/api/gas`** — ยัด base64 เข้า shim จะต้องดัน
+  `express.json` limit ที่เป็น global ขึ้นหลายสิบ MB ซึ่งเปิดช่อง DoS ให้ทุก endpoint
+- ด่านตรวจ: 25MB, MIME `application/pdf`, **magic bytes `%PDF-`** (ไม่เชื่อ MIME จาก client),
+  rate limit 20 ไฟล์/ชม./คน — ตรวจ metadata ให้ครบ *ก่อน* อัปขึ้น Drive เสมอ ไม่งั้นได้ไฟล์กำพร้า
+- ไฟล์เปิดเป็น **"ทุกคนที่มีลิงก์"** — `visible_levels` ซ่อนได้แค่การ์ดในหน้า ไม่ใช่ access control
+  ของตัวไฟล์ (แลกกับ bandwidth ของ Railway ตอนตัดสินใจ) ฟอร์มจึงเตือนเรื่องลิขสิทธิ์
+- `url` ของการ์ด PDF **แก้จากฟอร์มไม่ได้** — เปลี่ยนไฟล์ = ลบการ์ดแล้วอัปใหม่
+- ลบการ์ด → ย้ายไฟล์ลงถังขยะ Drive (Google เก็บ 30 วัน คืนพื้นที่เอง) กู้คืน → untrash
+  ถ้าขั้นตอน Drive ล้ม **ข้อความต้องบอกตรง ๆ ห้ามรายงานว่าสำเร็จ**
+- ⚠️ **OAuth app ต้อง publish เป็น "In production"** ไม่งั้น refresh token หมดอายุใน 7 วัน
+  วิธีตั้งทั้งหมดอยู่ใน `WEB_DEV.md` หัวข้อ "เชื่อมต่อ Google Drive"
+- Admin เห็นแถบสถานะ + โควตาบนหน้าสื่อการสอน (`getMediaStorageStatus`)
+- ถ้ายังไม่เชื่อม Drive: `getMediaCardOptions().uploadEnabled = false` ฟอร์มปิดตัวเลือกอัปโหลด
+  และ endpoint ตอบ 503 — **การ์ดแบบลิงก์ต้องใช้ได้ตามปกติเสมอ**
 
 ### ป้ายบนตาราง "จัดการเรียนรู้วันนี้" (dashboard ครู)
 

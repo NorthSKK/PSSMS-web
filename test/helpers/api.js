@@ -96,4 +96,9 @@ async function denied(fnName, args = [], as = null) {
   return res.__error;
 }
 
-module.exports = { call, ok, denied, stop, TOKENS, token };
+/** base URL ของ server ที่ harness boot ไว้ — สำหรับเทสต์ที่ยิง REST ตรง (เช่น multipart) */
+async function baseURL() {
+  return start();
+}
+
+module.exports = { call, ok, denied, stop, TOKENS, token, baseURL };

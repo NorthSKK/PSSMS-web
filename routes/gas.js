@@ -40,7 +40,7 @@ const ADMIN_ONLY = new Set([
   // ครูสร้าง/แก้สารบรรณได้ แต่ลบเป็นของ Admin — sarabun ไม่มีคอลัมน์เจ้าของให้ตรวจสิทธิ์รายแถว
   'deleteSarabun',
   // ถังขยะสื่อการสอน — ครูลบการ์ดตัวเองได้ แต่การกู้คืนเป็นของ Admin
-  'restoreMediaCard', 'getDeletedMediaCards',
+  'restoreMediaCard', 'getDeletedMediaCards', 'getMediaStorageStatus',
 ]);
 
 const TEACHER_OR_ADMIN = new Set([
@@ -274,6 +274,7 @@ const handlers = {
   deleteMediaCard:                 (args, user) => mediaCards.deleteMediaCard(args, user),
   restoreMediaCard:                (args, user) => mediaCards.restoreMediaCard(args, user),
   getDeletedMediaCards:            (args, user) => mediaCards.getDeletedMediaCards(args, user),
+  getMediaStorageStatus:           () => mediaCards.getMediaStorageStatus(),
 
   // Todo (in-memory)
   getTodoList:                     require('../functions/getTodoList'),

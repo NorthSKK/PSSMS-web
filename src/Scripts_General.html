@@ -1908,6 +1908,7 @@ function initTeachingMediaPage() {
 
   _mediaLoadOptions();
   _mediaLoad();
+  if (_mediaIsAdmin()) _mediaLoadStorageStatus();
 }
 
 // ตัวเลือกของฟอร์มมาจาก server เพื่อให้ allowlist ตรงกับที่ใช้ validate เสมอ
@@ -1920,6 +1921,35 @@ function _mediaLoadOptions(cb) {
       if (cb) showAlert('โหลดตัวเลือกของฟอร์มไม่สำเร็จ: ' + (err.message || err));
     })
     .getMediaCardOptions();
+}
+
+// สถานะ Google Drive — Admin ต้องเห็นว่ายังเชื่อมต่ออยู่ไหมและเหลือพื้นที่เท่าไหร่
+// ก่อนที่ครูจะมาแจ้งว่าอัปโหลดไม่ได้
+function _mediaLoadStorageStatus() {
+  var box = document.getElementById('mediaStorageStatus');
+  if (!box) return;
+  google.script.run
+    .withSuccessHandler(function(st) {
+      box.classList.remove('d-none');
+      box.className = 'mb-3 p-2 rounded-2 small';
+      if (!st || !st.connected) {
+        box.style.cssText = 'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;';
+        box.textContent = 'Google Drive: ยังไม่เชื่อมต่อ — อัปโหลด PDF ไม่ได้ (การ์ดแบบลิงก์ยังใช้ได้) · '
+          + (st && st.reason ? st.reason : '');
+        return;
+      }
+      var gb = function(b) { return (Number(b || 0) / (1024*1024*1024)).toFixed(2); };
+      var nearFull = st.percent != null && st.percent >= 85;
+      box.style.cssText = nearFull
+        ? 'background:#fffbeb;color:#92400e;border:1px solid #fde68a;'
+        : 'background:var(--p-accent-soft);color:var(--p-accent);';
+      box.textContent = 'Google Drive: เชื่อมต่ออยู่' + (st.email ? ' (' + st.email + ')' : '')
+        + ' · ใช้ไป ' + gb(st.usage) + ' GB'
+        + (st.limit ? ' จาก ' + gb(st.limit) + ' GB (' + st.percent + '%)' : '')
+        + (nearFull ? ' — ใกล้เต็ม ควรลบไฟล์เก่า' : '');
+    })
+    .withFailureHandler(function() { box.classList.add('d-none'); })
+    .getMediaStorageStatus();
 }
 
 function _mediaLoad() {
@@ -2108,7 +2138,8 @@ function _mediaCardEl(c) {
     open.type = 'button';
     open.className = 'btn btn-sm btn-link p-0 text-decoration-none';
     open.style.color = 'var(--p-accent)';
-    open.innerHTML = 'เปิดสื่อการสอน <i class="fas fa-arrow-up-right-from-square ms-1"></i>';
+    open.innerHTML = (c.cardType === 'pdf' ? 'เปิดไฟล์ PDF' : 'เปิดสื่อการสอน')
+      + ' <i class="fas fa-arrow-up-right-from-square ms-1"></i>';
     open.addEventListener('click', function() { openTeachingMedia(c.url); });
     foot.appendChild(open);
 
@@ -2156,6 +2187,7 @@ function openMediaCardForm(id) {
   }
 
   document.getElementById('mcId').value = card ? card.id : '';
+  _mediaSetupType(card, opts);
   document.getElementById('mcModalTitle').textContent = card ? 'แก้ไขการ์ดสื่อ' : 'เพิ่มการ์ดสื่อ';
   document.getElementById('mcTitle').value = card ? card.title : '';
   document.getElementById('mcUrl').value = card ? card.url : '';
@@ -2185,6 +2217,43 @@ function openMediaCardForm(id) {
   var el = document.getElementById('mediaCardModal');
   _mediaState.modal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
   _mediaState.modal.show();
+}
+
+// ชนิดสื่อเลือกได้เฉพาะตอนสร้างใหม่ — การ์ดที่มีไฟล์อยู่แล้วเปลี่ยนไฟล์ไม่ได้
+// (จะเปลี่ยนต้องลบแล้วอัปใหม่ ไม่งั้นต้องจัดการไฟล์เก่าที่ค้างบน Drive)
+function _mediaSetupType(card, opts) {
+  var isPdf = !!(card && card.cardType === 'pdf');
+  var canUpload = !!(opts && opts.uploadEnabled);
+
+  document.getElementById('mcTypeWrap').classList.toggle('d-none', !!card);
+  document.getElementById('mcTypePdf').disabled = !canUpload;
+  document.getElementById('mcUploadDisabledNote').classList.toggle('d-none', canUpload);
+  document.getElementById('mcTypeLink').checked = !isPdf;
+  document.getElementById('mcTypePdf').checked = isPdf;
+
+  var fileInput = document.getElementById('mcFile');
+  fileInput.value = '';
+  document.getElementById('mcFileHint').textContent =
+    'ไฟล์ PDF ขนาดไม่เกิน ' + ((opts && opts.maxUploadMB) || 25) + ' MB';
+
+  document.getElementById('mcFileCurrentWrap').classList.toggle('d-none', !isPdf);
+  if (isPdf) {
+    var size = card.fileSize ? ' · ' + (card.fileSize / (1024*1024)).toFixed(1) + ' MB' : '';
+    document.getElementById('mcFileCurrent').textContent = (card.fileName || 'ไฟล์ PDF') + size;
+  }
+
+  ['mcTypeLink', 'mcTypePdf'].forEach(function(id) {
+    document.getElementById(id).onchange = _mediaSyncTypeFields;
+  });
+  _mediaSyncTypeFields();
+}
+
+function _mediaSyncTypeFields() {
+  var isPdf = document.getElementById('mcTypePdf').checked;
+  var editingExisting = !!document.getElementById('mcId').value;
+  document.getElementById('mcUrlWrap').classList.toggle('d-none', isPdf);
+  // แก้การ์ด PDF เดิม = ไม่ต้องเลือกไฟล์ใหม่ ช่องอัปโหลดจึงโผล่เฉพาะตอนสร้างใหม่
+  document.getElementById('mcFileWrap').classList.toggle('d-none', !isPdf || editingExisting);
 }
 
 function _mediaApplyGroupDefaults(group) {
@@ -2278,20 +2347,28 @@ function saveMediaCardForm() {
     isFeatured: document.getElementById('mcFeatured').checked
   };
 
+  var isNewPdf = !payload.id && document.getElementById('mcTypePdf').checked;
+  var file = document.getElementById('mcFile').files[0];
+  if (isNewPdf && !file) { showAlert('เลือกไฟล์ PDF ก่อน'); return; }
+
+  var done = function(res) {
+    if (_mediaState.modal) _mediaState.modal.hide();
+    Swal.fire({ icon: 'success', title: res.message, timer: 1400, showConfirmButton: false });
+    _mediaLoad();
+    if (_mediaIsAdmin()) _mediaLoadStorageStatus();
+  };
+  var failed = function(msg) { Swal.fire('บันทึกไม่สำเร็จ', msg, 'error'); };
+
   var send = function() {
     var btn = document.getElementById('mcSaveBtn');
     if (btn) btn.disabled = true;
+    var release = function() { if (btn) btn.disabled = false; };
+
+    if (isNewPdf) { _mediaUpload(payload, file, done, failed, release); return; }
+
     google.script.run
-      .withSuccessHandler(function(res) {
-        if (btn) btn.disabled = false;
-        if (_mediaState.modal) _mediaState.modal.hide();
-        Swal.fire({ icon: 'success', title: res.message, timer: 1400, showConfirmButton: false });
-        _mediaLoad();
-      })
-      .withFailureHandler(function(err) {
-        if (btn) btn.disabled = false;
-        Swal.fire('บันทึกไม่สำเร็จ', err.message || String(err), 'error');
-      })
+      .withSuccessHandler(function(res) { release(); done(res); })
+      .withFailureHandler(function(err) { release(); failed(err.message || String(err)); })
       .saveMediaCard(payload);
   };
 
@@ -2308,6 +2385,38 @@ function saveMediaCardForm() {
     return;
   }
   send();
+}
+
+// อัปโหลดไม่ผ่าน google.script.run เพราะ shim ส่งได้แต่ JSON — ยิง REST endpoint ตรง
+// (ดูเหตุผลของเส้นแบ่งนี้ใน routes/media.js)
+function _mediaUpload(payload, file, done, failed, release) {
+  var fd = new FormData();
+  fd.append('payload', JSON.stringify(payload));
+  fd.append('file', file);
+
+  Swal.fire({
+    title: 'กำลังอัปโหลด...',
+    html: file.name + ' (' + (file.size / (1024*1024)).toFixed(1) + ' MB)',
+    allowOutsideClick: false,
+    didOpen: function() { Swal.showLoading(); }
+  });
+
+  fetch('/api/media/upload', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + (localStorage.getItem('pssms_jwt') || '') },
+    body: fd
+  })
+    .then(function(r) { return r.json().catch(function() { return { __error: 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ' }; }); })
+    .then(function(res) {
+      release();
+      // ห้ามรายงานว่าสำเร็จเมื่อไฟล์ไม่ได้ขึ้นจริง — ต้องขึ้น error ให้ครูเห็น
+      if (res.__error) { failed(res.__error); return; }
+      done(res.__result);
+    })
+    .catch(function(err) {
+      release();
+      failed('อัปโหลดไม่สำเร็จ: ' + (err.message || err));
+    });
 }
 
 function deleteMediaCardPrompt(card) {

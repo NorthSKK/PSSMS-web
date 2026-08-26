@@ -203,6 +203,18 @@ async function main() {
     );
   }
 
+  // การ์ดแบบ PDF — drive_file_id ปลอม เทสต์ไม่ได้ยิง Google จริง ใช้ตรวจว่า
+  // url ของการ์ด PDF แก้จากฟอร์มไม่ได้ และการลบรายงานตรง ๆ เมื่อลบไฟล์บน Drive ไม่สำเร็จ
+  await query(
+    `INSERT INTO media_cards(title,subject_group,icon,color,meta,description,url,card_type,
+                             visible_levels,is_featured,created_by,drive_file_id,file_name,file_size)
+     VALUES($1,$2,$3,$4,$5,$6,$7,'pdf',$8,false,$9,$10,$11,$12)`,
+    ['ใบความรู้หน่วยที่ 2 (PDF)', 'สุขศึกษาและพลศึกษา', 'fa-file-pdf', '#00897b',
+     'PDF · 1.2 MB', 'ใบความรู้ประกอบการสอน',
+     'https://drive.google.com/file/d/dev-fake-file-id/view', ['ม.2'], 'teacher2',
+     'dev-fake-file-id', 'ใบความรู้หน่วย2.pdf', 1258291]
+  );
+
   for (const sub of SUBJECTS) {
     for (const [day, period] of sub.slots) {
       await query(

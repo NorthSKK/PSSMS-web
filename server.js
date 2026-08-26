@@ -11,6 +11,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/assets', require('./routes/assets'));
+// multipart — ไม่ผ่าน express.json ข้างบน จึงไม่กระทบ limit ของ endpoint อื่น
+app.use('/api/media',  require('./routes/media'));
 app.use('/api/gas',    require('./routes/gas'));
 
 // SPA fallback — serves index.html for any unmatched path
