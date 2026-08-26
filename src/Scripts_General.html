@@ -2117,9 +2117,22 @@ function _mediaCardEl(c) {
     });
     foot.appendChild(open);
 
+    var actions = document.createElement('div');
+    actions.className = 'd-flex gap-1';
+
+    // แชร์เข้า Google Classroom ได้เฉพาะการ์ดแบบลิงก์
+    // การ์ด PDF ใช้ลิงก์แบบมีตั๋ว อายุ 10 นาทีและผูกกับคนขอ แชร์ไปก็เปิดไม่ได้
+    if (c.cardType !== 'pdf' && c.url && !_mediaState.trash) {
+      var share = document.createElement('button');
+      share.type = 'button';
+      share.className = 'btn btn-sm btn-outline-secondary';
+      share.title = 'แชร์ไป Google Classroom';
+      share.innerHTML = '<i class="fas fa-chalkboard-user"></i>';
+      share.addEventListener('click', function() { shareToClassroom(c.url); });
+      actions.appendChild(share);
+    }
+
     if (c.canEdit) {
-      var actions = document.createElement('div');
-      actions.className = 'd-flex gap-1';
       var edit = document.createElement('button');
       edit.type = 'button';
       edit.className = 'btn btn-sm btn-outline-secondary';
@@ -2134,13 +2147,29 @@ function _mediaCardEl(c) {
       del.addEventListener('click', function() { deleteMediaCardPrompt(c); });
       actions.appendChild(edit);
       actions.appendChild(del);
-      foot.appendChild(actions);
     }
+    if (actions.children.length) foot.appendChild(actions);
   }
   card.appendChild(foot);
 
   col.appendChild(card);
   return col;
+}
+
+/**
+ * เปิดหน้าแชร์ของ Google Classroom ให้ครูเลือกคลาสของตัวเอง
+ *
+ * ใช้ URL ตรง ๆ ไม่ต้องโหลด widget platform.js ของ Google (ไม่ต้องพึ่ง script ภายนอก
+ * ไม่ต้องใช้ Classroom API ไม่ต้อง OAuth ไม่ต้องผ่าน verification)
+ * ครูแค่ต้องล็อกอิน Google ในเบราว์เซอร์อยู่แล้ว
+ */
+function shareToClassroom(url) {
+  if (!url) return;
+  window.open(
+    'https://classroom.google.com/share?url=' + encodeURIComponent(url),
+    '_blank',
+    'noopener,width=560,height=680'
+  );
 }
 
 function openTeachingMedia(url) {

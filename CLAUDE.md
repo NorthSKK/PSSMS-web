@@ -787,6 +787,10 @@ function section(fn) {
 - ปักหมุด (`is_featured`) เป็นของ Admin เท่านั้น ครูตั้งเองไม่ได้แม้ในการ์ดตัวเอง
 - ครูแก้/ลบได้เฉพาะการ์ดที่ `created_by` เป็นตัวเอง · การกู้คืนจากถังขยะเป็น ADMIN_ONLY
 - ลบเป็น soft delete (`deleted_at`) ไม่ใช่ลบจริง
+- ปุ่ม "แชร์ไป Google Classroom" เปิด `https://classroom.google.com/share?url=...` ตรง ๆ
+  **ไม่ได้โหลด widget `platform.js` ของ Google** — ไม่ต้องพึ่ง script ภายนอก ไม่ใช้ Classroom API
+  ไม่ต้อง OAuth ไม่ต้อง verification · ขึ้นเฉพาะการ์ดแบบลิงก์ เพราะการ์ด PDF ใช้ลิงก์แบบมีตั๋ว
+  อายุ 10 นาทีและผูกกับคนขอ แชร์ไปแล้วเปิดไม่ได้ · ทุกคนที่เห็นการ์ดกดแชร์ได้ ไม่จำกัดเจ้าของ
 
 `MEDIA_SUBJECTS` ใน `Scripts_General.html` **ไม่ใช่แหล่งความจริงแล้ว** — เหลือหน้าที่เดียว
 คือรายการสำรองตอน `getMediaCards` ล้มเหลว (ขึ้นแถบเตือน `#mediaFallbackWarn` คู่กัน

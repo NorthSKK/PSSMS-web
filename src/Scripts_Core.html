@@ -238,9 +238,15 @@ function _silentRevalidate(credsB64) {
     const p = decoded.substring(sep + 1);
     google.script.run.withSuccessHandler(function(res) {
       if (res && res.status === 'success') {
-        // Refresh stored user data (catches role/name changes)
+        // Refresh stored user data (catches role/name/dept changes)
+        const before = JSON.parse(localStorage.getItem('pssms_user') || '{}');
         localStorage.setItem('pssms_user', JSON.stringify(res));
         localStorage.setItem('pssms_user_savedAt', String(Date.now()));
+        // เมนูกับหัวหน้าจอถูกเรนเดอร์ไปก่อนหน้านี้แล้วด้วยค่าเก่า — เรนเดอร์ใหม่เมื่อค่าเปลี่ยน
+        // ไม่งั้นนักเรียนที่เลื่อนชั้นจะเห็น "ชั้น" เก่าไปจนกว่าจะโหลดหน้าอีกรอบ
+        if (before.role !== res.role || before.dept !== res.dept || before.name !== res.name) {
+          renderApp(res);
+        }
       } else if (res && res.status !== 'success') {
         // Credentials no longer valid (password changed)
         _clearSavedSession();
@@ -516,7 +522,6 @@ function renderApp(user) {
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #00897b !important;" onclick="loadPage('Page_Teaching_Media')"><i class="fas fa-book-open-reader" style="color: #00897b;"></i> <span>สื่อการสอน</span></a></li>`;
   } else if (role === 'EXECUTIVE') {
     startPage = 'Page_Dashboard_Executive';
-    const dept = (user.dept || '').trim();
     menuHTML += `<li class="mb-3"><a href="javascript:void(0)" class="nav-link-custom active" onclick="loadPage('Page_Dashboard_Executive')"><i class="fas fa-chart-line me-2"></i>แดชบอร์ดผู้บริหาร</a></li>`;
     menuHTML += `<div class="menu-divider">ข้อมูลฝ่าย</div>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn academic" onclick="loadPage('Page_Academic_Report')"><i class="fas fa-graduation-cap"></i> <span>รายงานวิชาการ</span></a></li>`;
