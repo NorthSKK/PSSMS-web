@@ -203,17 +203,32 @@ async function main() {
     );
   }
 
-  // การ์ดแบบ PDF — drive_file_id ปลอม เทสต์ไม่ได้ยิง Google จริง ใช้ตรวจว่า
-  // url ของการ์ด PDF แก้จากฟอร์มไม่ได้ และการลบรายงานตรง ๆ เมื่อลบไฟล์บน Drive ไม่สำเร็จ
-  await query(
+  // การ์ดแบบ PDF พร้อมไฟล์จริงบนดิสก์ — ใช้ตรวจว่า url แก้จากฟอร์มไม่ได้,
+  // การเสิร์ฟไฟล์ตรวจตั๋วจริง และการลบย้ายไฟล์ลงถังขยะจริง
+  const store = require('../lib/fileStore');
+  await store.ensureReady();
+  // ล้างไฟล์ของ dev ทิ้งด้วย ไม่งั้นไฟล์จากรอบก่อนค้างอยู่ทั้งที่แถวในตารางถูกลบไปแล้ว
+  // (สถานะ "ที่เก็บไฟล์" ของ Admin จะรายงานจำนวนไฟล์เกินจริง)
+  const fsp = require('fs').promises;
+  const nodePath = require('path');
+  for (const dir of [store.ROOT, nodePath.join(store.ROOT, 'trash')]) {
+    for (const f of await fsp.readdir(dir).catch(() => [])) {
+      if (f.endsWith('.pdf')) await fsp.unlink(nodePath.join(dir, f)).catch(() => {});
+    }
+  }
+  const pdfBuf = Buffer.from('%PDF-1.4\n% ไฟล์ทดสอบของ seed-dev\n%%EOF\n');
+  const saved = await store.savePdf({ buffer: pdfBuf, filename: 'ใบความรู้หน่วย2.pdf' });
+  const { rows: pdfRows } = await query(
     `INSERT INTO media_cards(title,subject_group,icon,color,meta,description,url,card_type,
-                             visible_levels,is_featured,created_by,drive_file_id,file_name,file_size)
-     VALUES($1,$2,$3,$4,$5,$6,$7,'pdf',$8,false,$9,$10,$11,$12)`,
+                             visible_levels,is_featured,created_by,file_key,file_name,file_size)
+     VALUES($1,$2,$3,$4,$5,$6,'','pdf',$7,false,$8,$9,$10,$11)
+     RETURNING id`,
     ['ใบความรู้หน่วยที่ 2 (PDF)', 'สุขศึกษาและพลศึกษา', 'fa-file-pdf', '#00897b',
      'PDF · 1.2 MB', 'ใบความรู้ประกอบการสอน',
-     'https://drive.google.com/file/d/dev-fake-file-id/view', ['ม.2'], 'teacher2',
-     'dev-fake-file-id', 'ใบความรู้หน่วย2.pdf', 1258291]
+     ['ม.2'], 'teacher2', saved.key, 'ใบความรู้หน่วย2.pdf', pdfBuf.length]
   );
+  await query(`UPDATE media_cards SET url=$1 WHERE id=$2`,
+    [`/api/media/file/${pdfRows[0].id}`, pdfRows[0].id]);
 
   for (const sub of SUBJECTS) {
     for (const [day, period] of sub.slots) {

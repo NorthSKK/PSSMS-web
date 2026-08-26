@@ -497,45 +497,32 @@ until curl -s https://pssms-web-production.up.railway.app/api/assets/script/Scri
 ⚠️ `.env.prod` มีแค่ `DATABASE_URL` ที่ตรงกับ production — **`JWT_SECRET` ไม่ตรง**
 กับที่ตั้งไว้บน Railway จึงใช้ mint token ยิง API production ไม่ได้
 
-### เชื่อมต่อ Google Drive (อัปโหลด PDF ในหน้าสื่อการสอน)
+### ที่เก็บไฟล์สื่อการสอน (อัปโหลด PDF)
 
-ไฟล์ PDF ที่ครูอัปโหลดไปอยู่ใน **Drive ส่วนตัวของบัญชี Google บัญชีเดียว** ไม่ใช่ service account
-เพราะโรงเรียนไม่มี Google Workspace จึงสร้าง Shared Drive ไม่ได้ และ service account
-ไม่มีโควตาของตัวเอง อัปโหลดลง My Drive ของใครไม่ได้เลย
+ไฟล์ PDF ที่ครูอัปโหลดเก็บบน **ดิสก์ของ Railway Volume** ไม่ใช่ Google Drive
 
-ผลที่ตามมาที่ต้องรู้: โควตา 15GB แชร์กับ Gmail และ Google Photos ของบัญชีนั้น
-และไฟล์ทั้งหมดเป็นของบัญชีนั้น ถ้าเจ้าของถอนสิทธิ์ สื่อทั้งโรงเรียนเปิดไม่ได้พร้อมกัน
+เคยทำเป็น Google Drive แล้วติดตาย: publish OAuth consent screen เป็น production
+ต้องยืนยันความเป็นเจ้าของโดเมนใน Authorized domains แต่โฮสต์คือ `*.up.railway.app`
+ซึ่งเป็นของ Railway ไม่ใช่ของโรงเรียน จึงเพิ่มไม่ได้ และถ้าค้างโหมด Testing ไว้
+refresh token จะหมดอายุทุก 7 วัน
 
-**ตั้งครั้งเดียว:**
+**ตั้งครั้งเดียวบน Railway:**
 
-1. [Google Cloud Console](https://console.cloud.google.com/) → สร้างโปรเจกต์ใหม่
-2. **APIs & Services → Library** → เปิดใช้ **Google Drive API**
-3. **OAuth consent screen** → User type **External** → กรอกชื่อแอปกับอีเมลติดต่อ
-   → เพิ่ม scope `.../auth/drive.file` → **กด PUBLISH APP ให้เป็น "In production"**
+1. หน้าโปรเจกต์ → service → **Variables** → เพิ่ม `MEDIA_STORAGE_DIR=/data/media`
+2. แท็บ **Volumes** → **New Volume** → mount path `/data`
+3. Redeploy
 
-   ⚠️ **ห้ามปล่อยไว้โหมด "Testing"** — refresh token จะหมดอายุใน 7 วันแล้วอัปโหลดพังเงียบ ๆ
-   `drive.file` เป็น scope ที่ Google จัดว่า non-sensitive จึง publish ได้เลยโดยไม่ต้องส่ง verification
+**ถ้าไม่ตั้ง `MEDIA_STORAGE_DIR`** ระบบยังอัปโหลดได้ แต่เขียนลง filesystem ชั่วคราวของ
+container → **ไฟล์หายทุกครั้งที่ deploy** หน้าสื่อการสอนจะขึ้นแถบแดงเตือน Admin ไว้ให้
 
-4. **Credentials → Create credentials → OAuth client ID** → Application type **Desktop app**
-   (ชนิดนี้ยอมรับ redirect `http://localhost` พอร์ตอะไรก็ได้ ไม่ต้องลงทะเบียนพอร์ต)
-5. ออก refresh token ในเครื่องตัวเอง:
+**เช็คสถานะ**: ล็อกอินเป็น Admin → หน้าสื่อการสอน มีแถบบอกจำนวนไฟล์ พื้นที่ที่ใช้
+พื้นที่ว่าง และจำนวนไฟล์ในถังขยะ
 
-   ```bash
-   GOOGLE_OAUTH_CLIENT_ID=xxx.apps.googleusercontent.com \
-   GOOGLE_OAUTH_CLIENT_SECRET=yyy \
-   node scripts/google-oauth-setup.js
-   ```
+**ไฟล์ไม่ได้เปิดสาธารณะ** — เสิร์ฟผ่าน `GET /api/media/file/:id?t=<ticket>` โดยตั๋วอายุ 10 นาที
+ออกให้เฉพาะคนที่มีสิทธิ์เห็นการ์ดใบนั้น (`getMediaFileTicket`)
 
-   สคริปต์จะพิมพ์ลิงก์ให้เปิดในเบราว์เซอร์ ล็อกอินด้วยบัญชีที่จะใช้เก็บไฟล์ แล้วพิมพ์ env
-   ทั้ง 4 ตัวออกมา พร้อมสร้างโฟลเดอร์ "PSSMS สื่อการสอน" ใน Drive ให้
-
-6. เอาค่าที่ได้ไปใส่ใน Railway → Variables แล้ว restart
-
-**เช็คว่าเชื่อมต่ออยู่**: ล็อกอินเป็น Admin → หน้าสื่อการสอน จะมีแถบบอกสถานะและโควตาที่เหลือ
-ถ้าขึ้นแดงแปลว่าขาดการเชื่อมต่อ — **การ์ดแบบลิงก์ยังใช้ได้ปกติ** เสียเฉพาะการอัปโหลด
-
-**ถ้า token ตาย** (ถอนสิทธิ์ / เปลี่ยนรหัสผ่าน Google / ปล่อยไว้โหมด Testing):
-รัน `scripts/google-oauth-setup.js` ใหม่ แล้วอัปเดต `GOOGLE_OAUTH_REFRESH_TOKEN` บน Railway
+**ถังขยะ**: ลบการ์ด → ไฟล์ย้ายเข้า `<MEDIA_STORAGE_DIR>/trash/` เก็บ 30 วันแล้วลบเอง
+(กวาดตอนมีการลบครั้งถัดไป ไม่ต้องมี cron)
 
 ### Environment Variables ที่ต้องตั้งใน Railway
 | Key | หมาย |

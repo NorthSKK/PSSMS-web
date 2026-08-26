@@ -18,7 +18,8 @@
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
 const { SUBJECT_GROUP_BY_PREFIX } = require('../lib/subjectGroup');
-const drive = require('../lib/drive');
+const store = require('../lib/fileStore');
+const jwt = require('jsonwebtoken');
 
 // กลุ่มสาระ 8 กลุ่ม + กิจกรรมพัฒนาผู้เรียน — ใช้ค่าเดียวกับ subjectGroup.js จะได้ไม่มี 2 ชุด
 const SUBJECT_GROUPS = Array.from(new Set(Object.values(SUBJECT_GROUP_BY_PREFIX)));
@@ -106,7 +107,7 @@ function _toClient(row, user) {
 
 const SELECT_COLS = `id, title, subject_group, icon, color, meta, description, url,
                      card_type, visible_levels, is_featured, created_by, deleted_at,
-                     drive_file_id, file_name, file_size`;
+                     file_key, file_name, file_size`;
 
 async function getMediaCards(_args, user) {
   if (_isStaff(user)) {
@@ -197,7 +198,7 @@ async function _loadOwned(id, user) {
   const cardId = parseInt(id, 10);
   if (!Number.isInteger(cardId)) throw new Error('ไม่พบการ์ดนี้');
   const { rows } = await query(
-    `SELECT id, created_by, is_featured, deleted_at, card_type, url, drive_file_id
+    `SELECT id, created_by, is_featured, deleted_at, card_type, url, file_key
      FROM media_cards WHERE id=$1`, [cardId]
   );
   const row = rows[0];
@@ -253,26 +254,34 @@ async function createPdfCard({ payload, file }, user) {
   const c = _normalizeMeta(payload, user);
   if (!file || !file.buffer || !file.buffer.length) throw new Error('ไม่พบไฟล์ที่อัปโหลด');
 
-  const uploaded = await drive.uploadPdf({ buffer: file.buffer, filename: c.title + '.pdf' });
+  const saved = await store.savePdf({ buffer: file.buffer, filename: file.originalname });
 
   try {
+    // url ว่างไว้ก่อน — ต้องรู้ id ของแถวก่อนถึงจะประกอบลิงก์ได้ (ลิงก์อ้าง id ไม่ใช่ file_key
+    // เพื่อให้ตอนเสิร์ฟไฟล์ตรวจสิทธิ์จากการ์ดใบนั้นได้ตรง ๆ)
     const { rows } = await query(
       `INSERT INTO media_cards
          (title, subject_group, icon, color, meta, description, url, card_type,
-          visible_levels, is_featured, created_by, drive_file_id, file_name, file_size)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'pdf',$8,$9,$10,$11,$12,$13)
+          visible_levels, is_featured, created_by, file_key, file_name, file_size)
+       VALUES ($1,$2,$3,$4,$5,$6,'','pdf',$7,$8,$9,$10,$11,$12)
        RETURNING id`,
-      [c.title, c.group, c.icon, c.color, c.meta || _sizeLabel(uploaded.size), c.desc,
-       uploaded.url, c.levels, c.isFeatured, String(user?.id || ''),
-       uploaded.fileId, file.originalname || uploaded.name, uploaded.size]
+      [c.title, c.group, c.icon, c.color, c.meta || _sizeLabel(saved.size), c.desc,
+       c.levels, c.isFeatured, String(user?.id || ''),
+       saved.key, file.originalname || saved.name, saved.size]
     );
-    return { status: 'success', id: rows[0].id, url: uploaded.url,
-      message: 'อัปโหลดและเพิ่มการ์ดเรียบร้อย' };
+    const id = rows[0].id;
+    const url = fileUrlFor(id);
+    await query(`UPDATE media_cards SET url=$1 WHERE id=$2`, [url, id]);
+    return { status: 'success', id, url, message: 'อัปโหลดและเพิ่มการ์ดเรียบร้อย' };
   } catch (err) {
-    // เขียนตารางไม่สำเร็จหลังไฟล์ขึ้นไปแล้ว — เก็บกวาดไฟล์ทิ้ง อย่าปล่อยกำพร้า
-    await drive.trashFile(uploaded.fileId).catch(() => {});
+    // เขียนตารางไม่สำเร็จหลังไฟล์ลงดิสก์แล้ว — เก็บกวาดทิ้ง อย่าปล่อยไฟล์กำพร้ากินพื้นที่
+    await store.trashFile(saved.key).catch(() => {});
     throw err;
   }
+}
+
+function fileUrlFor(cardId) {
+  return `/api/media/file/${cardId}`;
 }
 
 function _sizeLabel(bytes) {
@@ -286,14 +295,14 @@ async function deleteMediaCard([id], user) {
   await query(`UPDATE media_cards SET deleted_at=NOW() WHERE id=$1 AND deleted_at IS NULL`,
     [existing.id]);
 
-  if (existing.drive_file_id) {
+  if (existing.file_key) {
     try {
-      await drive.trashFile(existing.drive_file_id);
+      await store.trashFile(existing.file_key);
     } catch (err) {
       // การ์ดลบไปแล้วและกู้คืนได้ ไฟล์ค้างบน Drive ไม่คุ้มที่จะ rollback ทั้งการลบ
       // แต่ต้องบอกให้รู้ว่าพื้นที่ยังไม่ถูกคืน ไม่ใช่รายงานว่าสำเร็จเฉย ๆ
       return { status: 'success',
-        message: 'ลบการ์ดแล้ว แต่ลบไฟล์บน Google Drive ไม่สำเร็จ: ' + err.message };
+        message: 'ลบการ์ดแล้ว แต่ย้ายไฟล์ลงถังขยะไม่สำเร็จ: ' + err.message };
     }
   }
   return { status: 'success', message: 'ลบการ์ดแล้ว กู้คืนได้จากถังขยะ' };
@@ -305,19 +314,19 @@ async function restoreMediaCard([id], user) {
   const { rows } = await query(
     `UPDATE media_cards SET deleted_at=NULL, updated_at=NOW()
      WHERE id=$1 AND deleted_at IS NOT NULL
-     RETURNING drive_file_id`, [cardId]
+     RETURNING file_key`, [cardId]
   );
   if (!rows.length) throw new Error('ไม่พบการ์ดนี้ในถังขยะ');
 
-  const fileId = rows[0].drive_file_id;
-  if (fileId) {
+  const fileKey = rows[0].file_key;
+  if (fileKey) {
     try {
-      await drive.untrashFile(fileId);
+      await store.untrashFile(fileKey);
     } catch (err) {
-      // เกิน 30 วัน Google ลบไฟล์ถาวรไปแล้ว — การ์ดกลับมาแต่ลิงก์เสีย ต้องบอกตรง ๆ
+      // เกินกำหนดถังขยะแล้วไฟล์ถูกลบถาวร — การ์ดกลับมาแต่เปิดไม่ได้ ต้องบอกตรง ๆ
       return { status: 'success',
-        message: 'กู้คืนการ์ดแล้ว แต่ไฟล์บน Google Drive กู้ไม่ได้ (' + err.message +
-                 ') ลิงก์ของการ์ดนี้จะใช้ไม่ได้' };
+        message: 'กู้คืนการ์ดแล้ว แต่ไฟล์กู้ไม่ได้ (' + err.message +
+                 ') การ์ดนี้จะเปิดไฟล์ไม่ได้' };
     }
   }
   return { status: 'success', message: 'กู้คืนการ์ดแล้ว' };
@@ -336,14 +345,45 @@ function getMediaCardOptions() {
   return { groups: SUBJECT_GROUPS, levels: LEVELS, icons: ICONS, colors: COLORS,
     groupDefaults: GROUP_DEFAULTS,
     maxUploadMB: MAX_UPLOAD_MB,
-    // ฟอร์มใช้ปิดตัวเลือก "อัปโหลด PDF" ตอนยังไม่ได้เชื่อม Drive
-    // แทนที่จะให้ครูกรอกจนจบแล้วค่อยเจอ error
-    uploadEnabled: drive.isConfigured() };
+    uploadEnabled: store.isConfigured() };
 }
 
-// สถานะ Google Drive สำหรับ Admin — โควตาที่เหลือและบัญชีที่เชื่อมต่ออยู่
+// สถานะที่เก็บไฟล์สำหรับ Admin — พื้นที่ที่ใช้ไป และเตือนถ้ายังไม่ได้ mount Volume
 async function getMediaStorageStatus() {
-  return drive.status();
+  return store.status();
+}
+
+/**
+ * ตั๋วเปิดไฟล์ — อายุสั้น ผูกกับการ์ดใบเดียว
+ *
+ * ไฟล์ไม่ได้เปิดสาธารณะ แต่ window.open ไม่ได้แนบ Authorization header ไปด้วย
+ * (JWT อยู่ใน localStorage ไม่ใช่ cookie) จึงตรวจสิทธิ์ตอนออกตั๋วผ่าน /api/gas
+ * แล้วให้ตัวไฟล์ตรวจแค่ตั๋ว — ตั๋วอยู่ใน query string จึงต้องอายุสั้น
+ */
+async function getMediaFileTicket([cardId], user) {
+  const id = parseInt(cardId, 10);
+  if (!Number.isInteger(id)) throw new Error('ไม่พบการ์ดนี้');
+
+  const { rows } = await query(
+    `SELECT id, card_type, file_key, visible_levels FROM media_cards
+     WHERE id=$1 AND deleted_at IS NULL`, [id]
+  );
+  const card = rows[0];
+  if (!card || card.card_type !== 'pdf' || !card.file_key) throw new Error('ไม่พบไฟล์ของการ์ดนี้');
+
+  if (!_isStaff(user)) {
+    const level = await _studentLevel(user);
+    if (!level || !(card.visible_levels || []).includes(level)) {
+      throw new Error('ไม่มีสิทธิ์เปิดไฟล์นี้');
+    }
+  }
+
+  const ticket = jwt.sign(
+    { cardId: id, uid: String(user?.id || '') },
+    process.env.JWT_SECRET,
+    { expiresIn: '10m' }
+  );
+  return { url: `${fileUrlFor(id)}?t=${encodeURIComponent(ticket)}` };
 }
 
 module.exports = {
@@ -351,6 +391,8 @@ module.exports = {
   saveMediaCard,
   createPdfCard,
   getMediaStorageStatus,
+  getMediaFileTicket,
+  fileUrlFor,
   deleteMediaCard,
   restoreMediaCard,
   getDeletedMediaCards,

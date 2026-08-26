@@ -799,23 +799,33 @@ function section(fn) {
   เพราะบน dark mode พื้นอ่อน 13% กับตัวอักษรสีเดิม contrast ต่ำจนอ่านไม่ออก
 **การ์ดแบบ PDF (`card_type = 'pdf'`)**:
 
-- ไฟล์อยู่ใน Google Drive ของบัญชี OAuth บัญชีเดียว (`lib/drive.js`) ไม่ใช่ service account
-  เพราะไม่มี Workspace → ไม่มี Shared Drive → service account ไม่มีโควตา อัปโหลดไม่ได้
+- ไฟล์อยู่บนดิสก์ที่ `MEDIA_STORAGE_DIR` (Railway Volume) — `lib/fileStore.js`
+  เคยทำเป็น Google Drive แต่ publish OAuth เป็น production ต้องยืนยันโดเมน
+  ซึ่ง `*.up.railway.app` เป็นของ Railway ไม่ใช่ของโรงเรียน (ค้างโหมด Testing ก็ไม่ได้
+  เพราะ refresh token หมดอายุ 7 วัน) — ประวัติเต็มอยู่ในหัว `lib/fileStore.js`
+- ⚠️ **ไม่ตั้ง `MEDIA_STORAGE_DIR` = ไฟล์หายทุก deploy** — `getMediaStorageStatus()` คืน
+  `ephemeral: true` และหน้า Admin ขึ้นแถบแดง วิธี mount Volume อยู่ใน `WEB_DEV.md`
 - อัปโหลดผ่าน `POST /api/media/upload` (`routes/media.js`) ไม่ใช่ `/api/gas`
   **เส้นแบ่งคือ binary ไป REST ที่เหลือไป `/api/gas`** — ยัด base64 เข้า shim จะต้องดัน
   `express.json` limit ที่เป็น global ขึ้นหลายสิบ MB ซึ่งเปิดช่อง DoS ให้ทุก endpoint
 - ด่านตรวจ: 25MB, MIME `application/pdf`, **magic bytes `%PDF-`** (ไม่เชื่อ MIME จาก client),
-  rate limit 20 ไฟล์/ชม./คน — ตรวจ metadata ให้ครบ *ก่อน* อัปขึ้น Drive เสมอ ไม่งั้นได้ไฟล์กำพร้า
-- ไฟล์เปิดเป็น **"ทุกคนที่มีลิงก์"** — `visible_levels` ซ่อนได้แค่การ์ดในหน้า ไม่ใช่ access control
-  ของตัวไฟล์ (แลกกับ bandwidth ของ Railway ตอนตัดสินใจ) ฟอร์มจึงเตือนเรื่องลิขสิทธิ์
+  rate limit 20 ไฟล์/ชม./คน — ตรวจ metadata ให้ครบ *ก่อน* เขียนไฟล์ลงดิสก์เสมอ
+  ไม่งั้นได้ไฟล์กำพร้าที่กินพื้นที่โดยไม่มีแถวไหนชี้ถึง (insert ล้ม → ลบไฟล์ทิ้ง)
+- ⚠️ **busboy ถอด `filename` เป็น latin1** ชื่อไฟล์ภาษาไทยจะเป็น mojibake ตั้งแต่รับเข้ามา
+  `decodeFilename()` แปลงกลับ อย่าถอดออก
+- ชื่อไฟล์บนดิสก์เป็น hex สุ่มล้วน ไม่เอาชื่อที่ครูตั้งมาประกอบ (กัน path traversal
+  และปัญหา encoding) — `safePath()` ยังตรวจซ้ำอีกชั้นแม้ค่าจะมาจาก DB
+- **ไฟล์ไม่เปิดสาธารณะ** เสิร์ฟที่ `GET /api/media/file/:id?t=<ticket>` รองรับ Range
+  ตั๋วอายุ 10 นาที ผูกกับการ์ดใบเดียว ออกโดย `getMediaFileTicket` ซึ่งตรวจ `visible_levels`
+  ก่อน — `window.open` ไม่แนบ Authorization header (JWT อยู่ใน localStorage ไม่ใช่ cookie)
+  จึงต้องผ่านตั๋ว ไม่ใช่ตรวจ header ที่ตัว route
 - `url` ของการ์ด PDF **แก้จากฟอร์มไม่ได้** — เปลี่ยนไฟล์ = ลบการ์ดแล้วอัปใหม่
-- ลบการ์ด → ย้ายไฟล์ลงถังขยะ Drive (Google เก็บ 30 วัน คืนพื้นที่เอง) กู้คืน → untrash
-  ถ้าขั้นตอน Drive ล้ม **ข้อความต้องบอกตรง ๆ ห้ามรายงานว่าสำเร็จ**
-- ⚠️ **OAuth app ต้อง publish เป็น "In production"** ไม่งั้น refresh token หมดอายุใน 7 วัน
-  วิธีตั้งทั้งหมดอยู่ใน `WEB_DEV.md` หัวข้อ "เชื่อมต่อ Google Drive"
-- Admin เห็นแถบสถานะ + โควตาบนหน้าสื่อการสอน (`getMediaStorageStatus`)
-- ถ้ายังไม่เชื่อม Drive: `getMediaCardOptions().uploadEnabled = false` ฟอร์มปิดตัวเลือกอัปโหลด
-  และ endpoint ตอบ 503 — **การ์ดแบบลิงก์ต้องใช้ได้ตามปกติเสมอ**
+- ลบการ์ด → ไฟล์ย้ายเข้า `trash/` เก็บ 30 วัน (กวาดตอนลบครั้งถัดไป ไม่มี cron) กู้คืน → ย้ายกลับ
+  ถ้าขั้นตอนไฟล์ล้ม **ข้อความต้องบอกตรง ๆ ห้ามรายงานว่าสำเร็จ**
+- Admin เห็นแถบสถานะที่เก็บไฟล์บนหน้าสื่อการสอน (`getMediaStorageStatus`) —
+  จำนวนไฟล์ พื้นที่ที่ใช้/ว่าง ถังขยะ และคำเตือน ephemeral
+- ถ้าที่เก็บไฟล์เขียนไม่ได้: `getMediaCardOptions().uploadEnabled = false` ฟอร์มปิดตัวเลือก
+  อัปโหลด — **การ์ดแบบลิงก์ต้องใช้ได้ตามปกติเสมอ**
 
 ### ป้ายบนตาราง "จัดการเรียนรู้วันนี้" (dashboard ครู)
 

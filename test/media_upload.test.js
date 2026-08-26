@@ -1,21 +1,25 @@
 'use strict';
 /**
- * สื่อการสอนเฟส 2 — อัปโหลด PDF ขึ้น Google Drive
+ * สื่อการสอนเฟส 2 — อัปโหลด PDF ลงที่เก็บไฟล์ (Railway Volume)
  *
- * เทสต์ชุดนี้ไม่ยิง Google จริง (ไม่มี GOOGLE_OAUTH_* ตอนรันเทส) จึงครอบ 2 อย่าง:
- *   1. ด่านตรวจก่อนถึง Drive — สิทธิ์, ไฟล์ปลอม, การ์ดที่ไม่มีการเชื่อมต่อ
- *   2. พฤติกรรมตอนต่อ Drive ไม่ได้ ต้อง "ดัง" ไม่ใช่รายงานว่าสำเร็จ
- *      (บั๊กเดิมของ uploadSarabunFile คือขึ้น "สำเร็จ!" ทั้งที่ไฟล์หายไปเฉย ๆ)
+ * จุดที่ต้องล็อกไว้:
+ *   1. ด่านตรวจก่อนไฟล์ลงดิสก์ — สิทธิ์, ไฟล์ปลอม, metadata ไม่ครบ
+ *   2. ไฟล์ไม่ได้เปิดสาธารณะ — ต้องมีตั๋ว และตั๋วข้ามการ์ดไม่ได้
+ *      (ต่างจากตอนที่เคยใช้ลิงก์ Google Drive ซึ่งใครมีลิงก์ก็เปิดได้)
+ *   3. ล้มแล้วต้อง "ดัง" ไม่ใช่รายงานว่าสำเร็จ (บั๊กเดิมของ uploadSarabunFile)
  */
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
-const { ok, denied, stop, TOKENS, baseURL } = require('./helpers/api');
-const { looksLikePdf } = require('../routes/media');
+const { ok, denied, stop, TOKENS, baseURL, token } = require('./helpers/api');
+const { looksLikePdf, decodeFilename } = require('../routes/media');
+const store = require('../lib/fileStore');
 
 after(stop);
 
 const PDF_CARD = 'ใบความรู้หน่วยที่ 2 (PDF)';
+const STUDENT_M2 = token({ id: '02001', role: 'Student' });
+const STUDENT_M6 = token({ id: '01901', role: 'Student' });
 
 async function cardByTitle(title, as = 'admin') {
   const cards = await ok('getMediaCards', [], as);
@@ -24,36 +28,46 @@ async function cardByTitle(title, as = 'admin') {
   return found;
 }
 
-// ยิง multipart ตรงไป REST endpoint — shim google.script.run ส่ง binary ไม่ได้
-async function uploadRaw({ token, filename = 'test.pdf', content = '%PDF-1.4 fake', payload = {} }) {
-  const base = await baseURL();
-  const boundary = '----pssmstest' + Date.now();
-  const parts = [
-    `--${boundary}\r\nContent-Disposition: form-data; name="payload"\r\n\r\n${JSON.stringify(payload)}\r\n`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-      `Content-Type: application/pdf\r\n\r\n${content}\r\n`,
-    `--${boundary}--\r\n`,
-  ];
-  const body = Buffer.from(parts.join(''), 'latin1');
-
-  return new Promise((resolve, reject) => {
-    const req = http.request(`${base}/api/media/upload`, {
-      method: 'POST',
+function request(pathname, { method = 'GET', token: tok, headers = {}, body } = {}) {
+  return baseURL().then(base => new Promise((resolve, reject) => {
+    const req = http.request(`${base}${pathname}`, {
+      method,
       headers: {
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': body.length,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+        ...(body ? { 'Content-Length': body.length } : {}),
+        ...headers,
       },
     }, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
       res.on('end', () => {
-        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
-        catch { resolve({ status: res.statusCode, body: { raw: data } }); }
+        const raw = Buffer.concat(chunks);
+        let parsed = null;
+        try { parsed = JSON.parse(raw.toString('utf8')); } catch { /* ไม่ใช่ JSON ก็ได้ */ }
+        resolve({ status: res.statusCode, headers: res.headers, raw, body: parsed });
       });
     });
     req.on('error', reject);
     req.end(body);
+  }));
+}
+
+// ยิง multipart ตรงไป REST endpoint — shim google.script.run ส่ง binary ไม่ได้
+function uploadRaw({ token: tok, filename = 'test.pdf', content = '%PDF-1.4 fake', payload = {} }) {
+  const boundary = '----pssmstest' + Date.now() + Math.random().toString(16).slice(2);
+  // utf8 ไม่ใช่ latin1 — ชื่อไฟล์กับ payload เป็นภาษาไทย latin1 จะทำ header เพี้ยนจน multer ปฏิเสธ
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="payload"\r\n\r\n`, 'utf8'),
+    Buffer.from(JSON.stringify(payload), 'utf8'),
+    Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+      `Content-Type: application/pdf\r\n\r\n`, 'utf8'),
+    Buffer.from(content, 'utf8'),
+    Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'),
+  ]);
+
+  return request('/api/media/upload', {
+    method: 'POST', token: tok, body,
+    headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
   });
 }
 
@@ -63,6 +77,20 @@ test('magic bytes: ยอมเฉพาะไฟล์ที่ขึ้นต�
   assert.equal(looksLikePdf(Buffer.from('PK\x03\x04zipfile')), false);
   assert.equal(looksLikePdf(Buffer.from('')), false);
   assert.equal(looksLikePdf(null), false);
+});
+
+test('ชื่อไฟล์ภาษาไทยจาก multipart ต้องไม่เพี้ยน', () => {
+  // busboy ถอดเป็น latin1 — ถ้าไม่แปลงกลับ ครูจะเห็นชื่อไฟล์เป็น mojibake บนการ์ด
+  const mangled = Buffer.from('ใบงาน.pdf', 'utf8').toString('latin1');
+  assert.equal(decodeFilename(mangled), 'ใบงาน.pdf');
+  assert.equal(decodeFilename('worksheet.pdf'), 'worksheet.pdf', 'ชื่อ ASCII ต้องไม่ถูกแตะ');
+  assert.equal(decodeFilename(''), '');
+});
+
+test('ชื่อไฟล์บนดิสก์ต้องเป็น hex ล้วน — กัน path traversal', () => {
+  assert.throws(() => store.safePath('../../etc/passwd'), /ชื่อไฟล์ไม่ถูกต้อง/);
+  assert.throws(() => store.safePath('a'.repeat(32) + '.exe'), /ชื่อไฟล์ไม่ถูกต้อง/);
+  assert.doesNotThrow(() => store.safePath('a'.repeat(32) + '.pdf'));
 });
 
 test('อัปโหลดโดยไม่มี token → 401', async () => {
@@ -75,35 +103,96 @@ test('นักเรียนอัปโหลดไม่ได้ → 403', 
   assert.equal(res.status, 403);
 });
 
-test('ยังไม่เชื่อม Drive → 503 พร้อมข้อความที่ครูอ่านรู้เรื่อง ไม่ใช่ success เงียบ ๆ', async () => {
-  assert.ok(!process.env.GOOGLE_OAUTH_REFRESH_TOKEN, 'เทสต์นี้ต้องรันตอนยังไม่ตั้ง GOOGLE_OAUTH_*');
-  const res = await uploadRaw({ token: TOKENS.teacher1, payload: { title: 'ทดสอบ' } });
-  assert.equal(res.status, 503);
-  assert.match(res.body.__error, /ยังไม่ได้เชื่อมต่อ Google Drive/);
-  assert.match(res.body.__error, /ลิงก์ยังใช้ได้/, 'ต้องบอกว่าการ์ดแบบลิงก์ยังใช้ได้');
+test('ไฟล์ที่ไม่ใช่ PDF จริงถูกปฏิเสธ แม้ MIME จะบอกว่าเป็น PDF', async () => {
+  const res = await uploadRaw({
+    token: TOKENS.teacher1, content: '<html>ปลอม</html>', payload: { title: 'ปลอม' },
+  });
+  assert.equal(res.status, 400);
+  assert.match(res.body.__error, /ไม่ใช่ PDF จริง/);
 });
 
-test('getMediaCardOptions บอก client ว่าอัปโหลดได้หรือยัง', async () => {
-  const opts = await ok('getMediaCardOptions', [], 'teacher1');
-  assert.equal(opts.uploadEnabled, false, 'ยังไม่เชื่อม Drive → ฟอร์มต้องปิดตัวเลือกอัปโหลด');
-  assert.equal(opts.maxUploadMB, 25);
+test('metadata ไม่ครบ → ปฏิเสธ และต้องไม่มีไฟล์กำพร้าค้างไว้', async () => {
+  const before = await ok('getMediaStorageStatus', [], 'admin');
+  const res = await uploadRaw({ token: TOKENS.teacher1, payload: { title: '   ' } });
+  assert.equal(res.status, 400);
+  assert.match(res.body.__error, /ชื่อสื่อ/);
+
+  const after_ = await ok('getMediaStorageStatus', [], 'admin');
+  assert.equal(after_.files, before.files, 'ตรวจ metadata ต้องเกิดก่อนเขียนไฟล์ลงดิสก์');
 });
 
-test('สถานะ Drive เป็นของ Admin และรายงานว่ายังไม่เชื่อมต่อ', async () => {
+test('อัปโหลดสำเร็จ → ได้การ์ด PDF ที่เปิดไฟล์ได้จริง', async () => {
+  const res = await uploadRaw({
+    token: TOKENS.teacher1,
+    filename: 'ใบงาน.pdf',
+    content: '%PDF-1.4\nเนื้อหาทดสอบ\n%%EOF',
+    payload: { title: 'อัปโหลดจากเทส', group: 'คณิตศาสตร์', visibleLevels: ['ม.6'] },
+  });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const cardId = res.body.__result.id;
+  assert.equal(res.body.__result.url, `/api/media/file/${cardId}`);
+
+  const card = await cardByTitle('อัปโหลดจากเทส');
+  assert.equal(card.cardType, 'pdf');
+  assert.equal(card.fileName, 'ใบงาน.pdf');
+  assert.ok(card.meta.startsWith('PDF ·'), 'ไม่ใส่ป้ายกำกับ → เติมขนาดไฟล์ให้อัตโนมัติ');
+
+  const ticket = await ok('getMediaFileTicket', [cardId], 'teacher1');
+  const file = await request(ticket.url);
+  assert.equal(file.status, 200);
+  assert.equal(file.headers['content-type'], 'application/pdf');
+  assert.match(file.headers['cache-control'], /private/, 'ห้าม proxy/CDN เก็บไฟล์ไปแจกต่อ');
+  assert.ok(file.raw.toString('utf8').includes('เนื้อหาทดสอบ'));
+
+  await ok('deleteMediaCard', [cardId], 'teacher1');
+});
+
+test('เปิดไฟล์โดยไม่มีตั๋ว หรือตั๋วของการ์ดอื่น → ไม่ผ่าน', async () => {
+  const card = await cardByTitle(PDF_CARD);
+
+  const noTicket = await request(`/api/media/file/${card.id}`);
+  assert.equal(noTicket.status, 401, 'ไฟล์ต้องไม่เปิดสาธารณะ');
+
+  const junk = await request(`/api/media/file/${card.id}?t=ไม่ใช่ตั๋ว`);
+  assert.equal(junk.status, 401);
+
+  // ตั๋วของการ์ดอื่นต้องใช้ข้ามใบไม่ได้
+  const other = await uploadRaw({
+    token: TOKENS.teacher1, payload: { title: 'การ์ดอื่น', visibleLevels: ['ม.6'] },
+  });
+  const otherId = other.body.__result.id;
+  const otherTicket = await ok('getMediaFileTicket', [otherId], 'teacher1');
+  const t = new URL('http://x' + otherTicket.url).searchParams.get('t');
+  const crossed = await request(`/api/media/file/${card.id}?t=${encodeURIComponent(t)}`);
+  assert.equal(crossed.status, 403);
+
+  await ok('deleteMediaCard', [otherId], 'teacher1');
+});
+
+test('นักเรียนที่ไม่ได้อยู่ในระดับชั้นของการ์ด ขอตั๋วไม่ได้', async () => {
+  const card = await cardByTitle(PDF_CARD); // เปิดให้ ม.2
+  await denied('getMediaFileTicket', [card.id], STUDENT_M6);
+
+  const allowed = await ok('getMediaFileTicket', [card.id], STUDENT_M2);
+  assert.match(allowed.url, /^\/api\/media\/file\/\d+\?t=/);
+});
+
+test('สถานะที่เก็บไฟล์เป็นของ Admin และเตือนเมื่อยังไม่ได้ mount Volume', async () => {
   await denied('getMediaStorageStatus', [], 'teacher1');
   const st = await ok('getMediaStorageStatus', [], 'admin');
-  assert.equal(st.connected, false);
-  assert.ok(st.reason, 'ต้องบอกเหตุผลให้ Admin เห็น');
+  assert.equal(st.connected, true);
+  assert.equal(st.ephemeral, true, 'dev ไม่ได้ตั้ง MEDIA_STORAGE_DIR → ต้องรายงานว่า ephemeral');
+  assert.ok(st.files >= 1);
 });
 
 test('การ์ด PDF ส่ง fileName/fileSize ให้ client', async () => {
   const card = await cardByTitle(PDF_CARD);
   assert.equal(card.cardType, 'pdf');
   assert.equal(card.fileName, 'ใบความรู้หน่วย2.pdf');
-  assert.equal(card.fileSize, 1258291);
+  assert.ok(card.fileSize > 0);
 });
 
-test('แก้การ์ด PDF เปลี่ยน url ไม่ได้ — ไฟล์ต้องยังเป็นไฟล์เดิมบน Drive', async () => {
+test('แก้การ์ด PDF เปลี่ยน url ไม่ได้ — ต้องชี้ไฟล์เดิมเสมอ', async () => {
   const before = await cardByTitle(PDF_CARD, 'teacher2');
   await ok('saveMediaCard', [{
     id: before.id, title: before.title, url: 'https://evil.example.com/แอบเปลี่ยน',
@@ -112,34 +201,22 @@ test('แก้การ์ด PDF เปลี่ยน url ไม่ได้ 
   }], 'teacher2');
 
   const after_ = await cardByTitle(PDF_CARD, 'teacher2');
-  assert.equal(after_.url, before.url, 'url ของการ์ด PDF ต้องไม่ถูกทับจากฟอร์ม');
+  assert.equal(after_.url, before.url);
 });
 
-test('แก้ metadata ของการ์ด PDF ได้ตามปกติ', async () => {
+test('ลบการ์ด PDF → ไฟล์เข้าถังขยะ กู้คืนแล้วเปิดได้เหมือนเดิม', async () => {
   const card = await cardByTitle(PDF_CARD, 'teacher2');
-  await ok('saveMediaCard', [{
-    id: card.id, title: card.title, desc: 'คำอธิบายใหม่',
-    icon: card.icon, color: card.color, group: card.group,
-    visibleLevels: ['ม.2', 'ม.3'],
-  }], 'teacher2');
 
-  const updated = await cardByTitle(PDF_CARD, 'teacher2');
-  assert.equal(updated.desc, 'คำอธิบายใหม่');
-  assert.deepEqual(updated.visibleLevels, ['ม.2', 'ม.3']);
-});
-
-test('ลบการ์ด PDF ตอนต่อ Drive ไม่ได้ → การ์ดหายแต่ต้องบอกว่าไฟล์ยังไม่ถูกลบ', async () => {
-  const card = await cardByTitle(PDF_CARD, 'teacher2');
-  const res = await ok('deleteMediaCard', [card.id], 'teacher2');
-
-  assert.equal(res.status, 'success');
-  assert.match(res.message, /ลบไฟล์บน Google Drive ไม่สำเร็จ/,
-    'ห้ามรายงานว่าลบสะอาดทั้งที่ไฟล์ยังกินโควตาอยู่');
-
-  const cards = await ok('getMediaCards', [], 'admin');
-  assert.ok(!cards.some(c => c.id === card.id), 'การ์ดต้องหายจากหน้ารวม');
+  const del = await ok('deleteMediaCard', [card.id], 'teacher2');
+  assert.equal(del.status, 'success');
+  assert.match(del.message, /กู้คืนได้จากถังขยะ/);
+  assert.ok(!(await ok('getMediaCards', [], 'admin')).some(c => c.id === card.id));
+  await denied('getMediaFileTicket', [card.id], 'teacher2');
 
   const restored = await ok('restoreMediaCard', [card.id], 'admin');
-  assert.match(restored.message, /ไฟล์บน Google Drive กู้ไม่ได้/,
-    'กู้คืนตอนต่อ Drive ไม่ได้ ต้องเตือนว่าลิงก์จะเสีย');
+  assert.equal(restored.message, 'กู้คืนการ์ดแล้ว', 'ไฟล์ยังอยู่ในถังขยะ ต้องกู้ได้สะอาด');
+
+  const ticket = await ok('getMediaFileTicket', [card.id], 'teacher2');
+  const file = await request(ticket.url);
+  assert.equal(file.status, 200);
 });

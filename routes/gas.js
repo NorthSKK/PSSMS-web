@@ -275,6 +275,7 @@ const handlers = {
   restoreMediaCard:                (args, user) => mediaCards.restoreMediaCard(args, user),
   getDeletedMediaCards:            (args, user) => mediaCards.getDeletedMediaCards(args, user),
   getMediaStorageStatus:           () => mediaCards.getMediaStorageStatus(),
+  getMediaFileTicket:              (args, user) => mediaCards.getMediaFileTicket(args, user),
 
   // Todo (in-memory)
   getTodoList:                     require('../functions/getTodoList'),

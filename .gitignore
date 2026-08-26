@@ -7,3 +7,6 @@ credentials.json
 dark-sensor-*.json
 d3479eb6-*.json
 .DS_Store
+
+# ไฟล์สื่อการสอนตอน dev — production ใช้ Railway Volume
+storage/

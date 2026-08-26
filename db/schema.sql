@@ -413,8 +413,8 @@ CREATE TABLE IF NOT EXISTS media_cards (
   visible_levels TEXT[] NOT NULL DEFAULT '{}',
   is_featured    BOOLEAN NOT NULL DEFAULT FALSE,
   created_by     TEXT NOT NULL DEFAULT '',
-  -- การ์ดแบบ pdf: ไฟล์อยู่ใน Google Drive ของบัญชีที่เชื่อมต่อไว้ (ดู lib/drive.js)
-  drive_file_id  TEXT,
+  -- การ์ดแบบ pdf: ไฟล์อยู่บนดิสก์ที่ MEDIA_STORAGE_DIR (Railway Volume) — ดู lib/fileStore.js
+  file_key       TEXT,
   file_name      TEXT,
   file_size      BIGINT,
   created_at     TIMESTAMPTZ DEFAULT NOW(),
@@ -425,5 +425,5 @@ CREATE TABLE IF NOT EXISTS media_cards (
 CREATE INDEX IF NOT EXISTS idx_media_cards_live
   ON media_cards (is_featured DESC, created_at DESC) WHERE deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_media_cards_drive_file
-  ON media_cards (drive_file_id) WHERE drive_file_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_media_cards_file_key
+  ON media_cards (file_key) WHERE file_key IS NOT NULL;
