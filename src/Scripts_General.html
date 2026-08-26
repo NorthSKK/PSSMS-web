@@ -2046,9 +2046,11 @@ function _mediaCardEl(c) {
   head.appendChild(circle);
 
   var titleBox = document.createElement('div');
-  titleBox.className = 'flex-grow-1 min-width-0';
+  titleBox.className = 'flex-grow-1';
+  titleBox.style.minWidth = '0'; // ให้ text-truncate ของบรรทัดกลุ่มสาระทำงานใน flex child
   var t = document.createElement('div');
-  t.className = 'fw-bold text-truncate';
+  // ชื่อสื่อขึ้นบรรทัดใหม่ได้ ไม่ตัดทิ้ง — ชื่อวิชาไทยยาวเกินความกว้างการ์ดเป็นเรื่องปกติ
+  t.className = 'fw-bold';
   t.textContent = c.title || '';
   var g = document.createElement('div');
   g.className = 'small text-truncate';
