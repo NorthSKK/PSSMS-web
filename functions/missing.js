@@ -380,19 +380,6 @@ async function saveStudentRemarkDirectly([studentId, subjectCode, term, year, re
   );
   return { success: true, val, status: 'success', message: 'บันทึกหมายเหตุสำเร็จ' };
 }
-/**
- * ยังไม่รองรับการแนบไฟล์งานสารบรรณ — ระบบยังไม่มีที่เก็บไฟล์ถาวร
- *
- * ⚠️ เดิมฟังก์ชันนี้คืน status 'success' ทั้งที่ไม่ได้เก็บไฟล์เลย ฝั่ง client จึงขึ้น
- *    "สำเร็จ!" ให้ครูดู แล้วไฟล์หายไปเฉย ๆ ไม่มีใครรู้ว่าแนบไม่ติดมาตลอด
- *    ห้ามเปลี่ยนกลับไปคืน success จนกว่าจะเก็บไฟล์ได้จริง
- *
- * เปิดใช้เมื่อไหร่: ใช้ lib/storage/ ตัวเดียวกับสื่อการสอน ซึ่งพร้อมแล้ว — เหลือแค่
- * ตัดสินเรื่องสิทธิ์การเห็นไฟล์แนบ (ตาราง sarabun ไม่มี visible_levels) ยังไม่ได้ออกแบบ
- */
-async function uploadSarabunFile() {
-  throw new Error('ยังไม่เปิดให้แนบไฟล์งานสารบรรณ — ระบบยังไม่มีที่เก็บไฟล์');
-}
 async function getTeacherListForDropdown() {
   const teachers = await require('./getTeachersForTimetable')();
   return teachers.map(t => t.name).filter(Boolean);
@@ -796,7 +783,6 @@ module.exports = {
   setupClubDatabase,
   setupCurriculumDatabase,
   saveStudentRemarkDirectly,
-  uploadSarabunFile,
   getTeacherListForDropdown,
   getMyClub,
   getMyClubs,

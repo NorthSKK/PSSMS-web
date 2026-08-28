@@ -84,8 +84,8 @@ test('disk driver ปฏิเสธ key ที่ไม่ใช่รูปแ
 });
 
 test('กวาดของหมดอายุ: ลบเฉพาะการ์ดที่เกิน 30 วัน และลบไฟล์ด้วย', async () => {
-  const fresh = await disk.put({ buffer: Buffer.from('%PDF-1.4 old'), filename: 'old.pdf' });
-  const keep = await disk.put({ buffer: Buffer.from('%PDF-1.4 keep'), filename: 'keep.pdf' });
+  const fresh = await disk.put({ buffer: Buffer.from('%PDF-1.4 old'), ext: 'pdf' });
+  const keep = await disk.put({ buffer: Buffer.from('%PDF-1.4 keep'), ext: 'pdf' });
 
   const mk = async (title, deletedDaysAgo, key) => {
     const { rows } = await query(

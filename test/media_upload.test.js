@@ -12,7 +12,8 @@ const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
 const { ok, denied, stop, TOKENS, baseURL, token } = require('./helpers/api');
-const { looksLikePdf, decodeFilename } = require('../routes/media');
+const { decodeFilename } = require('../routes/media');
+const types = require('../lib/storage/types');
 const store = require('../lib/storage/disk');
 
 after(stop);
@@ -71,12 +72,18 @@ function uploadRaw({ token: tok, filename = 'test.pdf', content = '%PDF-1.4 fake
   });
 }
 
-test('magic bytes: ยอมเฉพาะไฟล์ที่ขึ้นต้นด้วย %PDF-', () => {
-  assert.equal(looksLikePdf(Buffer.from('%PDF-1.7\nstuff')), true);
-  assert.equal(looksLikePdf(Buffer.from('<html>ไม่ใช่ pdf</html>')), false);
-  assert.equal(looksLikePdf(Buffer.from('PK\x03\x04zipfile')), false);
-  assert.equal(looksLikePdf(Buffer.from('')), false);
-  assert.equal(looksLikePdf(null), false);
+test('ชนิดไฟล์ตัดสินจาก magic bytes ไม่ใช่ MIME หรือนามสกุล', () => {
+  const ext = (buf, allowed) => { const t = types.detect(buf, allowed); return t && t.ext; };
+  assert.equal(ext(Buffer.from('%PDF-1.7\nstuff')), 'pdf');
+  assert.equal(ext(Buffer.from([0xff, 0xd8, 0xff, 0xe0])), 'jpg');
+  assert.equal(ext(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'png');
+  assert.equal(ext(Buffer.from([0x50, 0x4b, 0x03, 0x04])), 'docx');
+  assert.equal(ext(Buffer.from('<html>ไม่ใช่ไฟล์เอกสาร</html>')), null);
+  assert.equal(ext(Buffer.from('')), null);
+  assert.equal(ext(null), null);
+
+  // สื่อการสอนรับแค่ pdf — zip ที่เป็น docx ต้องไม่ผ่านตรงนั้น
+  assert.equal(ext(Buffer.from([0x50, 0x4b, 0x03, 0x04]), ['pdf']), null);
 });
 
 test('ชื่อไฟล์ภาษาไทยจาก multipart ต้องไม่เพี้ยน', () => {
@@ -108,7 +115,7 @@ test('ไฟล์ที่ไม่ใช่ PDF จริงถูกปฏิ
     token: TOKENS.teacher1, content: '<html>ปลอม</html>', payload: { title: 'ปลอม' },
   });
   assert.equal(res.status, 400);
-  assert.match(res.body.__error, /ไม่ใช่ PDF จริง/);
+  assert.match(res.body.__error, /รองรับเฉพาะไฟล์ PDF/);
 });
 
 test('metadata ไม่ครบ → ปฏิเสธ และต้องไม่มีไฟล์กำพร้าค้างไว้', async () => {
@@ -149,10 +156,10 @@ test('อัปโหลดสำเร็จ → ได้การ์ด PDF �
 test('เปิดไฟล์โดยไม่มีตั๋ว หรือตั๋วของการ์ดอื่น → ไม่ผ่าน', async () => {
   const card = await cardByTitle(PDF_CARD);
 
-  const noTicket = await request(`/api/media/file/${card.id}`);
+  const noTicket = await request(`/api/media/file/media/${card.id}`);
   assert.equal(noTicket.status, 401, 'ไฟล์ต้องไม่เปิดสาธารณะ');
 
-  const junk = await request(`/api/media/file/${card.id}?t=ไม่ใช่ตั๋ว`);
+  const junk = await request(`/api/media/file/media/${card.id}?t=ไม่ใช่ตั๋ว`);
   assert.equal(junk.status, 401);
 
   // ตั๋วของการ์ดอื่นต้องใช้ข้ามใบไม่ได้
@@ -162,7 +169,7 @@ test('เปิดไฟล์โดยไม่มีตั๋ว หรือ�
   const otherId = other.body.__result.id;
   const otherTicket = await ok('getMediaFileTicket', [otherId], 'teacher1');
   const t = new URL('http://x' + otherTicket.url).searchParams.get('t');
-  const crossed = await request(`/api/media/file/${card.id}?t=${encodeURIComponent(t)}`);
+  const crossed = await request(`/api/media/file/media/${card.id}?t=${encodeURIComponent(t)}`);
   assert.equal(crossed.status, 403);
 
   await ok('deleteMediaCard', [otherId], 'teacher1');
@@ -173,7 +180,7 @@ test('นักเรียนที่ไม่ได้อยู่ในร�
   await denied('getMediaFileTicket', [card.id], STUDENT_M6);
 
   const allowed = await ok('getMediaFileTicket', [card.id], STUDENT_M2);
-  assert.match(allowed.url, /^\/api\/media\/file\/\d+\?t=/);
+  assert.match(allowed.url, /^\/api\/media\/file\/media\/\d+\?t=/);
 });
 
 test('สถานะที่เก็บไฟล์เป็นของ Admin', async () => {

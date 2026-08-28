@@ -256,7 +256,7 @@ async function createPdfCard({ payload, file }, user) {
   const c = _normalizeMeta(payload, user);
   if (!file || !file.buffer || !file.buffer.length) throw new Error('ไม่พบไฟล์ที่อัปโหลด');
 
-  const saved = await storage.put({ buffer: file.buffer, filename: file.originalname });
+  const saved = await storage.put({ buffer: file.buffer, ext: file.detectedExt });
 
   try {
     // url ว่างไว้ก่อน — ต้องรู้ id ของแถวก่อนถึงจะประกอบลิงก์ได้ (ลิงก์อ้าง id ไม่ใช่ file_key
@@ -402,7 +402,7 @@ async function getMediaFileTicket([cardId], user) {
   }
 
   const url = await storage.getFileUrl({
-    cardId: id, key: card.file_key, filename: card.file_name, user,
+    kind: 'media', id, key: card.file_key, filename: card.file_name, user,
   });
   return { url };
 }

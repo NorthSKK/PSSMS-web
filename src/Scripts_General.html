@@ -191,13 +191,11 @@ window.loadSarabunHistory = function() {
     tbody.innerHTML = _skelTbody(4);
     
     const user = getSessionUser();
-    const userName = user ? user.name : "";
-    const role = user ? user.role : "";
-
+    // ไม่ส่งชื่อ/role ไปแล้ว — server อ่านจาก JWT เอง (เดิมส่งไปทำให้ปลอม role ได้)
     safeRun().withSuccessHandler(function(data) {
         allSarabunData = data || []; // เก็บไว้ใช้ตอนค้นหา
         renderSarabunTable(allSarabunData);
-    }).getSarabunHistory(userName, role);
+    }).getSarabunHistory();
 };
 
 // 🌟 5. ฟังก์ชันวาดตาราง (ใช้ร่วมกับตอนค้นหา)
@@ -222,16 +220,13 @@ window.renderSarabunTable = function(dataList) {
 
             const btnCss = 'width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;';
             const btnStyle = `style="${btnCss}"`;
-            const disabledBtnStyle = `style="${btnCss}opacity:.4;cursor:not-allowed;"`;
             let fileHtml = '<div class="d-flex gap-1 justify-content-center">';
-            if (row.fileUrl && row.fileUrl !== "") {
-                fileHtml += `<a href="${row.fileUrl}" target="_blank" class="btn btn-sm btn-success rounded-circle" title="ดูไฟล์" ${btnStyle}><i class="fas fa-search" style="font-size:.75rem;"></i></a>`;
-            } else {
-                // แนบไฟล์ยังทำไม่ได้จริง — uploadSarabunFile เป็น stub ที่ไม่เก็บไฟล์
-                // เดิมปุ่มนี้กดได้แล้วขึ้น "สำเร็จ!" ทั้งที่ไฟล์หายไปเฉย ๆ ครูจึงเข้าใจผิดมาตลอด
-                // ปิดปุ่มไว้จนกว่าจะออกแบบสิทธิ์การเห็นไฟล์แนบสารบรรณ (ที่เก็บไฟล์พร้อมแล้ว)
-                fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" disabled title="ยังไม่เปิดให้แนบไฟล์" ${disabledBtnStyle}><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
+            // ไฟล์แนบไม่ได้เปิดสาธารณะ — ต้องขอลิงก์อายุสั้นก่อนทุกครั้ง (openSarabunFile)
+            const attachTitle = row.hasFile ? 'เปลี่ยนไฟล์แนบ' : 'แนบไฟล์';
+            if (row.hasFile) {
+                fileHtml += `<button class="btn btn-sm btn-success rounded-circle" title="${_escH(row.fileName || 'ดูไฟล์')}" ${btnStyle} onclick="openSarabunFile(${row.id})"><i class="fas fa-search" style="font-size:.75rem;"></i></button>`;
             }
+            fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" title="${attachTitle}" ${btnStyle} onclick="pickSarabunFile(${row.id},'${_escH(row.docNumber)}')"><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
             if (isAdmin) {
                 fileHtml += `<button class="btn btn-sm btn-outline-primary rounded-circle" title="แก้ไข" ${btnStyle} onclick="editSarabunRecord(${row.id})"><i class="fas fa-pen" style="font-size:.75rem;"></i></button>`;
                 fileHtml += `<button class="btn btn-sm btn-outline-danger rounded-circle" title="ลบ" ${btnStyle} onclick="confirmDeleteSarabun(${row.id},'${_escH(row.docNumber)}')"><i class="fas fa-trash" style="font-size:.75rem;"></i></button>`;
@@ -360,11 +355,61 @@ function _filterSarabunDataImpl() {
 window.filterSarabunData = (typeof debounce === 'function') ? debounce(_filterSarabunDataImpl, 180) : _filterSarabunDataImpl;
 
 // 🌟 7. ฟังก์ชันจัดการการอัปโหลดไฟล์ (ทำงานซ่อนหลังบ้าน)
+window.pickSarabunFile = function(id, docNum) {
+    document.getElementById('uploadTargetId').value = id;
+    document.getElementById('uploadTargetDocNum').value = docNum;
+    document.getElementById('sarabunFileInput').click();
+};
+
+// เปิดไฟล์แนบ — ขอลิงก์อายุสั้นก่อน ไฟล์ไม่ได้เปิดสาธารณะ
+window.openSarabunFile = function(id) {
+    safeRun().withSuccessHandler(function(res) {
+        window.open(res.url, '_blank', 'noopener');
+    }).withFailureHandler(function(err) {
+        Swal.fire('เปิดไฟล์ไม่ได้', err.message || String(err), 'error');
+    }).getSarabunFileTicket(id);
+};
+
 window.handleSarabunFileUpload = function(event) {
-    // ปุ่มแนบไฟล์ถูกปิดไว้แล้ว ฟังก์ชันนี้จึงไม่ควรถูกเรียก — กันไว้ไม่ให้กลับไปหลอกว่าสำเร็จ
-    event.target.value = '';
-    Swal.fire('ยังแนบไฟล์ไม่ได้',
-      'ระบบยังไม่มีที่เก็บไฟล์ งานสารบรรณจึงยังแนบไฟล์ไม่ได้ — แจ้งผู้ดูแลระบบ', 'info');
+    const input = event.target;
+    const file = input.files[0];
+    if (!file) return;
+
+    const id = document.getElementById('uploadTargetId').value;
+    const docNum = document.getElementById('uploadTargetDocNum').value;
+    input.value = ''; // เคลียร์ทันที เลือกไฟล์เดิมซ้ำจะได้ยิง onchange อีกครั้ง
+
+    if (file.size > 10 * 1024 * 1024) {
+        Swal.fire('ไฟล์ใหญ่เกินไป', 'จำกัดไม่เกิน 10 MB', 'error');
+        return;
+    }
+
+    Swal.fire({
+        title: 'กำลังอัปโหลด...',
+        html: `เอกสารเลขที่: <b>${_escH(docNum)}</b><br><small class="text-muted">${_escH(file.name)}</small>`,
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    // อัปโหลดไม่ผ่าน google.script.run เพราะ shim ส่งได้แต่ JSON (ดู routes/media.js)
+    fetch('/api/media/sarabun/' + encodeURIComponent(id), {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + (localStorage.getItem('pssms_jwt') || '') },
+        body: fd
+    })
+    .then(function(r) { return r.json().catch(function() { return { __error: 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ' }; }); })
+    .then(function(res) {
+        // ห้ามรายงานว่าสำเร็จเมื่อไฟล์ไม่ได้ขึ้นจริง — บั๊กเดิมของ uploadSarabunFile
+        if (res.__error) { Swal.fire('แนบไฟล์ไม่สำเร็จ', res.__error, 'error'); return; }
+        Swal.fire({ icon: 'success', title: 'แนบไฟล์เรียบร้อย', timer: 1400, showConfirmButton: false });
+        loadSarabunHistory();
+    })
+    .catch(function(err) {
+        Swal.fire('แนบไฟล์ไม่สำเร็จ', err.message || String(err), 'error');
+    });
 };
 
 // ============================================================

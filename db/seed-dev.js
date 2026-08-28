@@ -215,11 +215,12 @@ async function main() {
   // (สถานะ "ที่เก็บไฟล์" ของ Admin จะรายงานจำนวนไฟล์เกินจริง)
   const fsp = require('fs').promises;
   const nodePath = require('path');
+  const storeTypes = require('../lib/storage/types');
   for (const f of await fsp.readdir(store.ROOT).catch(() => [])) {
-    if (f.endsWith('.pdf')) await fsp.unlink(nodePath.join(store.ROOT, f)).catch(() => {});
+    if (storeTypes.isValidKey(f)) await fsp.unlink(nodePath.join(store.ROOT, f)).catch(() => {});
   }
   const pdfBuf = Buffer.from('%PDF-1.4\n% ไฟล์ทดสอบของ seed-dev\n%%EOF\n');
-  const saved = await store.put({ buffer: pdfBuf, filename: 'ใบความรู้หน่วย2.pdf' });
+  const saved = await store.put({ buffer: pdfBuf, ext: 'pdf' });
   // url ว่างโดยตั้งใจ — การ์ด PDF ออกลิงก์ใหม่ทุกครั้งที่ขอ (presigned / ตั๋ว) ไม่เก็บไว้
   await query(
     `INSERT INTO media_cards(title,subject_group,icon,color,meta,description,url,card_type,

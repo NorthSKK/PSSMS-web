@@ -50,7 +50,9 @@ const TEACHER_OR_ADMIN = new Set([
   'saveMorningActivityBatch', 'createClub', 'updateClub', 'teacherUpdateTimetableRow',
   'saveStudentRemarkDirectly', 'saveLeaveRequest', 'updateLeave', 'deleteLeave', 'reviewLeave',
   'saveSubstituteAssignment', 'confirmSubstitute', 'saveBudget', 'saveSarabun',
-  'requestSarabunNumber', 'updateTaskStatus', 'uploadSarabunFile',
+  'requestSarabunNumber', 'updateTaskStatus',
+  // ทะเบียนสารบรรณเป็นของบุคลากร ไม่ใช่ของนักเรียน — เดิมเรียกได้ทุก role
+  'getSarabunHistory', 'getSarabunFileTicket',
   'saveSavingsTransaction',
   'saveMediaCard', 'deleteMediaCard',
 ]);
@@ -212,9 +214,10 @@ const handlers = {
 
   // Sarabun
   getSarabunHistory:               require('../functions/getSarabunHistory'),
-  saveSarabun:                     (args) => sarabun.saveSarabun(args),
+  saveSarabun:                     (args, user) => sarabun.saveSarabun(args, user),
   deleteSarabun:                   (args) => sarabun.deleteSarabun(args),
-  requestSarabunNumber:            (args) => sarabun.requestSarabunNumber(args),
+  requestSarabunNumber:            (args, user) => sarabun.requestSarabunNumber(args, user),
+  getSarabunFileTicket:            (args, user) => sarabun.getSarabunFileTicket(args, user),
 
   // Budget
   getBudgets:                      (args) => budget.getBudgets(args),
@@ -243,7 +246,6 @@ const handlers = {
   setupClubDatabase:               () => missing.setupClubDatabase(),
   setupCurriculumDatabase:         () => missing.setupCurriculumDatabase(),
   saveStudentRemarkDirectly:       (args, user) => missing.saveStudentRemarkDirectly(args, user),
-  uploadSarabunFile:               (args) => missing.uploadSarabunFile(args),
   getTeacherListForDropdown:       () => missing.getTeacherListForDropdown(),
   getPrintConfigData:              (args) => missing.getPrintConfigData(args),
   generatePP5Template:             (args) => pp5.generatePP5Template(args),

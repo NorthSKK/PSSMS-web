@@ -374,9 +374,16 @@ CREATE TABLE IF NOT EXISTS sarabun (
   requester   TEXT,
   target_date DATE,
   status      TEXT DEFAULT 'รอดำเนินการ',
-  file_url    TEXT,
+  file_url    TEXT,                  -- legacy: ไม่ได้ใช้แล้ว (uploadSarabunFile เคยเป็น stub)
+  -- ไฟล์แนบ: key ในที่เก็บที่เลือกด้วย STORAGE_DRIVER — ดู lib/storage/
+  file_key    TEXT,
+  file_name   TEXT,
+  file_size   BIGINT,
   year        TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_sarabun_file_key
+  ON sarabun (file_key) WHERE file_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_sarabun_year ON sarabun(year);
 
