@@ -18,8 +18,7 @@
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
 const { SUBJECT_GROUP_BY_PREFIX } = require('../lib/subjectGroup');
-const store = require('../lib/fileStore');
-const jwt = require('jsonwebtoken');
+const storage = require('../lib/storage');
 
 // กลุ่มสาระ 8 กลุ่ม + กิจกรรมพัฒนาผู้เรียน — ใช้ค่าเดียวกับ subjectGroup.js จะได้ไม่มี 2 ชุด
 const SUBJECT_GROUPS = Array.from(new Set(Object.values(SUBJECT_GROUP_BY_PREFIX)));
@@ -59,6 +58,9 @@ const MAX = { title: 120, meta: 60, description: 300, url: 2000 };
 
 // 25MB ต่อไฟล์ — สื่อการสอนสแกนทั้งเล่มใหญ่กว่านี้ ควรบีบอัดก่อน และโควตารวมมีแค่ 15GB
 const MAX_UPLOAD_MB = 25;
+
+// ถังขยะ — ลบแล้วกู้คืนได้กี่วันก่อนหายถาวร (ทั้งแถวและไฟล์)
+const TRASH_DAYS = 30;
 
 function _role(user) {
   return String(user?.role || '').trim().toUpperCase();
@@ -254,7 +256,7 @@ async function createPdfCard({ payload, file }, user) {
   const c = _normalizeMeta(payload, user);
   if (!file || !file.buffer || !file.buffer.length) throw new Error('ไม่พบไฟล์ที่อัปโหลด');
 
-  const saved = await store.savePdf({ buffer: file.buffer, filename: file.originalname });
+  const saved = await storage.put({ buffer: file.buffer, filename: file.originalname });
 
   try {
     // url ว่างไว้ก่อน — ต้องรู้ id ของแถวก่อนถึงจะประกอบลิงก์ได้ (ลิงก์อ้าง id ไม่ใช่ file_key
@@ -269,19 +271,12 @@ async function createPdfCard({ payload, file }, user) {
        c.levels, c.isFeatured, String(user?.id || ''),
        saved.key, file.originalname || saved.name, saved.size]
     );
-    const id = rows[0].id;
-    const url = fileUrlFor(id);
-    await query(`UPDATE media_cards SET url=$1 WHERE id=$2`, [url, id]);
-    return { status: 'success', id, url, message: 'อัปโหลดและเพิ่มการ์ดเรียบร้อย' };
+    return { status: 'success', id: rows[0].id, message: 'อัปโหลดและเพิ่มการ์ดเรียบร้อย' };
   } catch (err) {
-    // เขียนตารางไม่สำเร็จหลังไฟล์ลงดิสก์แล้ว — เก็บกวาดทิ้ง อย่าปล่อยไฟล์กำพร้ากินพื้นที่
-    await store.trashFile(saved.key).catch(() => {});
+    // เขียนตารางไม่สำเร็จหลังไฟล์ขึ้นที่เก็บแล้ว — เก็บกวาดทิ้ง อย่าปล่อยไฟล์กำพร้ากินพื้นที่
+    await storage.remove(saved.key).catch(() => {});
     throw err;
   }
-}
-
-function fileUrlFor(cardId) {
-  return `/api/media/file/${cardId}`;
 }
 
 function _sizeLabel(bytes) {
@@ -289,46 +284,28 @@ function _sizeLabel(bytes) {
   return mb >= 1 ? `PDF · ${mb.toFixed(1)} MB` : `PDF · ${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-// soft delete — การ์ด PDF ย้ายไฟล์ลงถังขยะ Drive ด้วย (Google เก็บให้ 30 วัน พื้นที่คืนเอง)
+/**
+ * soft delete — **ไม่แตะไฟล์เลย** ถังขยะอยู่ที่ `deleted_at` ที่เดียว
+ * ไฟล์ถูกลบจริงตอน purgeExpiredCards() หลังพ้น 30 วัน
+ * (เคยย้ายไฟล์ตามด้วย ทำให้มีสถานะไม่ตรงกัน 2 ที่ และกู้คืนแล้วได้การ์ดที่เปิดไม่ได้)
+ */
 async function deleteMediaCard([id], user) {
   const existing = await _loadOwned(id, user);
   await query(`UPDATE media_cards SET deleted_at=NOW() WHERE id=$1 AND deleted_at IS NULL`,
     [existing.id]);
 
-  if (existing.file_key) {
-    try {
-      await store.trashFile(existing.file_key);
-    } catch (err) {
-      // การ์ดลบไปแล้วและกู้คืนได้ ไฟล์ค้างบน Drive ไม่คุ้มที่จะ rollback ทั้งการลบ
-      // แต่ต้องบอกให้รู้ว่าพื้นที่ยังไม่ถูกคืน ไม่ใช่รายงานว่าสำเร็จเฉย ๆ
-      return { status: 'success',
-        message: 'ลบการ์ดแล้ว แต่ย้ายไฟล์ลงถังขยะไม่สำเร็จ: ' + err.message };
-    }
-  }
   return { status: 'success', message: 'ลบการ์ดแล้ว กู้คืนได้จากถังขยะ' };
 }
 
 async function restoreMediaCard([id], user) {
   const cardId = parseInt(id, 10);
   if (!Number.isInteger(cardId)) throw new Error('ไม่พบการ์ดนี้');
-  const { rows } = await query(
+  // ไม่แตะไฟล์ — การ์ดที่พ้น 30 วันถูกลบทั้งแถวไปแล้ว ที่ยังอยู่ในถังขยะจึงมีไฟล์ครบเสมอ
+  const { rowCount } = await query(
     `UPDATE media_cards SET deleted_at=NULL, updated_at=NOW()
-     WHERE id=$1 AND deleted_at IS NOT NULL
-     RETURNING file_key`, [cardId]
+     WHERE id=$1 AND deleted_at IS NOT NULL`, [cardId]
   );
-  if (!rows.length) throw new Error('ไม่พบการ์ดนี้ในถังขยะ');
-
-  const fileKey = rows[0].file_key;
-  if (fileKey) {
-    try {
-      await store.untrashFile(fileKey);
-    } catch (err) {
-      // เกินกำหนดถังขยะแล้วไฟล์ถูกลบถาวร — การ์ดกลับมาแต่เปิดไม่ได้ ต้องบอกตรง ๆ
-      return { status: 'success',
-        message: 'กู้คืนการ์ดแล้ว แต่ไฟล์กู้ไม่ได้ (' + err.message +
-                 ') การ์ดนี้จะเปิดไฟล์ไม่ได้' };
-    }
-  }
+  if (!rowCount) throw new Error('ไม่พบการ์ดนี้ในถังขยะ');
   return { status: 'success', message: 'กู้คืนการ์ดแล้ว' };
 }
 
@@ -345,12 +322,58 @@ function getMediaCardOptions() {
   return { groups: SUBJECT_GROUPS, levels: LEVELS, icons: ICONS, colors: COLORS,
     groupDefaults: GROUP_DEFAULTS,
     maxUploadMB: MAX_UPLOAD_MB,
-    uploadEnabled: store.isConfigured() };
+    uploadEnabled: storage.isConfigured() };
 }
 
-// สถานะที่เก็บไฟล์สำหรับ Admin — พื้นที่ที่ใช้ไป และเตือนถ้ายังไม่ได้ mount Volume
+/**
+ * สถานะที่เก็บไฟล์สำหรับ Admin
+ * จำนวน/ขนาดมาจาก DB ไม่ใช่ไปไล่ list object — DB รู้อยู่แล้วและถูกกว่ามาก
+ */
 async function getMediaStorageStatus() {
-  return store.status();
+  const health = await storage.check();
+  const { rows } = await query(
+    `SELECT count(*)::int AS files,
+            COALESCE(sum(file_size), 0)::bigint AS usage,
+            count(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS trashed
+     FROM media_cards WHERE file_key IS NOT NULL`
+  );
+  return {
+    connected: health.ok,
+    driver: storage.driverName(),
+    reason: health.ok ? '' : health.detail,
+    detail: health.detail,
+    files: rows[0].files,
+    usage: Number(rows[0].usage),
+    trashed: rows[0].trashed,
+  };
+}
+
+/**
+ * กวาดการ์ดที่ลบเกิน 30 วัน — ลบ object ก่อน แล้วค่อยลบแถว
+ *
+ * ลำดับสำคัญ: ลบแถวก่อนแล้ว object ตกค้าง = ไฟล์กำพร้าที่ไม่มีอะไรชี้ถึงตลอดกาล
+ * ลบ object ไม่สำเร็จ = ข้ามใบนั้นไว้ให้รอบหน้า ดีกว่าปล่อยกำพร้า
+ * เรียกตอน boot ต่อจาก migration — deploy สัปดาห์ละครั้งก็พอกับ policy 30 วัน
+ */
+async function purgeExpiredCards({ log = console.log } = {}) {
+  const { rows } = await query(
+    `SELECT id, file_key FROM media_cards
+     WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '${TRASH_DAYS} days'`
+  );
+  let purged = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      if (row.file_key) await storage.remove(row.file_key);
+      await query(`DELETE FROM media_cards WHERE id=$1`, [row.id]);
+      purged++;
+    } catch (err) {
+      failed++;
+      log(`[purge] การ์ด ${row.id} ลบไฟล์ไม่สำเร็จ ข้ามไว้รอบหน้า: ${err.message}`);
+    }
+  }
+  if (purged || failed) log(`[purge] ลบการ์ดที่หมดอายุ ${purged} ใบ (ข้าม ${failed})`);
+  return { purged, failed };
 }
 
 /**
@@ -365,7 +388,7 @@ async function getMediaFileTicket([cardId], user) {
   if (!Number.isInteger(id)) throw new Error('ไม่พบการ์ดนี้');
 
   const { rows } = await query(
-    `SELECT id, card_type, file_key, visible_levels FROM media_cards
+    `SELECT id, card_type, file_key, file_name, visible_levels FROM media_cards
      WHERE id=$1 AND deleted_at IS NULL`, [id]
   );
   const card = rows[0];
@@ -378,12 +401,10 @@ async function getMediaFileTicket([cardId], user) {
     }
   }
 
-  const ticket = jwt.sign(
-    { cardId: id, uid: String(user?.id || '') },
-    process.env.JWT_SECRET,
-    { expiresIn: '10m' }
-  );
-  return { url: `${fileUrlFor(id)}?t=${encodeURIComponent(ticket)}` };
+  const url = await storage.getFileUrl({
+    cardId: id, key: card.file_key, filename: card.file_name, user,
+  });
+  return { url };
 }
 
 module.exports = {
@@ -392,11 +413,11 @@ module.exports = {
   createPdfCard,
   getMediaStorageStatus,
   getMediaFileTicket,
-  fileUrlFor,
+  purgeExpiredCards,
   deleteMediaCard,
   restoreMediaCard,
   getDeletedMediaCards,
   getMediaCardOptions,
   levelOf,
-  SUBJECT_GROUPS, LEVELS, ICONS, COLORS, MAX_UPLOAD_MB,
+  SUBJECT_GROUPS, LEVELS, ICONS, COLORS, MAX_UPLOAD_MB, TRASH_DAYS,
 };

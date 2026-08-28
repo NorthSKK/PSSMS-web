@@ -8,5 +8,6 @@ dark-sensor-*.json
 d3479eb6-*.json
 .DS_Store
 
-# ไฟล์สื่อการสอนตอน dev — production ใช้ Railway Volume
-storage/
+# ไฟล์สื่อการสอนตอน dev (production ใช้ object storage)
+# ต้องมี / นำหน้า ไม่งั้นกิน lib/storage/ ที่เป็นโค้ดจริงไปด้วย
+/storage/

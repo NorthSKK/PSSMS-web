@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
 const http = require('http');
 const { ok, denied, stop, TOKENS, baseURL, token } = require('./helpers/api');
 const { looksLikePdf, decodeFilename } = require('../routes/media');
-const store = require('../lib/fileStore');
+const store = require('../lib/storage/disk');
 
 after(stop);
 
@@ -130,7 +130,6 @@ test('อัปโหลดสำเร็จ → ได้การ์ด PDF �
   });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   const cardId = res.body.__result.id;
-  assert.equal(res.body.__result.url, `/api/media/file/${cardId}`);
 
   const card = await cardByTitle('อัปโหลดจากเทส');
   assert.equal(card.cardType, 'pdf');
@@ -189,6 +188,13 @@ test('การ์ด PDF ส่ง fileName/fileSize ให้ client', async (
   assert.equal(card.cardType, 'pdf');
   assert.equal(card.fileName, 'ใบความรู้หน่วย2.pdf');
   assert.ok(card.fileSize > 0);
+});
+
+test('การ์ด PDF ไม่เก็บ url ไว้ — ลิงก์ออกใหม่ทุกครั้งที่ขอ', async () => {
+  // เดิมเก็บ /api/media/file/:id ไว้ในคอลัมน์ url แต่พอ driver s3 คืน presigned URL
+  // ที่หมดอายุใน 5 นาที การเก็บ URL ไว้ในตารางไม่มีความหมายอีกต่อไป
+  const card = await cardByTitle(PDF_CARD);
+  assert.equal(card.url, '');
 });
 
 test('แก้การ์ด PDF เปลี่ยน url ไม่ได้ — ต้องชี้ไฟล์เดิมเสมอ', async () => {

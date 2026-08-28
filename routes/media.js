@@ -17,7 +17,7 @@ const requireAuth = require('../middleware/auth');
 const { teacherOrAdmin } = require('../lib/permissions');
 const cache = require('../lib/cache');
 const mediaCards = require('../functions/mediaCards');
-const store = require('../lib/fileStore');
+const storage = require('../lib/storage');
 const jwt = require('jsonwebtoken');
 const { query } = require('../lib/db');
 
@@ -81,7 +81,7 @@ router.post('/upload', requireAuth, (req, res) => {
   }
 
   // ไม่มีที่เก็บถาวร = ไม่รับไฟล์ ดีกว่ารับแล้วหายตอน deploy รอบหน้า
-  if (!store.isConfigured()) {
+  if (!storage.isConfigured()) {
     return res.status(503).json({
       __error: 'ยังไม่เปิดให้อัปโหลด PDF — แจ้งผู้ดูแลระบบ (การ์ดแบบลิงก์ยังใช้ได้ปกติ)',
     });
@@ -129,7 +129,13 @@ router.post('/upload', requireAuth, (req, res) => {
  * รองรับ Range เพราะ PDF viewer ของเบราว์เซอร์ขอเป็นช่วง ไม่งั้นไฟล์ใหญ่จะโหลดทั้งก้อน
  * ก่อนแสดงหน้าแรก
  */
-router.get('/file/:id', async (req, res) => {
+/**
+ * เสิร์ฟไฟล์เอง — **เฉพาะ driver `disk` เท่านั้น** (dev)
+ *
+ * production ใช้ driver `s3` ซึ่งคืน presigned URL ให้เบราว์เซอร์โหลดจาก object storage
+ * ตรง ๆ route นี้จึงไม่ถูก mount เลย (ดู module.exports ท้ายไฟล์)
+ */
+if (storage.driverName() === 'disk') router.get('/file/:id', async (req, res) => {
   const cardId = parseInt(req.params.id, 10);
   if (!Number.isInteger(cardId)) return res.status(400).send('คำขอไม่ถูกต้อง');
 
@@ -151,7 +157,7 @@ router.get('/file/:id', async (req, res) => {
 
   let stat;
   try {
-    stat = store.statSync(card.file_key);
+    stat = storage.disk.statSync(card.file_key);
   } catch {
     return res.status(400).send('ไฟล์ไม่ถูกต้อง');
   }
@@ -177,12 +183,12 @@ router.get('/file/:id', async (req, res) => {
       res.status(206);
       res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
       res.setHeader('Content-Length', end - start + 1);
-      return store.readStream(card.file_key, { start, end }).pipe(res);
+      return storage.disk.readStream(card.file_key, { start, end }).pipe(res);
     }
   }
 
   res.setHeader('Content-Length', stat.size);
-  store.readStream(card.file_key).pipe(res);
+  storage.disk.readStream(card.file_key).pipe(res);
 });
 
 module.exports = router;

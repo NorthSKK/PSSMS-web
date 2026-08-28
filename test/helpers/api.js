@@ -9,7 +9,7 @@
 process.env.NODE_ENV = 'test';
 require('dotenv').config();
 
-// อัปโหลด PDF เปิดเฉพาะเมื่อมีที่เก็บถาวร (lib/fileStore.js) — เทสต์ต้องเปิดไว้เสมอ
+// อัปโหลด PDF เปิดเฉพาะเมื่อตั้งที่เก็บไว้ (lib/storage/disk.js) — เทสต์ต้องเปิดไว้เสมอ
 // จะได้ครอบทั้ง flow แม้ production จะพักฟีเจอร์นี้ไว้
 if (!process.env.MEDIA_STORAGE_DIR) {
   process.env.MEDIA_STORAGE_DIR = require('path').join(__dirname, '../../storage/media');

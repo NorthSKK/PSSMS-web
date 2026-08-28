@@ -229,7 +229,7 @@ window.renderSarabunTable = function(dataList) {
             } else {
                 // แนบไฟล์ยังทำไม่ได้จริง — uploadSarabunFile เป็น stub ที่ไม่เก็บไฟล์
                 // เดิมปุ่มนี้กดได้แล้วขึ้น "สำเร็จ!" ทั้งที่ไฟล์หายไปเฉย ๆ ครูจึงเข้าใจผิดมาตลอด
-                // ปิดปุ่มไว้จนกว่าจะมีที่เก็บไฟล์จริง (ดู lib/fileStore.js — พักไว้เหมือนกัน)
+                // ปิดปุ่มไว้จนกว่าจะออกแบบสิทธิ์การเห็นไฟล์แนบสารบรรณ (ที่เก็บไฟล์พร้อมแล้ว)
                 fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" disabled title="ยังไม่เปิดให้แนบไฟล์" ${disabledBtnStyle}><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
             }
             if (isAdmin) {
@@ -1913,12 +1913,10 @@ function _mediaLoadStorageStatus() {
         return;
       }
       var mb = function(b) { return (Number(b || 0) / (1024*1024)).toFixed(1); };
-      var gb = function(b) { return (Number(b || 0) / (1024*1024*1024)).toFixed(1); };
       box.style.cssText = 'background:var(--p-accent-soft);color:var(--p-accent);';
-      box.textContent = 'ที่เก็บไฟล์: ปกติ · '
+      box.textContent = 'ที่เก็บไฟล์: ปกติ (' + (st.driver || '?') + ') · '
         + st.files + ' ไฟล์ · ใช้ไป ' + mb(st.usage) + ' MB'
-        + (st.free ? ' · พื้นที่ว่าง ' + gb(st.free) + ' GB' : '')
-        + (st.trashed ? ' · ถังขยะ ' + st.trashed + ' ไฟล์' : '');
+        + (st.trashed ? ' · อยู่ในถังขยะ ' + st.trashed + ' ใบ' : '');
     })
     .withFailureHandler(function() { box.classList.add('d-none'); })
     .getMediaStorageStatus();

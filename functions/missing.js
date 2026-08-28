@@ -387,8 +387,8 @@ async function saveStudentRemarkDirectly([studentId, subjectCode, term, year, re
  *    "สำเร็จ!" ให้ครูดู แล้วไฟล์หายไปเฉย ๆ ไม่มีใครรู้ว่าแนบไม่ติดมาตลอด
  *    ห้ามเปลี่ยนกลับไปคืน success จนกว่าจะเก็บไฟล์ได้จริง
  *
- * เปิดใช้เมื่อไหร่: ใช้ lib/fileStore.js ตัวเดียวกับสื่อการสอน (ตอนนี้พักไว้เพราะ
- * ยังไม่มีที่เก็บถาวรบน production — ดู WEB_DEV.md)
+ * เปิดใช้เมื่อไหร่: ใช้ lib/storage/ ตัวเดียวกับสื่อการสอน ซึ่งพร้อมแล้ว — เหลือแค่
+ * ตัดสินเรื่องสิทธิ์การเห็นไฟล์แนบ (ตาราง sarabun ไม่มี visible_levels) ยังไม่ได้ออกแบบ
  */
 async function uploadSarabunFile() {
   throw new Error('ยังไม่เปิดให้แนบไฟล์งานสารบรรณ — ระบบยังไม่มีที่เก็บไฟล์');

@@ -513,41 +513,61 @@ until curl -s https://pssms-web-production.up.railway.app/api/assets/script/Scri
 ⚠️ `.env.prod` มีแค่ `DATABASE_URL` ที่ตรงกับ production — **`JWT_SECRET` ไม่ตรง**
 กับที่ตั้งไว้บน Railway จึงใช้ mint token ยิง API production ไม่ได้
 
-### ที่เก็บไฟล์สื่อการสอน (อัปโหลด PDF) — **พักไว้**
+### ที่เก็บไฟล์สื่อการสอน (อัปโหลด PDF)
 
-โค้ดอัปโหลด PDF เขียนเสร็จและมีเทสต์ครบ แต่ **ปิดอยู่บน production** เพราะยังไม่มีที่เก็บถาวร
+เลือก driver ด้วย `STORAGE_DRIVER` — `lib/storage/`
 
-`lib/fileStore.js` เขียนไฟล์ลงดิสก์ที่ `MEDIA_STORAGE_DIR` **ไม่ตั้งตัวแปรนี้ = ฟีเจอร์ปิด**
-(`isConfigured()` เป็น false → ฟอร์มปิดตัวเลือก, endpoint ตอบ 503, Admin เห็นแถบ "อัปโหลด PDF: ปิดอยู่")
-ปิดโดยตั้งใจ ไม่ใช่ตั้งค่าตกหล่น — filesystem ของ Railway หายทุก deploy
-ถ้าเปิดทิ้งไว้ครูจะอัปได้แล้วไฟล์หายเงียบ ๆ
+| driver | ใช้ตอนไหน | ที่เก็บ |
+|---|---|---|
+| `disk` (default) | dev + รันเทสต์ | ดิสก์ที่ `MEDIA_STORAGE_DIR` |
+| `s3` | production | object storage ที่พูด S3 API (ตั้งใจใช้ Cloudflare R2) |
 
-**การ์ดแบบลิงก์ไม่ได้รับผลกระทบ ใช้งานได้ตามปกติ**
+ทำไมไม่ใช้ดิสก์บน production: Railway ไม่มีดิสก์ถาวรให้ service
+ทำไมไม่ใช้ Google Drive: publish OAuth เป็น production ต้องยืนยันโดเมน ซึ่ง
+`*.up.railway.app` เป็นของ Railway และถ้าค้างโหมด Testing token หมดอายุทุก 7 วัน
+ทำไมไม่ใช้ Postgres `bytea`: ระบบนี้ขายหลายโรงเรียน ไฟล์ใน DB ทำให้ restore ช้า
+ตอนที่อยากให้เร็วที่สุด และ blob 25MB จองการเชื่อมต่อจาก pool ที่มีแค่ 20 ตัว
 
-ทำไมไม่ใช้ Google Drive: publish OAuth consent screen เป็น production ต้องยืนยันความเป็น
-เจ้าของโดเมนใน Authorized domains แต่โฮสต์คือ `*.up.railway.app` ซึ่งเป็นของ Railway
-และถ้าค้างโหมด Testing refresh token จะหมดอายุทุก 7 วัน
+**ไม่ตั้งค่าให้ครบ = ปิดฟีเจอร์อัปโหลด** (ฟอร์มปิดตัวเลือก, endpoint ตอบ 503,
+Admin เห็นแถบ "อัปโหลด PDF: ปิดอยู่") — การ์ดแบบลิงก์ใช้ได้ตามปกติเสมอ
 
-**วิธีเปิดใช้งาน** — เลือกทางใดทางหนึ่ง:
+#### ตั้งค่า R2 ให้โรงเรียนใหม่
 
-1. **Railway Volume** (ตรงกับโค้ดปัจจุบัน ไม่ต้องแก้อะไร)
-   - canvas ของโปรเจกต์ → คลิกขวาที่ service `PSSMS-web` หรือ `Cmd+K` → Attach Volume
-     → mount path `/data` (ตอนเขียนเอกสารนี้ยังหาเมนูไม่เจอ อาจติดที่แพลน)
-   - Variables → `MEDIA_STORAGE_DIR=/data/media`
-   - Redeploy แล้วเช็คแถบสถานะบนหน้าสื่อการสอนว่าเป็น "ที่เก็บไฟล์: ปกติ"
+**1 bucket + 1 token ต่อ 1 โรงเรียน** — token หลุดจากโรงเรียนหนึ่งต้องไม่เห็นไฟล์ของอีกโรงเรียน
 
-2. **Object storage** (Vercel Blob / Cloudflare R2 / S3) — เขียน adapter ใหม่แทน
-   `lib/fileStore.js` โดยคง interface เดิม (`savePdf` / `statSync` / `readStream` /
-   `trashFile` / `untrashFile` / `status` / `isConfigured`) ที่เหลือไม่ต้องแตะ
+1. Cloudflare Dashboard → **R2** → **Create bucket** → ตั้งชื่อ `pssms-<ชื่อโรงเรียน>`
+   Location เลือก **APAC** · **ห้ามเปิด Public access** (ไฟล์เข้าถึงผ่าน presigned URL เท่านั้น)
+2. **R2 → Manage API Tokens → Create API Token**
+   - Permission **Object Read & Write**
+   - **Specify bucket** → เลือกเฉพาะ bucket ของโรงเรียนนั้น ← สำคัญ อย่าเลือก "All buckets"
+   - คัดลอก **Access Key ID** กับ **Secret Access Key** (โชว์ครั้งเดียว)
+3. Railway → service ของโรงเรียนนั้น → **Variables**:
 
-3. **Postgres `bytea`** — DB มี volume ถาวรอยู่แล้ว แลกกับ backup/restore ที่ช้าลง
+```
+STORAGE_DRIVER=s3
+S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
+S3_BUCKET=pssms-<ชื่อโรงเรียน>
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_REGION=auto
+```
 
-⚠️ **อย่าย้ายทั้งแอปไป Vercel เพื่อแก้เรื่องนี้** — Vercel ไม่มีดิสก์ถาวรเลย และ Serverless
-Functions รับ body ได้สูงสุด 4.5MB ซึ่งเล็กกว่าลิมิตอัปโหลด 25MB ของฟีเจอร์นี้
+`<account_id>` อยู่ที่หน้า R2 Overview มุมขวา
 
-**ที่ทำไว้แล้วและใช้ได้ทันทีเมื่อเปิด**: 25MB/ไฟล์, ตรวจ magic bytes `%PDF-`,
-rate limit 20 ไฟล์/ชม./คน, ถังขยะ 30 วันพร้อมกวาดอัตโนมัติ, และไฟล์ไม่เปิดสาธารณะ —
-เสิร์ฟผ่าน `GET /api/media/file/:id?t=<ticket>` ตั๋วอายุ 10 นาทีผูกกับการ์ดใบเดียว
+4. Redeploy → ล็อกอินเป็น Admin → หน้าสื่อการสอน แถบสถานะต้องขึ้น
+   `ที่เก็บไฟล์: ปกติ (s3)` ถ้าขึ้นแดงให้ดูข้อความต่อท้าย บอกว่าติดตรงไหน
+
+#### กลไกที่ควรรู้
+
+- **เปิดไฟล์**: `getMediaFileTicket` ตรวจ `visible_levels` แล้วคืน URL อายุสั้น —
+  driver `s3` คืน presigned URL (5 นาที) ให้เบราว์เซอร์โหลดจาก R2 ตรง **Railway ไม่แตะไฟล์เลย**
+  driver `disk` คืนตั๋ว JWT ชี้ `GET /api/media/file/:id?t=...` ซึ่ง **mount เฉพาะ driver disk**
+- **อัปโหลด**: ผ่าน backend เสมอ (ทั้งสอง driver) เพื่อคงการตรวจ magic bytes `%PDF-`
+  ขนาด 25MB และ rate limit — upload เป็น write path เกิดนาน ๆ ครั้ง ไม่คุ้มที่จะเลี่ยง
+- **ถังขยะ 30 วัน อยู่ที่ DB ไม่ใช่ที่ storage**: ลบการ์ด = ไม่แตะไฟล์, กู้คืน = ล้าง `deleted_at`
+  พ้น 30 วัน `purgeExpiredCards()` ลบ object ก่อนแล้วค่อยลบแถว (ลบแถวก่อน = ไฟล์กำพร้า)
+  เรียกตอน boot ต่อจาก migration ไม่ต้องมี cron
+- **เปลี่ยนผู้ให้บริการ** (B2 / MinIO / S3 จริง) = แก้ `S3_ENDPOINT` กับ key ไม่ต้องแตะโค้ด
 
 ### Environment Variables ที่ต้องตั้งใน Railway
 | Key | หมาย |

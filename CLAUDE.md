@@ -803,38 +803,37 @@ function section(fn) {
   เพราะบน dark mode พื้นอ่อน 13% กับตัวอักษรสีเดิม contrast ต่ำจนอ่านไม่ออก
 **การ์ดแบบ PDF (`card_type = 'pdf'`)**:
 
-- ไฟล์อยู่บนดิสก์ที่ `MEDIA_STORAGE_DIR` (Railway Volume) — `lib/fileStore.js`
-  เคยทำเป็น Google Drive แต่ publish OAuth เป็น production ต้องยืนยันโดเมน
-  ซึ่ง `*.up.railway.app` เป็นของ Railway ไม่ใช่ของโรงเรียน (ค้างโหมด Testing ก็ไม่ได้
-  เพราะ refresh token หมดอายุ 7 วัน) — ประวัติเต็มอยู่ในหัว `lib/fileStore.js`
-- ⚠️ **ตอนนี้ฟีเจอร์นี้ปิดอยู่บน production** — `MEDIA_STORAGE_DIR` ยังไม่ได้ตั้ง
-  `isConfigured()` จึงเป็น false: ฟอร์มปิดตัวเลือกอัปโหลด, endpoint ตอบ 503,
-  Admin เห็นแถบ "อัปโหลด PDF: ปิดอยู่" **ปิดโดยตั้งใจ** เพราะ filesystem ของ Railway
-  หายทุก deploy — เปิดทิ้งไว้ = ครูอัปได้แล้วไฟล์หายเงียบ ๆ
-  วิธีเปิด (Volume / object storage / bytea) อยู่ใน `WEB_DEV.md`
-  **การ์ดแบบลิงก์ไม่กระทบ** และเทสต์ตั้ง `MEDIA_STORAGE_DIR` เองใน `test/helpers/api.js`
-  จึงยังครอบ flow อัปโหลดครบ
-- อัปโหลดผ่าน `POST /api/media/upload` (`routes/media.js`) ไม่ใช่ `/api/gas`
-  **เส้นแบ่งคือ binary ไป REST ที่เหลือไป `/api/gas`** — ยัด base64 เข้า shim จะต้องดัน
-  `express.json` limit ที่เป็น global ขึ้นหลายสิบ MB ซึ่งเปิดช่อง DoS ให้ทุก endpoint
+- ที่เก็บไฟล์อยู่หลัง adapter `lib/storage/` เลือกด้วย `STORAGE_DRIVER`
+  `disk` (dev + เทสต์) / `s3` (production, Cloudflare R2) — เหตุผลที่ไม่ใช้ Drive,
+  Railway Volume, หรือ Postgres bytea อยู่ในหัวไฟล์ `lib/storage/s3.js`
+- **ตั้งค่าไม่ครบ = ปิดฟีเจอร์อัปโหลด** ไม่ใช่เขียนลงที่ชั่วคราวแล้วบอกว่าสำเร็จ
+  (`uploadEnabled=false`, endpoint 503, Admin เห็นแถบสถานะ) — การ์ดลิงก์ต้องใช้ได้เสมอ
+- **เปิดไฟล์**: `getMediaFileTicket` ตรวจ `visible_levels` แล้วให้ driver ออก URL อายุสั้น
+  · `s3` → presigned URL 5 นาที เบราว์เซอร์โหลดจาก R2 ตรง **Railway ไม่แตะไฟล์**
+  · `disk` → ตั๋ว JWT 10 นาที ชี้ `GET /api/media/file/:id?t=` ซึ่ง **mount เฉพาะ driver disk**
+  ทั้งสองแบบตรวจสิทธิ์ตอน *ออก* URL ไม่ใช่ตอนเสิร์ฟ — `window.open` แนบ Authorization
+  header ไม่ได้เพราะ JWT อยู่ใน localStorage ไม่ใช่ cookie
+- `media_cards.url` ของการ์ด PDF **เป็นค่าว่างเสมอ** ลิงก์ออกใหม่ทุกครั้งที่ขอ
+  (เก็บ presigned URL ที่หมดอายุใน 5 นาทีไว้ในตารางไม่มีความหมาย)
+- **อัปโหลดผ่าน backend เสมอ** ทั้งสอง driver — `POST /api/media/upload` (`routes/media.js`)
+  **เส้นแบ่งคือ binary ไป REST ที่เหลือไป `/api/gas`** · ยอมให้ byte วิ่งผ่าน Railway
+  ตอนอัปเพราะเป็น write path นาน ๆ ครั้ง และต้องเห็นไฟล์ถึงจะตรวจ magic bytes ได้
 - ด่านตรวจ: 25MB, MIME `application/pdf`, **magic bytes `%PDF-`** (ไม่เชื่อ MIME จาก client),
-  rate limit 20 ไฟล์/ชม./คน — ตรวจ metadata ให้ครบ *ก่อน* เขียนไฟล์ลงดิสก์เสมอ
+  rate limit 20 ไฟล์/ชม./คน — ตรวจ metadata ให้ครบ *ก่อน* เขียนไฟล์เสมอ
   ไม่งั้นได้ไฟล์กำพร้าที่กินพื้นที่โดยไม่มีแถวไหนชี้ถึง (insert ล้ม → ลบไฟล์ทิ้ง)
 - ⚠️ **busboy ถอด `filename` เป็น latin1** ชื่อไฟล์ภาษาไทยจะเป็น mojibake ตั้งแต่รับเข้ามา
   `decodeFilename()` แปลงกลับ อย่าถอดออก
-- ชื่อไฟล์บนดิสก์เป็น hex สุ่มล้วน ไม่เอาชื่อที่ครูตั้งมาประกอบ (กัน path traversal
-  และปัญหา encoding) — `safePath()` ยังตรวจซ้ำอีกชั้นแม้ค่าจะมาจาก DB
-- **ไฟล์ไม่เปิดสาธารณะ** เสิร์ฟที่ `GET /api/media/file/:id?t=<ticket>` รองรับ Range
-  ตั๋วอายุ 10 นาที ผูกกับการ์ดใบเดียว ออกโดย `getMediaFileTicket` ซึ่งตรวจ `visible_levels`
-  ก่อน — `window.open` ไม่แนบ Authorization header (JWT อยู่ใน localStorage ไม่ใช่ cookie)
-  จึงต้องผ่านตั๋ว ไม่ใช่ตรวจ header ที่ตัว route
+- ชื่อไฟล์ในที่เก็บเป็น hex สุ่มล้วน ไม่เอาชื่อที่ครูตั้งมาประกอบ (กัน path traversal
+  และปัญหา encoding) — ทั้งสอง driver ตรวจซ้ำอีกชั้นแม้ค่าจะมาจาก DB
 - `url` ของการ์ด PDF **แก้จากฟอร์มไม่ได้** — เปลี่ยนไฟล์ = ลบการ์ดแล้วอัปใหม่
-- ลบการ์ด → ไฟล์ย้ายเข้า `trash/` เก็บ 30 วัน (กวาดตอนลบครั้งถัดไป ไม่มี cron) กู้คืน → ย้ายกลับ
-  ถ้าขั้นตอนไฟล์ล้ม **ข้อความต้องบอกตรง ๆ ห้ามรายงานว่าสำเร็จ**
-- Admin เห็นแถบสถานะที่เก็บไฟล์บนหน้าสื่อการสอน (`getMediaStorageStatus`) —
-  จำนวนไฟล์ พื้นที่ที่ใช้/ว่าง ถังขยะ และคำเตือน ephemeral
-- ถ้าที่เก็บไฟล์เขียนไม่ได้: `getMediaCardOptions().uploadEnabled = false` ฟอร์มปิดตัวเลือก
-  อัปโหลด — **การ์ดแบบลิงก์ต้องใช้ได้ตามปกติเสมอ**
+- **ถังขยะ 30 วันอยู่ที่ `deleted_at` ที่เดียว ไม่แตะไฟล์**: ลบ = ไม่ทำอะไรกับ storage,
+  กู้คืน = ล้าง `deleted_at` (จึงไม่มีทางกู้แล้วได้การ์ดที่เปิดไฟล์ไม่ได้)
+  พ้น 30 วัน `purgeExpiredCards()` **ลบ object ก่อนแล้วค่อยลบแถว** — สลับลำดับเมื่อไหร่
+  ได้ไฟล์กำพร้าที่ไม่มีอะไรชี้ถึงตลอดกาล · รันตอน boot ต่อจาก migration ไม่มี cron
+- **1 bucket + 1 token ต่อ 1 โรงเรียน** จำกัด blast radius ตอน key หลุด — วิธีตั้งอยู่ใน `WEB_DEV.md`
+- driver `s3` เป็น path ที่ production ใช้แต่เทสต์อัตโนมัติไม่ครอบ (ไม่มี R2 ตอนรันเทส)
+  `test/storage.test.js` ล็อกเท่าที่ล็อกได้: การตรวจ key, รูปทรง presigned URL, การปิดตัวเองเมื่อ env ไม่ครบ
+  **แก้ `lib/storage/s3.js` แล้วต้อง smoke test บน production จริง**
 
 ### แนบไฟล์งานสารบรรณ — **ปิดอยู่**
 
@@ -846,8 +845,9 @@ function section(fn) {
 - ปุ่มคลิปหนีบกระดาษในตารางสารบรรณเป็น `disabled` + `opacity:.4` title "ยังไม่เปิดให้แนบไฟล์"
 - `uploadSarabunFile` **throw** ไม่ใช่คืน success — **ห้ามเปลี่ยนกลับ** จนกว่าจะเก็บไฟล์ได้จริง
 
-เปิดใช้เมื่อไหร่: ใช้ `lib/fileStore.js` ตัวเดียวกับสื่อการสอน (พักไว้เพราะ production
-ยังไม่มีที่เก็บถาวร — ดู `WEB_DEV.md`)
+เปิดใช้เมื่อไหร่: ใช้ `lib/storage/` ตัวเดียวกับสื่อการสอน ซึ่งพร้อมแล้ว —
+เหลือแค่ตัดสินเรื่องสิทธิ์การเห็นไฟล์แนบสารบรรณ (ตาราง `sarabun` ไม่มี `visible_levels`
+แบบสื่อการสอน) ยังไม่ได้ออกแบบ
 
 ### ป้ายบนตาราง "จัดการเรียนรู้วันนี้" (dashboard ครู)
 

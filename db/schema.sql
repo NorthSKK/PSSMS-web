@@ -415,7 +415,7 @@ CREATE TABLE IF NOT EXISTS media_cards (
   visible_levels TEXT[] NOT NULL DEFAULT '{}',
   is_featured    BOOLEAN NOT NULL DEFAULT FALSE,
   created_by     TEXT NOT NULL DEFAULT '',
-  -- การ์ดแบบ pdf: ไฟล์อยู่บนดิสก์ที่ MEDIA_STORAGE_DIR (Railway Volume) — ดู lib/fileStore.js
+  -- การ์ดแบบ pdf: ไฟล์อยู่ในที่เก็บที่เลือกด้วย STORAGE_DRIVER — ดู lib/storage/
   file_key       TEXT,
   file_name      TEXT,
   file_size      BIGINT,
