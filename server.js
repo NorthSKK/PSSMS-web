@@ -24,9 +24,18 @@ app.get('*', (req, res) => {
 // ephemeral port instead of racing the dev server on 3000.
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`PSSMS web running → http://localhost:${PORT}`);
-  });
+  // migration ต้องจบก่อนเปิดรับ request — แอปที่ขึ้นมาพร้อมตารางผิดรูปแย่กว่าแอปที่ไม่ขึ้น
+  // (เทสต์ require ไฟล์นี้แล้ว listen เอง จึงไม่ผ่านทางนี้ ไม่โดน migrate)
+  require('./db/migrate').runMigrations()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`PSSMS web running → http://localhost:${PORT}`);
+      });
+    })
+    .catch(err => {
+      console.error('[boot] migration ล้มเหลว ไม่เปิดเซิร์ฟเวอร์:', err.message);
+      process.exit(1);
+    });
 }
 
 module.exports = app;

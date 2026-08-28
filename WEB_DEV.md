@@ -334,19 +334,35 @@ cache.delPrefix('leave_');  // ลบทุก key ที่ขึ้นต้�
 
 ### Migrations
 
-ไม่มี migration framework — ใช้ raw SQL:
+รันเองตอน server boot — `db/migrate.js` ไล่ไฟล์ใน `db/migrations/` ที่ยังไม่เคยรัน
+เทียบกับตาราง `schema_migrations` **ไม่ต้องสั่งมือ deploy แล้ว migrate เอง**
+
+จำเป็นเพราะขายแบบ 1 โรงเรียน = 1 deployment + 1 DB — รันมือไหวแค่ตอนมีโรงเรียนเดียว
 
 ```bash
-node -e "
-require('dotenv').config();
-require('./lib/db').query(\`
-  ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS request_date TIMESTAMPTZ DEFAULT NOW();
-  CREATE INDEX IF NOT EXISTS idx_leave_status ON leave_records(status);
-\`).then(() => { console.log('Migration OK'); process.exit(); });
-"
+node db/migrate.js     # รันตรง ๆ ก็ได้ (dev / ตรวจสอบ)
 ```
 
-หลัง migration → restart server
+**เขียน migration ใหม่:**
+
+1. สร้าง `db/migrations/YYYY-MM-DD-ชื่อ.sql` (ชื่อเรียงตามตัวอักษร = เรียงตามเวลา)
+2. ⚠️ **แก้ `db/schema.sql` ให้ตรงกันด้วยเสมอ** — DB เปล่าของโรงเรียนใหม่สร้างจาก
+   `schema.sql` แล้ว baseline migration ทั้งกอง ไม่ได้ไล่รันทีละไฟล์
+   ถ้าลืม โรงเรียนใหม่จะได้ schema ที่ขาดของ (เคยหลุดจริงกับ FK ของ `substitute_assignments`)
+   มีเทสต์ดักไว้แล้วที่ `test/migrate.test.js`
+3. push — ทุก deployment จะ migrate เองตอน deploy
+
+**พฤติกรรมของตัวรัน:**
+
+| สภาพ DB | ทำอะไร |
+|---|---|
+| เปล่า (ไม่มีตาราง `users`) | รัน `schema.sql` แล้วบันทึกทุกไฟล์เป็น baseline |
+| มีข้อมูลแต่ยังไม่มี `schema_migrations` | บันทึกทุกไฟล์เป็น baseline (DB ที่ migrate มือมาก่อน) |
+| ปกติ | รันเฉพาะไฟล์ที่ยังไม่มีใน `schema_migrations` |
+
+- แต่ละไฟล์รันใน transaction เดียว พังกลางทาง = rollback ไม่เหลือ schema ครึ่ง ๆ
+- `pg_advisory_lock` กันสอง instance รันชนกันตอน deploy
+- **migration พัง = เซิร์ฟเวอร์ไม่ขึ้น** โดยตั้งใจ แอปที่ขึ้นมาพร้อมตารางผิดรูปแย่กว่าแอปที่ไม่ขึ้น
 
 ### Reset ข้อมูล (dev เท่านั้น)
 

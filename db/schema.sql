@@ -281,7 +281,9 @@ CREATE INDEX IF NOT EXISTS idx_leave_status ON leave_records(status);
 
 CREATE TABLE IF NOT EXISTS substitute_assignments (
   id                    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-  leave_id              TEXT REFERENCES leave_records(id),
+  -- ON DELETE SET NULL: ลบใบลาที่มีคาบสอนแทนผูกอยู่เคยพังทั้งคำสั่ง
+  -- (ตรงกับ db/migrations/2026-08-17-substitute-leave-fk.sql)
+  leave_id              TEXT REFERENCES leave_records(id) ON DELETE SET NULL,
   date                  DATE NOT NULL,
   period                TEXT,
   day_of_week           TEXT,
