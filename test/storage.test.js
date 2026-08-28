@@ -71,6 +71,13 @@ test('s3 presigned URL มีลายเซ็น วันหมดอาย�
   }
 });
 
+test('s3 driver เติม globalThis.crypto ให้ Node ที่ยังไม่เปิดเป็น global', () => {
+  // Node < 19 ไม่มี globalThis.crypto → aws4fetch พังด้วย "crypto is not defined"
+  // ตอนอัปโหลดเท่านั้น (เคยหลุดขึ้น production มาแล้ว เพราะ dev รัน Node ใหม่กว่า)
+  assert.ok(globalThis.crypto, 'require lib/storage/s3.js แล้วต้องมี globalThis.crypto');
+  assert.equal(typeof globalThis.crypto.subtle.sign, 'function');
+});
+
 test('disk driver ปฏิเสธ key ที่ไม่ใช่รูปแบบของเรา', () => {
   assert.throws(() => disk.safePath('../../etc/passwd'), /ชื่อไฟล์ไม่ถูกต้อง/);
   assert.doesNotThrow(() => disk.safePath('b'.repeat(32) + '.pdf'));
