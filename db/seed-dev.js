@@ -21,15 +21,9 @@ if (!process.env.MEDIA_STORAGE_DIR) {
 }
 const { query } = require('../lib/db');
 
-// parse hostname จริง อย่าใช้ regex — URL ของ dev ไม่มี user:pass เลยไม่มี '@'
-const url = String(process.env.DATABASE_URL || '');
-let host = '';
-try { host = new URL(url).hostname; } catch (_) { /* ปล่อยว่างไว้ ให้ตกไปที่ error ด้านล่าง */ }
-if (host !== 'localhost' && host !== '127.0.0.1') {
-  console.error('❌ DATABASE_URL ไม่ได้ชี้ localhost — ปฏิเสธการรัน กัน seed ทับ production');
-  console.error('   ตอนนี้ชี้ไปที่:', host || '(อ่าน DATABASE_URL ไม่ได้)');
-  process.exit(1);
-}
+// ด่านกัน seed ทับ production — ผ่านได้เฉพาะ localhost หรือ DB ที่ทำเครื่องหมายว่าเป็นเดโม
+// (lib/instance.js อธิบายว่าทำไมเครื่องหมายถึงอยู่ในฐานข้อมูลไม่ใช่ใน env)
+const { assertSafeToWipe } = require('../lib/instance');
 
 const TERM = '1', YEAR = '2569';
 
@@ -158,6 +152,8 @@ const HOLIDAYS = [
 ];
 
 async function main() {
+  await assertSafeToWipe('seed-dev.js');
+
   // ล้างเฉพาะตารางข้อมูล — system_settings / curriculum / print_config ก๊อปมาจาก prod ไว้แล้ว
   const wipe = [
     'score_history', 'score_database', 'qualitative_assess', 'grade_summary', 'subject_config',

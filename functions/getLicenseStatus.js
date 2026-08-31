@@ -7,9 +7,19 @@
  * ไม่ใช่เรื่องที่ครูต้องมากังวลกลางคาบ
  */
 const license = require('../lib/license');
+const cache = require('../lib/cache');
+const { isDemoDatabase } = require('../lib/instance');
 const { isAdmin } = require('../lib/permissions');
 
 module.exports = async function getLicenseStatus(_args, user) {
+  // เดโมมาก่อน — ผู้เข้ามาลองต้องรู้ตั้งแต่แรกว่าข้อมูลที่กรอกจะหายตอนตีสาม
+  if (await _isDemo()) {
+    return {
+      show: true, state: 'demo',
+      text: 'นี่คือระบบทดลอง กรอกอะไรก็ได้ตามสบาย ข้อมูลทั้งหมดจะถูกล้างกลับเป็นค่าตั้งต้นทุกคืน เวลา 03:00 น.',
+    };
+  }
+
   const { state, until, daysLeft } = await license.read();
 
   // ยังไม่ถึงกำหนด: เห็นเฉพาะ Admin และเห็นก็ต่อเมื่อเหลือน้อยกว่า 30 วัน
@@ -26,3 +36,13 @@ module.exports = async function getLicenseStatus(_args, user) {
 
   return { show: true, state, until, daysLeft, text };
 };
+
+// เช็คทุกครั้งที่เรนเดอร์หน้าแรก — แคชไว้ ไม่ต้องยิง DB ซ้ำ ค่านี้ไม่เปลี่ยนระหว่างรัน
+async function _isDemo() {
+  const hit = cache.get('is_demo');
+  if (hit !== null) return hit === 'yes';
+  let demo = false;
+  try { demo = await isDemoDatabase(); } catch (_) { demo = false; }
+  cache.set('is_demo', demo ? 'yes' : 'no', 300);
+  return demo;
+}

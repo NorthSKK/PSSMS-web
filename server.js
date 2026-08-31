@@ -31,6 +31,10 @@ if (require.main === module) {
       // กวาดไม่สำเร็จไม่ใช่เหตุให้แอปไม่ขึ้น — รอบหน้าค่อยกวาดใหม่
       console.error('[purge]', err.message);
     }))
+    // เดโมสาธารณะเท่านั้นที่ตัวนี้จะทำงาน — เครื่องโรงเรียนจริงเงียบสนิท
+    .then(() => require('./lib/demoReset').start().catch(err => {
+      console.error('[demo-reset]', err.message);
+    }))
     .then(() => {
       app.listen(PORT, () => {
         console.log(`PSSMS web running → http://localhost:${PORT}`);

@@ -269,10 +269,8 @@ function checkLicenseBanner() {
   if (!el) return;
   google.script.run.withSuccessHandler(function(st) {
     if (!st || !st.show) { el.className = 'd-none'; el.textContent = ''; return; }
-    var style = st.state === 'warn'
-      ? 'alert-warning'
-      : (st.state === 'grace' ? 'alert-danger' : 'alert-secondary');
-    var icon = st.state === 'locked' ? 'fa-lock' : 'fa-triangle-exclamation';
+    var style = { demo: 'alert-info', warn: 'alert-warning', grace: 'alert-danger' }[st.state] || 'alert-secondary';
+    var icon  = { demo: 'fa-flask', locked: 'fa-lock' }[st.state] || 'fa-triangle-exclamation';
     el.className = 'alert ' + style + ' border-0 rounded-0 mb-0 py-2 px-4 small fw-bold';
     // textContent — ข้อความมาจากเซิร์ฟเวอร์ก็จริง แต่ไม่มีเหตุให้ต้องเป็น HTML
     el.textContent = '';

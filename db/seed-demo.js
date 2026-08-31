@@ -26,12 +26,8 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const { query, pool } = require('../lib/db');
 
-let host = '';
-try { host = new URL(String(process.env.DATABASE_URL || '')).hostname; } catch (_) { /* ตกไป error */ }
-if (host !== 'localhost' && host !== '127.0.0.1') {
-  console.error('❌ DATABASE_URL ไม่ได้ชี้ localhost — ปฏิเสธการรัน');
-  process.exit(1);
-}
+// ด่านเดียวกับ seed-dev — localhost หรือ DB ที่ประกาศตัวว่าเป็นเดโมเท่านั้น
+const { assertSafeToWipe, isDemoDatabase } = require('../lib/instance');
 
 const SCHOOL = 'โรงเรียนสาธิตวิทยา';
 
@@ -63,11 +59,19 @@ const M6_NAMES = [
 ];
 
 async function main() {
+  const why = await assertSafeToWipe('seed-demo.js');
+
   console.log('🎬 เตรียมข้อมูลสำหรับถ่ายภาพหน้าจอ...');
 
   // ใช้โครงจาก seed-dev ทั้งหมด (ตารางสอน คะแนน เช็คชื่อ สอนแทน) แล้วค่อยเปลี่ยนชื่อทับ
   // ไม่คัดลอกตรรกะซ้ำ — seed-dev เป็นเจ้าของรูปร่างข้อมูลอยู่แล้ว
   execFileSync(process.execPath, [path.join(__dirname, 'seed-dev.js')], { stdio: 'pipe' });
+
+  // seed-dev ไม่ล้าง system_settings อยู่แล้ว แต่ถ้าวันหนึ่งมันล้าง เครื่องหมายเดโมจะหาย
+  // แล้วรอบถัดไปสคริปต์จะปฏิเสธตัวเอง — ตอกกลับไว้ให้แน่ใจ
+  if (why === 'demo' && !(await isDemoDatabase())) {
+    await require('../lib/instance').markDemo();
+  }
 
   for (const [username, name] of Object.entries(TEACHER_NAMES)) {
     await query(`UPDATE users SET full_name=$1 WHERE username=$2`, [name, username]);
