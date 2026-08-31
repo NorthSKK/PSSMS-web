@@ -15,3 +15,4 @@
 | [`WEB_DEV.md`](./WEB_DEV.md) | คู่มือ onboarding — setup, เพิ่ม endpoint/หน้าใหม่, deploy, pitfalls |
 | [`.claude/commands/`](./.claude/commands/) | slash command (`/dev`, `/debug`, `/migrate`, `/schema`, `/test-fn`) |
 | [`docs/agents/`](./docs/agents/) | issue tracker, triage labels, domain docs |
+| [`docs/plan-teacher-app.md`](./docs/plan-teacher-app.md) | แผนแอปสำหรับครูคนเดียว (ยังไม่เริ่มเขียน — มีประตูตัดสินใจ) |
