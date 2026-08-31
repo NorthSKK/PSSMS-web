@@ -1,8 +1,25 @@
 # PSSMS Web — Node + Railway PostgreSQL
 
-ระบบบริหารจัดการสถานศึกษา 4 ฝ่าย โรงเรียนภูพระบาทวิทยา — **web rewrite** ของ GAS prototype เดิม (อ่าน `../src/` เป็น reference เท่านั้น, ไม่ deploy ไป GAS แล้ว).
+ระบบบริหารจัดการสถานศึกษา 4 ฝ่าย — **web rewrite** ของ GAS prototype เดิม
+(อ่าน `../src/` เป็น reference เท่านั้น, ไม่ deploy ไป GAS แล้ว)
 
 พัฒนาโดย: ครูน๊อต ศิกษก เดินรีบรัมย์
+
+## โมเดลการติดตั้ง — สำคัญต่อทุกการตัดสินใจ
+
+ระบบนี้กำลังทำเป็น**ผลิตภัณฑ์ขายให้โรงเรียนอื่น** ไม่ใช่ระบบของโรงเรียนเดียวอีกต่อไป
+
+**1 โรงเรียน = 1 deployment + 1 database** ไม่ใช่ multi-tenant —
+ตั้งใจแลกความยุ่งของการดูแลหลาย deployment กับความเสี่ยงของบั๊ก tenant isolation
+ซึ่งถ้าหลุดคือข้อมูลนักเรียนโรงเรียนหนึ่งไปโผล่ที่อีกโรงเรียน
+
+ผลที่ตามมาที่ต้องจำ:
+- **ห้ามเขียนโค้ดที่สมมติว่ามีโรงเรียนเดียว** ในทางกลับกันก็ **ไม่ต้องใส่ `school_id`**
+  ทุกตาราง — แต่ละ DB มีโรงเรียนเดียวอยู่แล้ว
+- migration ต้องรันเองทุก deployment → `db/migrate.js` รันตอน boot
+- ชื่อโรงเรียนมาจาก `system_settings.schoolName` **อย่า hardcode**
+- โดเมน: `pssms.app` = เว็บขาย (repo `pssms-site`) · `<ชื่อย่อ>.pssms.app` = แอปของแต่ละโรงเรียน
+  ปัจจุบัน `pw.pssms.app` = ภูพระบาทวิทยา
 
 ---
 
@@ -21,15 +38,20 @@ Read-only = request ที่ไม่มีการแก้ไข file ใด
 
 ## Stack & Deploy
 
-- **Runtime:** Node.js 24, Express 4
+- **Runtime:** Node.js ≥ 20 (`engines` ใน package.json), Express 4
+  ⚠️ ตรึงไว้ ≥20 เพราะ `aws4fetch` เซ็นด้วย WebCrypto ผ่าน `globalThis.crypto`
+  ซึ่ง Node เพิ่งเปิดเป็น global ตั้งแต่ 19 — production เคยรัน 18 แล้วอัปโหลดพัง
+  ด้วย "crypto is not defined" ทั้งที่ dev ผ่านหมด (มี polyfill ใน `lib/storage/s3.js` กันไว้อีกชั้น)
 - **DB:** PostgreSQL (Railway), host `autorack.proxy.rlwy.net:47000` (จาก `DATABASE_URL`)
 - **Auth:** JWT (HS256, 90-day exp) — store ใน `localStorage.pssms_jwt`
 - **Frontend:** SPA `public/index.html` — bundle จาก GAS HTML files (Index.html + Pages + Scripts) ใช้ `gas-shim.js` เป็น polyfill ของ `google.script.run`
 - **Static + API:** server เดียว port 3000
+- **ที่เก็บไฟล์:** object storage ที่พูด S3 API (Cloudflare R2) ผ่าน `lib/storage/`
+  เลือก driver ด้วย `STORAGE_DRIVER` — `disk` ตอน dev/เทสต์, `s3` บน production
+- **Migration:** รันเองตอน boot (`db/migrate.js`) ไม่ต้องสั่งมือ
 
 ### Run dev server
 ```bash
-cd web
 node server.js          # หรือ npm run dev (nodemon)
 # Kill ก่อน restart:
 kill $(lsof -ti :3000) 2>/dev/null
@@ -41,6 +63,15 @@ DATABASE_URL=postgresql://localhost:5432/pssms_dev
 JWT_SECRET=long_random_string
 PORT=3000
 SPREADSHEET_ID=... (legacy — sheets.js ยังใช้สำหรับ migration ไม่ใช่ runtime)
+
+# ที่เก็บไฟล์ — ไม่ตั้ง = ปิดฟีเจอร์อัปโหลด (การ์ดลิงก์ยังใช้ได้)
+STORAGE_DRIVER=disk           # dev · production ใช้ s3
+MEDIA_STORAGE_DIR=            # ใช้เมื่อ driver=disk
+S3_ENDPOINT=                  # ใช้เมื่อ driver=s3 — 1 bucket + 1 token ต่อ 1 โรงเรียน
+S3_BUCKET=
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+S3_REGION=auto
 ```
 ดู `.env.example` (commit ไว้) เป็นแม่แบบ. `.gitignore` คลุม `.env.*` ทั้งหมดยกเว้น `.env.example`
 
@@ -134,10 +165,18 @@ web/
 ├── lib/
 │   ├── db.js                    PostgreSQL pool + query() helper (max:20, idleTimeout:30s)
 │   ├── cache.js                 in-memory TTL cache (get/set/del)
+│   ├── permissions.js           ตรวจสิทธิ์รายแถว/รายวิชา — ใช้ทุกที่ที่เขียนข้อมูล
+│   ├── storage/                 ที่เก็บไฟล์ เลือก driver ด้วย STORAGE_DRIVER
+│   │   ├── index.js             เลือก driver + interface ที่ทั้งสองต้องมี
+│   │   ├── disk.js              เขียนดิสก์ (dev/เทสต์)
+│   │   ├── s3.js                S3-compatible (production, Cloudflare R2)
+│   │   └── types.js             allowlist ชนิดไฟล์ + magic bytes
 │   └── sheets.js                legacy Google Sheets client (migration only)
 ├── middleware/                  auth + logging (loaded by routes)
 ├── routes/
 │   ├── gas.js                   handlers map + JWT verify + dispatcher
+│   ├── media.js                 ⭐ REST endpoints ตัวเดียวของ repo — อัปโหลดไฟล์
+│   │                              (binary ไป REST, ที่เหลือไป /api/gas)
 │   └── assets.js                non-GAS-style routes
 ├── functions/                   one file per logical domain
 │   ├── attendanceReport.js      ⭐ shared formula: getSemesterReport,
@@ -163,8 +202,18 @@ web/
 ├── public/
 │   ├── index.html               SPA shell (compiled from GAS HTML)
 │   └── gas-shim.js              google.script.run polyfill
-└── db/                          schema dumps / migration scripts
+└── db/
+    ├── schema.sql               schema เต็มปัจจุบัน — DB ใหม่สร้างจากไฟล์นี้
+    │                              ⚠️ เขียน migration แล้วต้องแก้ที่นี่ให้ตรงกันเสมอ
+    ├── migrate.js               ตัวรัน migration (เรียกตอน boot จาก server.js)
+    ├── migrations/              ส่วนต่างเรียงตามวันที่
+    ├── seed-dev.js              ข้อมูลปลอมสำหรับ dev/เทสต์ (ชื่อมีคำว่า "ทดสอบ")
+    └── seed-demo.js             ข้อมูลสำหรับถ่ายภาพลงเว็บขาย (ชื่อสมจริงแต่สมมติ)
 ```
+
+**repo ที่เกี่ยวข้อง**: `pssms-site` — เว็บขายที่ `pssms.app` (Cloudflare Workers + D1)
+แยก repo โดยตั้งใจ เพราะ push `main` ที่นี่ = deploy production ทันที
+การแก้คำโฆษณาไม่ควร restart ระบบที่ครูกำลังเช็คชื่ออยู่
 
 ---
 
@@ -1112,18 +1161,32 @@ USER_WRITE_FNS       → cache.delPrefix('students_'), cache.del('all_users_*')
 
 ## DB Migrations
 
-ไม่มี migration framework — ใช้ raw SQL ผ่าน `node -e` หรือ `psql` ตรง:
+**รันเองตอน server boot** — `db/migrate.js` ไล่ไฟล์ใน `db/migrations/` ที่ยังไม่เคยรัน
+เทียบกับตาราง `schema_migrations` · ไม่ต้องสั่งมือ deploy แล้ว migrate เอง
+
+จำเป็นเพราะ 1 โรงเรียน = 1 DB — รันมือไหวแค่ตอนมีโรงเรียนเดียว
+
 ```bash
-cd web
-node -e "
-require('dotenv').config();
-require('./lib/db').query(\`
-  ALTER TABLE foo ADD COLUMN IF NOT EXISTS bar TEXT DEFAULT '';
-\`).then(()=>{console.log('OK');process.exit();});
-"
+node db/migrate.js     # รันตรง ๆ ก็ได้ (dev / ตรวจสอบ)
 ```
 
-หลัง migration → restart server (`kill $(lsof -ti :3000); node server.js &`)
+**เขียน migration ใหม่:**
+
+1. สร้าง `db/migrations/YYYY-MM-DD-ชื่อ.sql` (ชื่อเรียงตามตัวอักษร = เรียงตามเวลา)
+2. ⚠️ **แก้ `db/schema.sql` ให้ตรงกันด้วยเสมอ** — DB เปล่าของโรงเรียนใหม่สร้างจาก
+   `schema.sql` แล้ว baseline migration ทั้งกอง ไม่ได้ไล่รันทีละไฟล์
+   ลืมแล้วโรงเรียนใหม่จะได้ schema ที่ขาดของ (เคยหลุดจริงกับ FK ของ `substitute_assignments`)
+   `test/migrate.test.js` สร้าง DB ชั่วคราวดักไว้แล้ว
+3. เขียนให้ idempotent (`IF NOT EXISTS`)
+
+| สภาพ DB | ตัวรันทำอะไร |
+|---|---|
+| เปล่า (ไม่มีตาราง `users`) | รัน `schema.sql` แล้วบันทึกทุกไฟล์เป็น baseline |
+| มีข้อมูลแต่ยังไม่มี `schema_migrations` | บันทึกทุกไฟล์เป็น baseline (DB ที่ migrate มือมาก่อน) |
+| ปกติ | รันเฉพาะไฟล์ที่ยังไม่มีใน `schema_migrations` |
+
+- แต่ละไฟล์รันใน transaction เดียว · `pg_advisory_lock` กันสอง instance ชนกัน
+- **migration พัง = เซิร์ฟเวอร์ไม่ขึ้น** โดยตั้งใจ แอปที่ขึ้นพร้อมตารางผิดรูปแย่กว่าแอปที่ไม่ขึ้น
 
 ---
 
@@ -1192,6 +1255,10 @@ test/
 - New endpoint → relevant section + frontend call example
 - Function signature → "Function Signature Convention" examples list
 - Bug fix ที่ behavior เปลี่ยน → conventions / relevant section
+- **Migration → แก้ `db/schema.sql` ให้ตรงกันด้วย** ไม่ใช่แค่เพิ่มไฟล์ใน `db/migrations/`
+  (DB ของโรงเรียนใหม่สร้างจาก `schema.sql` ไม่ได้ไล่รัน migration)
+- เพิ่มตารางที่เก็บ **ชื่อคนซ้ำ** (denormalised) → เพิ่มใน `NAME_COPIES` ของ `db/seed-demo.js`
+  ไม่งั้นภาพหน้าจอที่ใช้ขายจะมีชื่อเก่ากับใหม่ปนกัน
 
 ห้าม split code commit กับ doc commit — กัน doc drift
 
