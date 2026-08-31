@@ -30,6 +30,11 @@ window.initSarabunPage = function() {
 // 🌟 2. ฟังก์ชันซ่อน/โชว์ ฟิลด์ตามประเภทเอกสาร
 window.toggleSarabunFields = function() {
     const docType = document.getElementById('docType').value;
+
+    // เลือกประเภทในฟอร์มซ้าย = กรองทะเบียนฝั่งขวาให้เหลือประเภทนั้น
+    // ครูขอเลขประเภทไหนก็มักอยากดูของประเภทเดียวกันเพื่อเทียบเลขล่าสุด
+    syncSarabunTypeFilter(docType);
+
     
     const divSubject = document.getElementById('divSubject');
     const divAmount = document.getElementById('divAmount');
@@ -353,6 +358,21 @@ function _filterSarabunDataImpl() {
     renderSarabunTable(filtered);
 }
 window.filterSarabunData = (typeof debounce === 'function') ? debounce(_filterSarabunDataImpl, 180) : _filterSarabunDataImpl;
+
+/**
+ * ตั้งตัวกรองประเภทของทะเบียนให้ตรงกับที่เลือกในฟอร์มขอเลข
+ * ค่าใน <option> ของ #docType กับ #filterSarabunType ตรงกันอยู่แล้ว — เปลี่ยนที่ใดที่หนึ่ง
+ * ต้องแก้อีกที่ด้วย ไม่งั้นตัวกรองจะเงียบ ๆ ไม่ตรงกัน
+ */
+window.syncSarabunTypeFilter = function(docType) {
+    const filter = document.getElementById('filterSarabunType');
+    if (!filter) return;
+    const wanted = docType || 'ALL';
+    // ประเภทที่ไม่มีในตัวกรอง (หรือยังไม่ได้เลือก) → แสดงทั้งหมด ดีกว่าโชว์ตารางว่าง
+    const known = Array.prototype.some.call(filter.options, o => o.value === wanted);
+    filter.value = known ? wanted : 'ALL';
+    _filterSarabunDataImpl();
+};
 
 // 🌟 7. ฟังก์ชันจัดการการอัปโหลดไฟล์ (ทำงานซ่อนหลังบ้าน)
 window.pickSarabunFile = function(id, docNum) {
