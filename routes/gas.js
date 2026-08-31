@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { adminOnly, teacherOrAdmin, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
 const cache = require('../lib/cache');
+const license = require('../lib/license');
 
 // Functions that invalidate timetable-related caches on success
 const TIMETABLE_WRITE_FNS = new Set([
@@ -57,6 +58,45 @@ const TEACHER_OR_ADMIN = new Set([
   'saveMediaCard', 'deleteMediaCard',
 ]);
 
+// ---------------------------------------------------------------------------
+// โหมดอ่านอย่างเดียวเมื่อ licence หมดอายุพ้นช่วงผ่อนผัน (lib/license.js)
+//
+// นี่คือ **allowlist ไม่ใช่ denylist** โดยตั้งใจ: ฟังก์ชันใหม่ที่เพิ่มทีหลัง
+// จะถูกบล็อกไว้ก่อนจนกว่าจะมาเพิ่มชื่อที่นี่ ลืมแล้วพังตอน dev ดีกว่าลืมแล้ว
+// โรงเรียนที่หมดสัญญายังบันทึกข้อมูลได้เงียบ ๆ
+//
+// ทุกชื่อในลิสต์นี้ตรวจแล้วว่าไม่มี INSERT/UPDATE/DELETE
+// (getTodoList เขียนผ่าน export แยกชื่อ saveTodoList จึงปลอดภัย)
+//
+// ⚠️ generatePP5Template และ exportClubsForTerm ต้องอยู่ในลิสต์นี้เสมอ
+//    เป็นเอกสารราชการที่ครูมีหน้าที่ต้องออก ห้ามเอาไปผูกกับเรื่องค่าบริการ
+const READONLY_ALLOWED = new Set([
+    'getAdminDashboardBundle', 'getAllInOneScoreGridData', 'getAllLeaves',
+    'getAllSubjectsReport', 'getAllUsers', 'getAutoAssignPreview',
+    'getAvailableSubstitutes', 'getAvailableTerms', 'getBudgets',
+    'getCalendarEvents', 'getClassListForSavings', 'getClubAttendanceSummary',
+    'getClubList', 'getClubMembers', 'getClubMembersForTeacher',
+    'getCourseSessionList', 'getCurriculumBySubject', 'getCurriculumData',
+    'getDeletedMediaCards', 'getDetailedLessonRecords', 'getExecutiveDashboardBundle',
+    'getFilteredTimetables', 'getHomeroomAssignments', 'getLeaveRequestBundle',
+    'getMassiveAttendanceGrid', 'getMediaCardOptions', 'getMediaCards',
+    'getMediaFileTicket', 'getMediaStorageStatus', 'getMorningActivityData',
+    'getMyClub', 'getMyClubs', 'getPage',
+    'getPendingLeaves', 'getPendingSubstitutes', 'getPrintConfigData',
+    'getSarabunFileTicket', 'getSarabunHistory', 'getSavingsBalance',
+    'getSavingsHistory', 'getSavingsSummary', 'getSemesterReport',
+    'getStudentDashboardBundle', 'getStudentSummaryStats', 'getStudentsByClass',
+    'getStudentsByClub', 'getSubjectConfig', 'getSystemConfig',
+    'getTeacherAtRiskDashboard', 'getTeacherDashboardBundle', 'getTeacherListForClubDropdown',
+    'getTeacherListForDropdown', 'getTeacherRiskDashboard', 'getTeacherSubjects',
+    'getTeacherTimetable', 'getTeacherTimetableByDate', 'getTeacherTimetableWithStatus',
+    'getTeachersForTimetable', 'getTodayAttendanceHistory', 'getTodayMorningSummary',
+    'getTodoList',
+  'checkLogin',
+  'generatePP5Template', 'exportClubsForTerm',
+  'getLicenseStatus',
+]);
+
 const leaveBundle = require('../functions/getLeaveBundle');
 const attendance = require('../functions/attendance');
 const students = require('../functions/students');
@@ -80,6 +120,7 @@ const handlers = {
   // Auth
   checkLogin:                      require('../functions/checkLogin'),
   getSystemConfig:                 require('../functions/getSystemConfig'),
+  getLicenseStatus:                require('../functions/getLicenseStatus'),
   getAvailableTerms:               async () => {
     const { query } = require('../lib/db');
     const { rows } = await query(
@@ -305,6 +346,16 @@ router.post('/:fnName', async (req, res) => {
     else if (TEACHER_OR_ADMIN.has(fnName)) teacherOrAdmin(user);
   } catch (e) {
     return res.json({ __error: e.message });
+  }
+
+  // ปิดการเขียนเมื่อ licence หมดอายุพ้น grace — อ่าน พิมพ์ และ export ยังทำได้
+  if (!READONLY_ALLOWED.has(fnName) && await license.isLocked()) {
+    const { until } = await license.read();
+    return res.json({
+      __error: `หมดอายุการใช้งานเมื่อ ${until} ระบบอยู่ในโหมดอ่านอย่างเดียว บันทึกข้อมูลใหม่ไม่ได้ — ` +
+               'พิมพ์ ปพ.5 และ export ยังใช้ได้ตามปกติ ติดต่อผู้ดูแลเพื่อต่ออายุ',
+      __licenseLocked: true,
+    });
   }
 
   const handler = handlers[fnName];

@@ -257,6 +257,34 @@ function _silentRevalidate(credsB64) {
   } catch (e) {}
 }
 
+/**
+ * แถบแจ้งวันหมดอายุการใช้งาน
+ *
+ * เซิร์ฟเวอร์เป็นคนตัดสินว่าใครควรเห็นอะไร (functions/getLicenseStatus.js)
+ * ฝั่งนี้แค่แสดงผล — ห้ามเอา state มาใช้ตัดสินใจปิดปุ่มหรือกันการบันทึก
+ * การบังคับจริงอยู่ที่ READONLY_ALLOWED ใน routes/gas.js เท่านั้น
+ */
+function checkLicenseBanner() {
+  var el = document.getElementById('license-banner');
+  if (!el) return;
+  google.script.run.withSuccessHandler(function(st) {
+    if (!st || !st.show) { el.className = 'd-none'; el.textContent = ''; return; }
+    var style = st.state === 'warn'
+      ? 'alert-warning'
+      : (st.state === 'grace' ? 'alert-danger' : 'alert-secondary');
+    var icon = st.state === 'locked' ? 'fa-lock' : 'fa-triangle-exclamation';
+    el.className = 'alert ' + style + ' border-0 rounded-0 mb-0 py-2 px-4 small fw-bold';
+    // textContent — ข้อความมาจากเซิร์ฟเวอร์ก็จริง แต่ไม่มีเหตุให้ต้องเป็น HTML
+    el.textContent = '';
+    var i = document.createElement('i');
+    i.className = 'fas ' + icon + ' me-2';
+    el.appendChild(i);
+    el.appendChild(document.createTextNode(st.text || ''));
+  }).withFailureHandler(function() {
+    // เรียกไม่ได้ก็ไม่ต้องขึ้นอะไร ดีกว่าขึ้นคำเตือนผิด ๆ กลางคาบ
+  }).getLicenseStatus();
+}
+
 function _clearSavedSession() {
   localStorage.removeItem('pssms_user');
   localStorage.removeItem('pssms_user_savedAt');
@@ -510,6 +538,7 @@ function renderApp(user) {
   </div>`;
 
   if (showTermBadge) renderTermBadge(user);
+  checkLicenseBanner();
   
   let menuHTML = '';
   let startPage = '';
