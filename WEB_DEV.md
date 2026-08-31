@@ -521,6 +521,18 @@ renderTermProgressBar('myTermProgress', cfg);   // มี systemConfig จาก
 **push ขึ้น `main` = deploy production ทันที** — Railway auto-deploy จาก GitHub
 https://pssms-web-production.up.railway.app · ครูใช้จริง ไม่มี staging
 
+**โครงโดเมน** (จดไว้แล้ว ยังไม่ได้ชี้ทั้งหมด):
+
+| โดเมน | ชี้ไปไหน | สถานะ |
+|---|---|---|
+| `pssms.app` | เว็บขาย (repo `pssms-site` บน Cloudflare Workers) | ✅ ใช้งานแล้ว |
+| `<โรงเรียน>.pssms.app` | แอปของแต่ละโรงเรียนบน Railway | ยังไม่ได้ชี้ |
+
+โดเมนหลักเป็นของ **ผลิตภัณฑ์** ไม่ใช่ของโรงเรียนแรก — ภูพระบาทคือลูกค้ารายที่ 1
+ตอนย้าย: Railway → service → Settings → Networking → Custom Domain → `phuphrabat.pssms.app`
+แล้วเพิ่ม CNAME ตามที่ Railway บอกใน Cloudflare DNS (**Proxy = DNS only เมฆเทา** ตอนแรก
+ไม่งั้นการออก cert ของ Railway อาจติด) · ครูต้องเปลี่ยน bookmark ครั้งเดียว
+
 รอ build ~1-2 นาที แล้วเช็คว่าโค้ดใหม่ขึ้นจริงด้วยการ grep asset ที่เสิร์ฟอยู่:
 
 ```bash
