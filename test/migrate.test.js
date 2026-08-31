@@ -94,6 +94,31 @@ test('DB เปล่าของโรงเรียนใหม่ สร้�
     );
     assert.equal(fk.rows[0] && fk.rows[0].confdeltype, 'n',
       'FK ต้องเป็น ON DELETE SET NULL ตาม 2026-08-17-substitute-leave-fk.sql');
+    // ── ด่านกัน schema.sql เพี้ยนจากฐานข้อมูลที่ใช้งานจริง ──────────────────
+    // เทียบคอลัมน์ทีละตัวระหว่าง DB ที่เพิ่งสร้างกับ DB dev (ตัวแทนของโรงเรียนที่ใช้มานาน)
+    // เคยเพี้ยนจนตาราง savings_transactions หายทั้งตาราง และ score เป็น NUMERIC
+    // ทั้งที่ ปพ.5 ต้องเก็บ 'ร' 'มส' '-' — รู้ตัวตอนตั้งเครื่องเดโมเท่านั้น
+    const COLS = `SELECT table_name||'.'||column_name||' : '||data_type AS c
+                  FROM information_schema.columns
+                  WHERE table_schema='public' AND table_name<>'schema_migrations'
+                  ORDER BY 1`;
+    const freshCols = (await fresh.query(COLS)).rows.map(r => r.c);
+    const devCols   = (await query(COLS)).rows.map(r => r.c);
+
+    const missing = devCols.filter(c => !freshCols.includes(c));
+    const extra   = freshCols.filter(c => !devCols.includes(c));
+    assert.deepEqual(missing, [], `schema.sql ขาดของที่ DB จริงมี — โรงเรียนใหม่จะได้ระบบที่พัง:\n  ${missing.join('\n  ')}`);
+    assert.deepEqual(extra,   [], `schema.sql มีของที่ DB จริงไม่มี:\n  ${extra.join('\n  ')}`);
+
+    // seed ลงบน DB ที่สร้างจาก schema.sql ได้จริง — ข้อนี้คือข้อที่จับ NUMERIC vs TEXT ได้
+    execFileSync(process.execPath, ['db/seed-dev.js'], {
+      cwd: require('path').join(__dirname, '..'),
+      env: { ...process.env, DATABASE_URL: adminUrl(FRESH_DB) },
+      stdio: 'pipe',
+    });
+    const seeded = await fresh.query(`SELECT count(*)::int AS n FROM users`);
+    assert.ok(seeded.rows[0].n > 0, 'seed ลง DB ของโรงเรียนใหม่ไม่ได้');
+
   } finally {
     await fresh.end();
     if (created) {

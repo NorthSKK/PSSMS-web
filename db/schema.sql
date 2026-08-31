@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS subject_config (
   year          TEXT NOT NULL,
   score_ratio   TEXT,
   indicators_json JSONB,
+  exam_indicators_json JSONB,
   teacher_id    TEXT,
   PRIMARY KEY (subject_code, class_name, term, year)
 );
@@ -175,7 +176,8 @@ CREATE TABLE IF NOT EXISTS score_database (
   student_id    TEXT NOT NULL,
   subject_code  TEXT NOT NULL,
   indicator_id  TEXT NOT NULL,
-  score         NUMERIC,
+  -- TEXT ไม่ใช่ NUMERIC — ปพ.5 รับ 'ร', 'มส', '-' ไม่ได้มีแต่ตัวเลข
+  score         TEXT,
   term          TEXT NOT NULL,
   year          TEXT NOT NULL,
   PRIMARY KEY (student_id, subject_code, indicator_id, term, year)
@@ -191,6 +193,20 @@ CREATE TABLE IF NOT EXISTS qualitative_assess (
   reading_writing TEXT,
   char_json       JSONB,
   comp_json       JSONB,
+  -- คุณลักษณะอันพึงประสงค์ 4 ข้อ และอ่านคิดวิเคราะห์ 4 ข้อ — หน้า ปพ.5 อ่านจากคอลัมน์พวกนี้
+  char1           TEXT DEFAULT '',
+  char2           TEXT DEFAULT '',
+  char3           TEXT DEFAULT '',
+  char4           TEXT DEFAULT '',
+  char_total      INTEGER DEFAULT 0,
+  char_grade      INTEGER DEFAULT 0,
+  read1           TEXT DEFAULT '',
+  read2           TEXT DEFAULT '',
+  read3           TEXT DEFAULT '',
+  read4           TEXT DEFAULT '',
+  read_total      INTEGER DEFAULT 0,
+  read_grade      INTEGER DEFAULT 0,
+  comp            INTEGER DEFAULT 3,
   PRIMARY KEY (student_id, subject_code, term, year)
 );
 
@@ -206,6 +222,26 @@ CREATE TABLE IF NOT EXISTS grade_summary (
   PRIMARY KEY (student_id, subject_code, term, year)
 );
 
+-- ระบบเงินออม — ตารางนี้เคยหายไปจาก schema.sql ทั้งตาราง โรงเรียนใหม่จึงเปิดเมนูนี้ไม่ได้
+CREATE TABLE IF NOT EXISTS savings_transactions (
+  id            SERIAL PRIMARY KEY,
+  student_id    TEXT NOT NULL,
+  student_name  TEXT NOT NULL,
+  class         TEXT NOT NULL DEFAULT '',
+  type          TEXT NOT NULL CHECK (type IN ('deposit','withdraw')),
+  amount        NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  recorded_by   TEXT NOT NULL,
+  note          TEXT DEFAULT '',
+  date          DATE NOT NULL,
+  term          TEXT NOT NULL,
+  year          TEXT NOT NULL,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_savings_student    ON savings_transactions(student_id);
+CREATE INDEX IF NOT EXISTS idx_savings_class_term ON savings_transactions(class, term, year);
+CREATE INDEX IF NOT EXISTS idx_savings_date       ON savings_transactions(date);
+
 CREATE TABLE IF NOT EXISTS score_history (
   id            SERIAL PRIMARY KEY,
   timestamp     TIMESTAMPTZ DEFAULT NOW(),
@@ -213,8 +249,8 @@ CREATE TABLE IF NOT EXISTS score_history (
   student_id    TEXT,
   subject_code  TEXT,
   indicator_id  TEXT,
-  old_score     NUMERIC,
-  new_score     NUMERIC,
+  old_score     TEXT,
+  new_score     TEXT,
   term          TEXT,
   year          TEXT
 );
@@ -253,7 +289,8 @@ CREATE TABLE IF NOT EXISTS budgets (
   used_amount   NUMERIC DEFAULT 0,
   balance       NUMERIC GENERATED ALWAYS AS (budget_amount - used_amount) STORED,
   status        TEXT DEFAULT 'active',
-  year          TEXT NOT NULL
+  year          TEXT NOT NULL,
+  created_by    TEXT DEFAULT ''
 );
 
 -- ============================================================
