@@ -519,24 +519,27 @@ renderTermProgressBar('myTermProgress', cfg);   // มี systemConfig จาก
 ## 11. Deploy (Railway)
 
 **push ขึ้น `main` = deploy production ทันที** — Railway auto-deploy จาก GitHub
-https://pssms-web-production.up.railway.app · ครูใช้จริง ไม่มี staging
+https://pw.pssms.app · ครูใช้จริง ไม่มี staging
 
 **โครงโดเมน** (จดไว้แล้ว ยังไม่ได้ชี้ทั้งหมด):
 
 | โดเมน | ชี้ไปไหน | สถานะ |
 |---|---|---|
 | `pssms.app` | เว็บขาย (repo `pssms-site` บน Cloudflare Workers) | ✅ ใช้งานแล้ว |
-| `<โรงเรียน>.pssms.app` | แอปของแต่ละโรงเรียนบน Railway | ยังไม่ได้ชี้ |
+| `pw.pssms.app` | ภูพระบาทวิทยา (Railway) | ✅ ใช้งานแล้ว |
+| `<โรงเรียน>.pssms.app` | โรงเรียนถัดไป ตั้งชื่อย่อแบบเดียวกัน | — |
 
 โดเมนหลักเป็นของ **ผลิตภัณฑ์** ไม่ใช่ของโรงเรียนแรก — ภูพระบาทคือลูกค้ารายที่ 1
-ตอนย้าย: Railway → service → Settings → Networking → Custom Domain → `phuphrabat.pssms.app`
-แล้วเพิ่ม CNAME ตามที่ Railway บอกใน Cloudflare DNS (**Proxy = DNS only เมฆเทา** ตอนแรก
-ไม่งั้นการออก cert ของ Railway อาจติด) · ครูต้องเปลี่ยน bookmark ครั้งเดียว
+เปิดโรงเรียนใหม่: Railway → service → Settings → Networking → Custom Domain → `<ชื่อย่อ>.pssms.app`
+แล้วเพิ่ม CNAME ตามที่ Railway บอกใน Cloudflare DNS
+
+**URL เดิม `pssms-web-production.up.railway.app` ยังใช้ได้อยู่** เข้าได้ทั้งสองทาง
+ไม่ต้องรีบให้ครูเปลี่ยน bookmark
 
 รอ build ~1-2 นาที แล้วเช็คว่าโค้ดใหม่ขึ้นจริงด้วยการ grep asset ที่เสิร์ฟอยู่:
 
 ```bash
-until curl -s https://pssms-web-production.up.railway.app/api/assets/script/Scripts_General \
+until curl -s https://pw.pssms.app/api/assets/script/Scripts_General \
   | grep -q "<ชื่อฟังก์ชันใหม่>"; do sleep 10; done; echo DEPLOYED
 ```
 
@@ -699,7 +702,7 @@ node db/seed-dev.js
 DATABASE_URL=$(node -e "require('dotenv').config({path:'.env.prod'});process.stdout.write(process.env.DATABASE_URL)") node db/backfill-grade-summary.js
 
 # เช็คว่าโค้ดใหม่ขึ้น production แล้วหรือยัง (Railway auto-deploy จาก main)
-curl -s https://pssms-web-production.up.railway.app/api/assets/script/Scripts_General | grep -c "<ชื่อฟังก์ชันใหม่>"
+curl -s https://pw.pssms.app/api/assets/script/Scripts_General | grep -c "<ชื่อฟังก์ชันใหม่>"
 
 # ตรวจหน้าพิมพ์ว่าออกเป็น A4 แนวนอนจริง (A4 landscape = 841.92 x 594.96 pts)
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --no-pdf-header-footer \

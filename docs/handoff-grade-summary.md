@@ -149,7 +149,7 @@ git commit -m "fix: grade_summary ไม่ถูกเขียน — saveAllI
 git push
 ```
 
-Railway auto-deploy จาก `main` → https://pssms-web-production.up.railway.app
+Railway auto-deploy จาก `main` → https://pw.pssms.app
 
 **หลัง deploy ต้องรัน backfill ชี้ไปที่ production DB ด้วย** (ถ้า `.env` ในเครื่อง
 ชี้ Railway อยู่แล้ว ขั้น 2 ก็ครอบคลุมแล้ว — เช็ค `DATABASE_URL` ให้ชัวร์ก่อน)
