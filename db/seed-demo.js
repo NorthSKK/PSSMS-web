@@ -28,6 +28,7 @@ const { query, pool } = require('../lib/db');
 
 // ด่านเดียวกับ seed-dev — localhost หรือ DB ที่ประกาศตัวว่าเป็นเดโมเท่านั้น
 const { assertSafeToWipe, isDemoDatabase } = require('../lib/instance');
+const demoContent = require('./demo-content');
 
 const SCHOOL = 'โรงเรียนสาธิตวิทยา';
 
@@ -40,23 +41,6 @@ const TEACHER_NAMES = {
   teacher4: 'นายธนากร ศรีสุวรรณ',
   teacher5: 'นายพีรพล อินทรโชติ',
 };
-
-// ม.2/1 เต็มห้อง — หน้า ปพ.5 กับเช็คชื่อจะได้ดูเหมือนห้องเรียนจริง ไม่ใช่ตาราง 2 แถว
-const M2_NAMES = [
-  'เด็กชายกิตติพงษ์ ชัยวัฒน์', 'เด็กหญิงกัญญาณัฐ บุญมี',
-  'เด็กชายจิรายุ เพชรรัตน์',   'เด็กหญิงชนัญชิดา สุขสวัสดิ์',
-  'เด็กชายณัฐดนัย แก้วประเสริฐ', 'เด็กหญิงณิชากร พันธ์ทอง',
-  'เด็กชายธีรภัทร มงคลชัย',    'เด็กหญิงนภัสสร รุ่งเรือง',
-  'เด็กชายปวริศ อารีย์วงศ์',    'เด็กหญิงพิชญาภา คงทรัพย์',
-  'เด็กชายภูมิพัฒน์ สินสมบูรณ์', 'เด็กหญิงมนัสนันท์ ใจงาม',
-  'เด็กชายรัชชานนท์ โพธิ์ทอง',  'เด็กหญิงวรินทร ปัญญาดี',
-  'เด็กชายศุภกร เจริญสุข',     'เด็กหญิงสุพิชญา ทิพย์มณี',
-];
-
-const M6_NAMES = [
-  'นายกฤตเมธ วัฒนกุล', 'นางสาวจิดาภา ศิริพงศ์',
-  'นายชยพล เรืองศรี',  'นางสาวธัญชนก บวรกิจ',
-];
 
 async function main() {
   const why = await assertSafeToWipe('seed-demo.js');
@@ -82,27 +66,12 @@ async function main() {
       [name, username]).catch(() => {});
   }
 
-  // นักเรียนเดิม 6 คนของ seed-dev → เปลี่ยนชื่อ แล้วเติมให้ ม.2/1 เต็มห้อง
-  const existing = await query(`SELECT username, department FROM users WHERE role='Student' ORDER BY username`);
-  let m2 = 0, m6 = 0;
-  for (const row of existing.rows) {
-    const isM2 = String(row.department || '').startsWith('ม.2');
-    const name = isM2 ? M2_NAMES[m2++] : M6_NAMES[m6++];
-    if (name) await query(`UPDATE users SET full_name=$1 WHERE username=$2`, [name, row.username]);
-  }
-
-  // เติมนักเรียน ม.2/1 ให้ครบ 16 คน
   const { rows: cfg } = await query(`SELECT value1 FROM system_settings WHERE key='year' LIMIT 1`);
   const YEAR = (cfg[0] && cfg[0].value1) || '2569';
-  for (; m2 < M2_NAMES.length; m2++) {
-    const id = String(2001 + m2).padStart(5, '0');
-    await query(
-      `INSERT INTO users(username,password,full_name,role,department,email,year,status)
-       VALUES($1,'1234',$2,'Student','ม.2/1',$3,$4,'ปกติ')
-       ON CONFLICT (username) DO UPDATE SET full_name=EXCLUDED.full_name`,
-      [id, M2_NAMES[m2], `${id}@demo.local`, YEAR]
-    );
-  }
+
+  // ข้อมูลตัวอย่างของทุกเมนู อยู่ใน db/demo-content.js
+  const filled = await demoContent.fill({ term: '1', year: YEAR, teacherNames: TEACHER_NAMES });
+  for (const line of filled) console.log('   ·', line);
 
   /**
    * ชื่อคนถูก "คัดลอกเป็นข้อความ" ไว้ในอีกหลายตาราง (denormalised) ไม่ได้ join จาก users

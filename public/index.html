@@ -34,7 +34,9 @@
     <div class="container">
       <div class="row min-vh-100 align-items-center justify-content-center">
         <div class="col-md-5 col-lg-4">
-          <div class="pssms-card p-4 text-center" style="background: #fff;">
+          <!-- overflow ต้อง visible: dropdown เลือกบัญชีวางตัวนอกขอบการ์ด
+                 .pssms-card ตั้ง overflow:hidden ไว้ ทำให้รายการล่าง ๆ ถูกตัดและกดไม่โดน -->
+            <div class="pssms-card p-4 text-center" style="background: #fff; overflow: visible;">
             <div class="mb-4">
               <div id="loginLogoWrap" class="rounded-circle d-inline-flex justify-content-center align-items-center mb-3 overflow-hidden" style="width: 72px; height: 72px; background: var(--p-accent-soft); border: 1px solid var(--p-border); position:relative;">
                 <i id="loginLogoIcon" class="fas fa-school fa-lg" style="color: var(--p-accent);"></i>
@@ -54,7 +56,7 @@
                 <label for="username"><i class="fas fa-user me-2"></i>รหัสผู้ใช้งาน</label>
               </div>
               <div id="savedAccountsList" class="position-absolute w-100 bg-white border rounded-3 shadow"
-                   style="top:100%;left:0;z-index:1050;display:none;max-height:220px;overflow-y:auto;margin-top:2px;">
+                   style="top:100%;left:0;z-index:1050;display:none;max-height:340px;overflow-y:auto;margin-top:2px;">
               </div>
             </div>
 

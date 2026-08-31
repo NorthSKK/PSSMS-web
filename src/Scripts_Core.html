@@ -186,6 +186,7 @@ function checkAutoLogin() {
       _clearSavedSession();
       showLoader(false);
       document.getElementById('login-section').classList.remove('d-none');
+      initLoginScreen();
       return;
     }
     renderApp(JSON.parse(savedUser));
@@ -196,6 +197,7 @@ function checkAutoLogin() {
 
   showLoader(false);
   document.getElementById('login-section').classList.remove('d-none');
+  initLoginScreen();
 }
 
 function _attemptSilentRelogin(credsB64) {
@@ -216,16 +218,19 @@ function _attemptSilentRelogin(credsB64) {
       } else {
         _clearSavedSession();
         document.getElementById('login-section').classList.remove('d-none');
+        initLoginScreen();
       }
     }).withFailureHandler(function() {
       // Network blip — keep current state, show login
       showLoader(false);
       document.getElementById('login-section').classList.remove('d-none');
+      initLoginScreen();
     }).checkLogin(u, p);
   } catch (e) {
     _clearSavedSession();
     showLoader(false);
     document.getElementById('login-section').classList.remove('d-none');
+    initLoginScreen();
   }
 }
 
@@ -414,6 +419,59 @@ function _getSavedAccounts() {
   try { return JSON.parse(localStorage.getItem('pssms_saved_accounts') || '[]'); } catch (e) { return []; }
 }
 
+// บัญชีทดลองบทบาท — เซิร์ฟเวอร์เป็นคนตัดสินว่าเครื่องนี้เป็นเดโมหรือไม่ ไม่ใช่ฝั่งนี้เดาจาก URL
+var _demoAccounts = [];
+var _loginScreenInit = false;
+
+/**
+ * เตรียมหน้าล็อกอิน — เรียกได้จากหลายทาง (auto-login หมดอายุ, relogin ไม่ผ่าน, ออกจากระบบ)
+ * ทำงานครั้งเดียวพอ
+ */
+function initLoginScreen() {
+  if (_loginScreenInit) return;
+  _loginScreenInit = true;
+  loadLoginBranding();
+  loadDemoAccounts();
+}
+
+/**
+ * ชื่อและโลโก้โรงเรียนบนหน้าล็อกอิน
+ *
+ * เดิมอ่านจาก localStorage อย่างเดียว ซึ่งมีค่าก็ต่อเมื่อเคยล็อกอินสำเร็จมาแล้ว
+ * แปลว่าโรงเรียนที่เพิ่งติดตั้งจะเห็นชื่อที่ hardcode ไว้ใน Login.html
+ * (โรงเรียนภูพระบาทวิทยา) อยู่บนหน้าล็อกอินของตัวเอง จนกว่าจะมีคนเข้าระบบสักคน
+ * getSystemConfig อยู่ใน PUBLIC_FNS อยู่แล้ว จึงถามได้ตั้งแต่ยังไม่ล็อกอิน
+ */
+function loadLoginBranding() {
+  google.script.run.withSuccessHandler(function (cfg) {
+    if (!cfg) return;
+    if (cfg.schoolName) {
+      _applySchoolName(cfg.schoolName);
+      try { localStorage.setItem('pssms_school_name', cfg.schoolName); } catch (e) {}
+    }
+    if (cfg.schoolLogo) {
+      _applySchoolLogo(cfg.schoolLogo);
+      try { localStorage.setItem('pssms_school_logo', cfg.schoolLogo); } catch (e) {}
+    }
+  }).withFailureHandler(function () {}).getSystemConfig();
+}
+
+function loadDemoAccounts() {
+  google.script.run.withSuccessHandler(function (list) {
+    _demoAccounts = Array.isArray(list) ? list : [];
+    // ผู้ใช้อาจคลิกช่องไปแล้วระหว่างรอ — วาดใหม่ให้เห็นทันทีโดยไม่ต้องคลิกซ้ำ
+    if (_demoAccounts.length && document.activeElement === document.getElementById('username')) {
+      filterSavedAccounts(document.getElementById('username').value || '');
+    }
+  }).withFailureHandler(function () { _demoAccounts = []; }).getDemoAccounts();
+}
+
+function _esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function _saveAccount(username, password, res) {
   try {
     let accounts = _getSavedAccounts().filter(a => a.u !== username);
@@ -424,8 +482,7 @@ function _saveAccount(username, password, res) {
 }
 
 function showSavedAccounts() {
-  const accounts = _getSavedAccounts();
-  if (!accounts.length) return;
+  if (!_getSavedAccounts().length && !_demoAccounts.length) return;
   filterSavedAccounts(document.getElementById('username').value || '');
 }
 
@@ -434,34 +491,70 @@ function hideSavedAccounts() {
   if (el) el.style.display = 'none';
 }
 
+const _ROLE_ICON = {
+  ADMIN: 'fa-shield-alt text-danger', TEACHER: 'fa-chalkboard-teacher text-primary',
+  STUDENT: 'fa-user-graduate text-success', EXECUTIVE: 'fa-user-tie text-warning',
+};
+
+// บัญชีทดลองบทบาทบนเครื่องเดโม — รหัสผ่านเป็นของสาธารณะอยู่แล้ว จึงโชว์ได้
+function _demoAccountRow(a) {
+  const pass = btoa(unescape(encodeURIComponent(a.password)));
+  return `<div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom"
+               style="cursor:pointer;transition:.15s"
+               onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''"
+               onmousedown="fillAccount('${_esc(a.username)}','${_esc(pass)}')">
+            <i class="fas fa-play-circle fa-fw" style="color:var(--p-accent);"></i>
+            <div class="flex-grow-1 overflow-hidden">
+              <div class="fw-medium text-truncate" style="font-size:13px;">${_esc(a.label)}</div>
+              <div class="text-muted text-truncate" style="font-size:11px;">${_esc(a.hint)}</div>
+            </div>
+          </div>`;
+}
+
+function _savedAccountRow(a) {
+  const icon = _ROLE_ICON[(a.r || '').toUpperCase()] || 'fa-user text-muted';
+  return `<div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom"
+               style="cursor:pointer;transition:.15s"
+               onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''"
+               onmousedown="fillAccount('${_esc(a.u)}','${_esc(a.p)}')">
+            <i class="fas ${icon} fa-fw"></i>
+            <div class="flex-grow-1 overflow-hidden">
+              <div class="fw-medium text-truncate" style="font-size:13px;">${_esc(a.n)}</div>
+              <div class="text-muted text-truncate" style="font-size:11px;">${_esc(a.u)}</div>
+            </div>
+            <button class="btn btn-link p-0 ms-1" style="color:#dc3545;font-size:13px;line-height:1;"
+                    title="ลบบัญชีนี้"
+                    onmousedown="event.stopPropagation();removeSavedAccount('${_esc(a.u)}')">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>`;
+}
+
 function filterSavedAccounts(query) {
   const box = document.getElementById('savedAccountsList');
   if (!box) return;
-  const q = query.toLowerCase();
-  const accounts = _getSavedAccounts().filter(a =>
-    !q || a.u.toLowerCase().includes(q) || a.n.toLowerCase().includes(q)
-  );
-  if (!accounts.length) { box.style.display = 'none'; return; }
-  const roleIcon = { ADMIN: 'fa-shield-alt text-danger', TEACHER: 'fa-chalkboard-teacher text-primary', STUDENT: 'fa-user-graduate text-success', EXECUTIVE: 'fa-user-tie text-warning' };
-  box.innerHTML = accounts.map(a => {
-    const icon = roleIcon[(a.r || '').toUpperCase()] || 'fa-user text-muted';
-    const safeU = a.u.replace(/'/g,"\\'");
-    return `<div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom"
-                 style="cursor:pointer;transition:.15s"
-                 onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''"
-                 onmousedown="fillAccount('${safeU}','${a.p}')">
-              <i class="fas ${icon} fa-fw"></i>
-              <div class="flex-grow-1 overflow-hidden">
-                <div class="fw-medium text-truncate" style="font-size:13px;">${a.n}</div>
-                <div class="text-muted text-truncate" style="font-size:11px;">${a.u}</div>
-              </div>
-              <button class="btn btn-link p-0 ms-1" style="color:#dc3545;font-size:13px;line-height:1;"
-                      title="ลบบัญชีนี้"
-                      onmousedown="event.stopPropagation();removeSavedAccount('${safeU}')">
-                <i class="fas fa-times"></i>
-              </button>
-            </div>`;
-  }).join('');
+  const q = String(query || '').toLowerCase();
+  const match = (...fields) => !q || fields.some(f => String(f || '').toLowerCase().includes(q));
+
+  const demo = _demoAccounts.filter(a => match(a.username, a.label, a.name));
+  const saved = _getSavedAccounts().filter(a => match(a.u, a.n));
+
+  if (!demo.length && !saved.length) { box.style.display = 'none'; return; }
+
+  let html = '';
+  if (demo.length) {
+    html += `<div class="px-3 pt-2 pb-1 text-muted fw-medium"
+                  style="font-size:11px;letter-spacing:.02em;">เลือกบทบาทที่อยากลอง</div>`;
+    html += demo.map(_demoAccountRow).join('');
+  }
+  if (saved.length) {
+    if (demo.length) {
+      html += `<div class="px-3 pt-2 pb-1 text-muted fw-medium"
+                    style="font-size:11px;letter-spacing:.02em;">เคยเข้าจากเครื่องนี้</div>`;
+    }
+    html += saved.map(_savedAccountRow).join('');
+  }
+  box.innerHTML = html;
   box.style.display = 'block';
 }
 
@@ -504,6 +597,7 @@ function logout() {
     sessionStorage.clear();
     document.getElementById('main-app').classList.add('d-none');
     document.getElementById('login-section').classList.remove('d-none');
+    initLoginScreen();
     document.getElementById('username').value = '';
     document.getElementById('password').value = '';
   }

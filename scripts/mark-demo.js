@@ -42,7 +42,10 @@ async function main() {
 
   const { rows } = await query(`SELECT COUNT(*)::int AS n FROM users`);
   const n = rows[0].n;
-  if (n > REAL_SCHOOL_USERS && !args.includes('--force')) {
+  // ด่านนี้มีไว้กันการติดเครื่องหมายให้ DB ของโรงเรียนจริง — ถ้าติดอยู่แล้วก็ไม่มีอะไรให้กัน
+  // (เดโมโตขึ้นได้จากการเพิ่มข้อมูลตัวอย่าง ไม่ควรกลายเป็นว่า mark ซ้ำไม่ได้)
+  const alreadyDemo = await instance.isDemoDatabase();
+  if (!alreadyDemo && n > REAL_SCHOOL_USERS && !args.includes('--force')) {
     console.error(`❌ ฐานข้อมูลนี้มีผู้ใช้ ${n} คน — มากเกินกว่าจะเป็นเดโม`);
     console.error(`   ที่: ${host()}  ดูเหมือนชี้ผิดไปที่โรงเรียนจริง ปฏิเสธการทำเครื่องหมาย`);
     process.exit(1);

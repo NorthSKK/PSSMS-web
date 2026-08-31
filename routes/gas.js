@@ -21,7 +21,7 @@ const USER_WRITE_FNS = new Set([
 ]);
 
 // Functions callable without a valid session token
-const PUBLIC_FNS = new Set(['checkLogin', 'getSystemConfig']);
+const PUBLIC_FNS = new Set(['checkLogin', 'getSystemConfig', 'getDemoAccounts']);
 
 const ADMIN_ONLY = new Set([
   'addUser', 'editUser', 'deleteUser', 'importStudentCSV', 'importTeacherCSV',
@@ -94,7 +94,7 @@ const READONLY_ALLOWED = new Set([
     'getTodoList',
   'checkLogin',
   'generatePP5Template', 'exportClubsForTerm',
-  'getLicenseStatus',
+  'getLicenseStatus', 'getDemoAccounts',
 ]);
 
 const leaveBundle = require('../functions/getLeaveBundle');
@@ -120,6 +120,7 @@ const handlers = {
   // Auth
   checkLogin:                      require('../functions/checkLogin'),
   getSystemConfig:                 require('../functions/getSystemConfig'),
+  getDemoAccounts:                 require('../functions/getDemoAccounts'),
   getLicenseStatus:                require('../functions/getLicenseStatus'),
   getAvailableTerms:               async () => {
     const { query } = require('../lib/db');

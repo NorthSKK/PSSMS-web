@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const { execFile } = require('node:child_process');
 const path = require('node:path');
 const { ok, stop } = require('./helpers/api');
+const { query } = require('../lib/db');
 const instance = require('../lib/instance');
 const cache = require('../lib/cache');
 
@@ -116,4 +117,53 @@ test('bootstrap ปฏิเสธถ้าฐานข้อมูลมีผ�
   } finally {
     delete process.env.DEMO_BOOTSTRAP;
   }
+});
+
+// ------------------------------------------------- บัญชีทดลองบทบาทบนหน้าล็อกอิน
+
+test('ไม่ใช่เดโม — ต้องไม่บอกบัญชีใด ๆ ออกไป', async () => {
+  cache.del('is_demo');
+  const list = await ok('getDemoAccounts');
+  assert.deepEqual(list, [], 'เครื่องโรงเรียนจริงห้ามประกาศบัญชีให้คนนอก');
+});
+
+test('เป็นเดโม — เรียกได้โดยไม่ต้องล็อกอิน และได้บทบาทให้เลือก', async () => {
+  await instance.markDemo();
+  cache.del('is_demo');
+  // ไม่ส่ง token — หน้าล็อกอินยังไม่มี session จะเรียกไม่ได้ถ้าไม่ได้อยู่ใน PUBLIC_FNS
+  const list = await ok('getDemoAccounts');
+  assert.ok(list.length >= 2, 'ต้องมีอย่างน้อยครูกับผู้ดูแลให้เลือก');
+  for (const a of list) {
+    assert.ok(a.username && a.label && a.password, 'ทุกรายการต้องกดแล้วล็อกอินได้จริง');
+  }
+  assert.ok(list.some(a => a.username === 'teacher2'), 'ครูผู้สอนคือบทบาทหลักที่ต้องมี');
+});
+
+test('ห้ามอ่านรหัสผ่านจริงจากตาราง users ออกไป', async () => {
+  // ถ้าเครื่องของโรงเรียนถูกทำเครื่องหมายเป็นเดโมโดยพลาด ปลายทางนี้เรียกได้โดยไม่ต้องล็อกอิน
+  // สิ่งที่หลุดต้องเป็นค่าคงที่ในโค้ด ไม่ใช่รหัสผ่านของครูจริง
+  const { rows } = await query(`SELECT password FROM users WHERE username='teacher2'`);
+  const original = rows[0].password;
+  await query(`UPDATE users SET password='ความลับของครูจริง' WHERE username='teacher2'`);
+  try {
+    await instance.markDemo();
+    cache.del('is_demo');
+    const list = await ok('getDemoAccounts');
+    const t2 = list.find(a => a.username === 'teacher2');
+    assert.ok(t2, 'teacher2 ต้องยังอยู่ในลิสต์');
+    assert.notEqual(t2.password, 'ความลับของครูจริง', 'รหัสผ่านจาก DB ห้ามหลุดออกไปเด็ดขาด');
+    assert.equal(t2.password, '1234');
+  } finally {
+    await query(`UPDATE users SET password=$1 WHERE username='teacher2'`, [original]);
+  }
+});
+
+test('บัญชีที่ไม่มีอยู่จริงต้องไม่ถูกเสนอ', async () => {
+  await instance.markDemo();
+  cache.del('is_demo');
+  const list = await ok('getDemoAccounts');
+  const { rows } = await query(
+    `SELECT username FROM users WHERE username = ANY($1)`, [list.map(a => a.username)]
+  );
+  assert.equal(rows.length, list.length, 'ทุกบัญชีที่เสนอต้องมีอยู่ใน users จริง');
 });
