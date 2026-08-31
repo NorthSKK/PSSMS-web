@@ -94,3 +94,26 @@ test('bangkokNow คืนวันและชั่วโมงตามเว
   const expect = new Date(Date.now() + 7 * 3600000).getUTCHours();
   assert.equal(hour, expect);
 });
+
+// ------------------------------------------------------- bootstrap ครั้งแรก
+
+test('bootstrap ไม่ทำอะไรถ้าไม่ได้ตั้ง DEMO_BOOTSTRAP', async () => {
+  delete process.env.DEMO_BOOTSTRAP;
+  await require('../lib/demoBootstrap').run();
+  assert.equal(await instance.isDemoDatabase(), false);
+});
+
+test('bootstrap ปฏิเสธถ้าฐานข้อมูลมีผู้ใช้อยู่แล้ว', async () => {
+  // DB ของเทสต์ seed มาแล้ว จึงมีผู้ใช้ — เป็นตัวแทนของเครื่องโรงเรียนจริง
+  const { rows } = await require('../lib/db').query(`SELECT COUNT(*)::int AS n FROM users`);
+  assert.ok(rows[0].n > 0, 'เทสต์นี้ต้องรันบน DB ที่มีข้อมูล');
+
+  process.env.DEMO_BOOTSTRAP = '1';
+  try {
+    await require('../lib/demoBootstrap').run();
+    assert.equal(await instance.isDemoDatabase(), false,
+      'env ถูกตั้งผิดเครื่องต้องไม่ทำให้ DB ที่มีคนใช้อยู่กลายเป็นเดโม');
+  } finally {
+    delete process.env.DEMO_BOOTSTRAP;
+  }
+});
