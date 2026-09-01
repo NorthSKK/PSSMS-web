@@ -14,15 +14,23 @@
   <!-- แถบรวมทั้งโรงเรียน -->
   <div class="ar-bar" id="tpTotals"></div>
 
+  <!-- สามคอลัมน์นับคนละหน่วย ต้องบอกให้ชัดว่านับอะไรจากอะไร -->
+  <p class="tp-legend">
+    <b>เช็คชื่อ</b> คาบที่เช็คแล้ว จากคาบที่ตารางสอนบอกว่าควรสอน (ตั้งแต่เปิดเทอมถึงวันนี้ ไม่นับวันหยุด) ·
+    <b>ตั้งค่าวิชา</b> วิชาที่ตั้งโครงสร้างคะแนนแล้ว จากวิชาที่สอน ·
+    <b>กรอกคะแนน</b> นักเรียนที่ตัดเกรดได้แล้ว จากนักเรียนทั้งหมดในห้องที่สอน
+    <span class="tp-legend-note">ตัวเลขบอกความคืบหน้า ณ ตอนนี้ ยังไม่ครบไม่ได้แปลว่าค้าง — บางส่วนยังไม่ถึงกำหนด</span>
+  </p>
+
   <div class="pssms-card p-0">
     <div class="ar-scroll">
       <table class="table table-sm mb-0 tp-table">
         <thead>
           <tr>
             <th class="tp-col-name">ครู</th>
-            <th class="tp-col-metric">เช็คชื่อ</th>
-            <th class="tp-col-metric">ตั้งค่าวิชา</th>
-            <th class="tp-col-metric">กรอกคะแนน</th>
+            <th class="tp-col-metric">เช็คชื่อ <span class="tp-unit">คาบ</span></th>
+            <th class="tp-col-metric">ตั้งค่าวิชา <span class="tp-unit">วิชา</span></th>
+            <th class="tp-col-metric">กรอกคะแนน <span class="tp-unit">คน</span></th>
           </tr>
         </thead>
         <tbody id="tpBody">

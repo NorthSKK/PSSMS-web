@@ -1885,19 +1885,28 @@ function initTeacherProgressPage(force) {
     .getTeacherProgressBoard();
 }
 
-// เม็ดวัด — คืน <td> พร้อมแถบและตัวเลข · expected=0 แปลว่า "ไม่มีให้ทำ" ไม่ใช่ "ทำไม่ครบ"
-function _tpMeterCell(m) {
+// เม็ดวัด — % เป็นตัวหลัก (ใช้กวาดตาเทียบครูหลายคน) เศษส่วนเป็นตัวรอง (ใช้ตอนจะไปคุยกับเจ้าตัว)
+// expected=0 แปลว่า "ไม่มีให้ทำ" ไม่ใช่ "ทำไม่ครบ" — ขึ้น — ไม่ใช่ 0%
+function _tpMeterCell(m, unit) {
   var td = document.createElement('td');
   if (!m || !m.expected) {
     var na = document.createElement('span');
     na.className = 'tp-meter-na';
     na.textContent = '—';
+    na.title = 'ไม่มีรายการที่ต้องทำในช่องนี้';
     td.appendChild(na);
     return td;
   }
   var pct = Math.round((m.done / m.expected) * 100);
   var wrap = document.createElement('div');
   wrap.className = 'tp-meter' + (m.done >= m.expected ? ' tp-meter-full' : '');
+
+  var pctEl = document.createElement('span');
+  pctEl.className = 'tp-meter-pct';
+  pctEl.textContent = pct + '%';
+
+  var right = document.createElement('div');
+  right.className = 'tp-meter-right';
   var bar = document.createElement('div');
   bar.className = 'tp-meter-bar';
   var fill = document.createElement('span');
@@ -1905,21 +1914,25 @@ function _tpMeterCell(m) {
   bar.appendChild(fill);
   var num = document.createElement('span');
   num.className = 'tp-meter-num';
-  num.textContent = m.done.toLocaleString() + '/' + m.expected.toLocaleString();
-  wrap.appendChild(bar); wrap.appendChild(num);
+  num.textContent = m.done.toLocaleString() + ' / ' + m.expected.toLocaleString();
+  right.appendChild(bar); right.appendChild(num);
+
+  wrap.appendChild(pctEl); wrap.appendChild(right);
   td.appendChild(wrap);
-  td.title = pct + '%';
+  td.title = m.done.toLocaleString() + ' จาก ' + m.expected.toLocaleString() + (unit ? ' ' + unit : '');
   return td;
 }
 
-function _tpTotalBlock(label, m) {
+var TP_UNITS = { attendance: 'คาบ', config: 'วิชา', scores: 'คน' };
+
+function _tpTotalBlock(label, m, unit) {
   var box = document.createElement('div');
   box.className = 'tp-total';
   var lb = document.createElement('span');
   lb.className = 'tp-total-label';
   lb.textContent = label;
   box.appendChild(lb);
-  var cell = _tpMeterCell(m);
+  var cell = _tpMeterCell(m, unit);
   while (cell.firstChild) box.appendChild(cell.firstChild);
   return box;
 }
@@ -1938,9 +1951,9 @@ function _tpRender() {
 
   if (totals) {
     totals.innerHTML = '';
-    totals.appendChild(_tpTotalBlock('เช็คชื่อ', d.totals.attendance));
-    totals.appendChild(_tpTotalBlock('ตั้งค่าวิชา', d.totals.config));
-    totals.appendChild(_tpTotalBlock('กรอกคะแนน', d.totals.scores));
+    totals.appendChild(_tpTotalBlock('เช็คชื่อ', d.totals.attendance, TP_UNITS.attendance));
+    totals.appendChild(_tpTotalBlock('ตั้งค่าวิชา', d.totals.config, TP_UNITS.config));
+    totals.appendChild(_tpTotalBlock('กรอกคะแนน', d.totals.scores, TP_UNITS.scores));
   }
 
   body.innerHTML = '';
@@ -1968,9 +1981,9 @@ function _tpRender() {
     nm.textContent = t.name;
     nameTd.appendChild(caret); nameTd.appendChild(nm);
     tr.appendChild(nameTd);
-    tr.appendChild(_tpMeterCell(t.attendance));
-    tr.appendChild(_tpMeterCell(t.config));
-    tr.appendChild(_tpMeterCell(t.scores));
+    tr.appendChild(_tpMeterCell(t.attendance, TP_UNITS.attendance));
+    tr.appendChild(_tpMeterCell(t.config, TP_UNITS.config));
+    tr.appendChild(_tpMeterCell(t.scores, TP_UNITS.scores));
     body.appendChild(tr);
 
     if (!_tpOpen[t.teacherId]) return;
@@ -1985,9 +1998,9 @@ function _tpRender() {
       cls.textContent = s.className;
       std.appendChild(cls);
       sr.appendChild(std);
-      sr.appendChild(_tpMeterCell(s.attendance));
-      sr.appendChild(_tpMeterCell(s.config));
-      sr.appendChild(_tpMeterCell(s.scores));
+      sr.appendChild(_tpMeterCell(s.attendance, TP_UNITS.attendance));
+      sr.appendChild(_tpMeterCell(s.config, TP_UNITS.config));
+      sr.appendChild(_tpMeterCell(s.scores, TP_UNITS.scores));
       body.appendChild(sr);
     });
   });

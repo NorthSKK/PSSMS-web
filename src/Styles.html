@@ -1489,19 +1489,39 @@ body.dark-mode .pssms-dept-general {
 .tp-sub-name { padding-left: 26px; color: var(--p-text-muted); font-size: .75rem; }
 .tp-sub-class { color: var(--p-text-muted); font-size: .7rem; }
 
-/* เม็ดวัดความคืบหน้า — ตัวเลขคือของจริง แถบเป็นแค่ตัวช่วยกวาดสายตา */
-.tp-meter { display: flex; align-items: center; gap: .45rem; }
+/* คำอธิบายว่าแต่ละคอลัมน์นับอะไร — สามคอลัมน์คนละหน่วย ไม่บอกแล้วอ่านไม่ออก */
+.tp-legend {
+  font-size: .7rem; line-height: 1.6; color: var(--p-text-muted);
+  margin: 0 0 .6rem; padding: 0 2px;
+}
+.tp-legend b { color: var(--p-text); font-weight: 600; }
+.tp-legend-note { display: block; opacity: .75; }
+.tp-unit { font-weight: 400; opacity: .6; }
+
+/* เม็ดวัดความคืบหน้า
+   % เป็นตัวหลัก — ใช้กวาดตาเทียบครูหลายคน
+   เศษส่วนเป็นตัวรอง — ใช้ตอนจะไปคุยกับเจ้าตัวว่าเหลือเท่าไหร่ */
+.tp-meter { display: flex; align-items: center; gap: .5rem; }
+.tp-meter-pct {
+  font-size: .88rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--p-text-muted); min-width: 38px; text-align: right;
+}
+.tp-meter-right { flex: 1 1 auto; min-width: 0; }
 .tp-meter-bar {
-  flex: 1 1 auto; min-width: 46px; height: 5px;
-  border-radius: 999px; background: var(--p-border); overflow: hidden;
+  height: 5px; border-radius: 999px;
+  background: var(--p-border); overflow: hidden;
 }
 .tp-meter-bar > span { display: block; height: 100%; background: var(--p-accent); }
 .tp-meter-num {
-  font-size: .7rem; font-variant-numeric: tabular-nums;
-  color: var(--p-text-muted); white-space: nowrap;
+  display: block; margin-top: 2px;
+  font-size: .65rem; font-variant-numeric: tabular-nums;
+  color: var(--p-text-muted); white-space: nowrap; opacity: .8;
 }
-.tp-meter-full .tp-meter-num { color: var(--p-text); font-weight: 600; }
+.tp-meter-full .tp-meter-pct { color: var(--p-accent); }
 .tp-meter-na { color: var(--p-text-muted); opacity: .45; font-size: .7rem; }
+
+/* บนแถบรวมด้านบน เม็ดวัดต้องไม่ยืดจนกินพื้นที่ */
+.tp-total .tp-meter-right { min-width: 90px; max-width: 130px; }
 
 /* แถบรวมด้านบน — ใช้โครง .ar-bar เดิม */
 .tp-total { display: flex; align-items: center; gap: .5rem; min-width: 190px; }
@@ -1510,6 +1530,7 @@ body.dark-mode .pssms-dept-general {
 @media (max-width: 576px) {
   .tp-col-metric { width: auto; }
   .tp-meter-bar { display: none; }
+  .tp-meter-num { display: inline; margin-top: 0; }
 }
 
 </style>
