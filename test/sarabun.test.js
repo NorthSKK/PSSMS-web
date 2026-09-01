@@ -215,3 +215,65 @@ test('ลบทะเบียนเป็นของ Admin ครูลบไ�
   await denied('deleteSarabun', [id], 'teacher1');
   await query(`DELETE FROM sarabun WHERE id=$1`, [id]);
 });
+
+// ---------------------------------------------------------------------------
+// ขอเลขเป็นชุด (เกียรติบัตร)
+//
+// ฟอร์มมีช่อง "จำนวน (ฉบับ)" ให้เฉพาะทะเบียนเกียรติบัตร และปุ่มเขียนว่า "รันเลขชุด"
+// แต่ server ไม่เคยอ่าน amount เลย — ครูขอ 25 ใบได้เลขเดียว อีก 24 ใบไม่มีเลขในทะเบียน
+// แล้วไม่มีอะไรฟ้อง เพราะคำขอสำเร็จตามปกติ
+
+const CERT = 'ทะเบียนเกียรติบัตร';
+
+/** เลขล้วนของเกียรติบัตรในทะเบียน เรียงน้อยไปมาก */
+async function certNumbers() {
+  const rows = await ok('getSarabunHistory', [], 'teacher2');
+  return rows
+    .filter(r => r.docType === CERT)
+    .map(r => parseInt(String(r.docNumber).split('/')[0], 10))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+}
+
+const askCert = (amount) =>
+  ok('requestSarabunNumber', [{ docType: CERT, subject: 'เกียรติบัตร', amount, year: '2569' }], 'teacher2');
+
+test('ขอเลขชุด — ได้ครบตามจำนวนที่ขอ ไม่ใช่เลขเดียว', async () => {
+  const before = await certNumbers();
+  const res = await askCert(25);
+
+  assert.equal(res.count, 25, 'ต้องออกเลขครบ 25');
+  const after = await certNumbers();
+  assert.equal(after.length - before.length, 25, 'ต้องมี 25 แถวใหม่ในทะเบียน — ครูต้องอ้างอิงได้ทุกใบ');
+
+  const added = after.slice(before.length);
+  assert.ok(added.every((n, i) => i === 0 || n === added[i - 1] + 1), 'เลขในชุดต้องต่อเนื่องไม่ขาด');
+  assert.equal(new Set(after).size, after.length, 'ห้ามมีเลขซ้ำในทะเบียน');
+  assert.match(res.firstNumber, /^\d+\/2569$/);
+  assert.match(res.lastNumber, /^\d+\/2569$/);
+});
+
+test('ขอชุดถัดไปต้องต่อจากเลขเดิม ไม่ทับของเก่า', async () => {
+  const first = await askCert(3);
+  const second = await askCert(2);
+  const n1 = parseInt(first.lastNumber, 10);
+  const n2 = parseInt(second.firstNumber, 10);
+  assert.equal(n2, n1 + 1, 'ชุดใหม่ต้องเริ่มถัดจากเลขสุดท้ายของชุดก่อน');
+});
+
+test('ขอทีละเลขยังคืนรูปแบบเดิม', async () => {
+  const res = await askCert(1);
+  assert.equal(res.count, 1);
+  assert.equal(res.docNumber, res.firstNumber, 'ขอใบเดียวต้องไม่กลายเป็นช่วงเลข');
+  assert.match(res.docNumber, /^\d+\/2569$/);
+});
+
+test('จำนวนที่ส่งมาเพี้ยนต้องไม่ทำให้ทะเบียนพัง', async () => {
+  for (const bad of [0, -5, 'abc', null, undefined]) {
+    const res = await askCert(bad);
+    assert.equal(res.count, 1, `amount=${JSON.stringify(bad)} ต้องถือเป็น 1 ใบ`);
+  }
+  // เพดานกันคนพิมพ์เลขหลุด — ไม่งั้นสร้างเป็นหมื่นแถวในคำขอเดียว
+  const huge = await askCert(9999);
+  assert.equal(huge.count, 500, 'ต้องตัดที่เพดาน ไม่ใช่สร้างตามที่ขอ');
+});

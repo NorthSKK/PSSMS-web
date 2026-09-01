@@ -173,10 +173,16 @@ window.requestNewDocNumber = function() {
             initSarabunPage(); // ดึงวันที่กลับมา
             loadSarabunHistory(); 
             
-            // แจ้งเตือนเลขที่ได้แบบอลังการ
+            // แจ้งเตือนเลขที่ได้ — รันเป็นชุดต้องบอกให้ครบว่าได้เลขอะไรถึงอะไร
+            // ไม่งั้นครูที่ขอ 25 ใบเห็นเลขเดียวแล้วไม่รู้ว่าอีก 24 ใบใช้เลขไหน
+            const gotMany = res.count > 1;
             Swal.fire({
                 title: '🎉 ดำเนินการสำเร็จ!',
-                html: `เลข ${docType} ของคุณคือ<br><b class="fs-1 mt-3 mb-2 d-block text-primary" style="letter-spacing: 2px;">${res.docNumber}</b>`,
+                html: gotMany
+                    ? `ได้เลข ${docType} ทั้งหมด <b>${res.count}</b> เลข` +
+                      `<b class="fs-2 mt-3 mb-1 d-block text-primary" style="letter-spacing:1px;">${res.firstNumber} – ${res.lastNumber}</b>` +
+                      `<small class="text-muted">บันทึกลงทะเบียนครบทุกเลขแล้ว</small>`
+                    : `เลข ${docType} ของคุณคือ<br><b class="fs-1 mt-3 mb-2 d-block text-primary" style="letter-spacing: 2px;">${res.docNumber}</b>`,
                 icon: 'success',
                 confirmButtonText: 'ตกลง',
                 confirmButtonColor: '#0d6efd'

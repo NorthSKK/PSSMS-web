@@ -112,10 +112,28 @@ async function getSarabunFileTicket([id], user) {
   return { url };
 }
 
+/**
+ * ขอเลขทะเบียนสารบรรณ — ทีละเลข หรือรันเป็นชุด
+ *
+ * เกียรติบัตรขอเป็นชุด (ฟอร์มมีช่อง "จำนวน (ฉบับ)" ให้เฉพาะประเภทนี้ ปุ่มเขียนว่า
+ * "รันเลขชุด") เดิม server ไม่เคยอ่าน d.amount เลย ขอ 25 ใบจึงได้เลขเดียว
+ * แล้วอีก 24 ใบไม่มีเลขในทะเบียน
+ *
+ * ทั้งชุดออกใน transaction เดียวใต้ LOCK เดิม — ขอพร้อมกันสองคนต้องไม่ได้เลขทับกัน
+ * และถ้าล้มกลางทางต้องไม่เหลือเลขค้างครึ่ง ๆ ในทะเบียน
+ */
+const MAX_BATCH = 500;   // ตรงกับ max ของช่องกรอกใน src/Page_General.html
+
 async function requestSarabunNumber([payload], user) {
   const d = payload || {};
   const docType = d.docType || '';
   const year = d.year || String(new Date().getFullYear() + 543);
+
+  // เผื่อ client เก่าหรือค่าเพี้ยน — ปัดเข้าช่วงที่รับได้เสมอ ไม่ปล่อยให้สร้างหมื่นแถว
+  let amount = parseInt(d.amount, 10);
+  if (!Number.isFinite(amount) || amount < 1) amount = 1;
+  if (amount > MAX_BATCH) amount = MAX_BATCH;
+
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   try {
@@ -131,16 +149,33 @@ async function requestSarabunNumber([payload], user) {
       const last = String(rows[0].doc_number || '').match(/(\d+)/);
       if (last) nextNum = parseInt(last[1]) + 1;
     }
-    const docNumber = `${nextNum}/${year}`;
+
     const targetDate = (d.targetDate && d.targetDate !== '-') ? d.targetDate : null;
+    const requester = await resolveRequester(user, d.requester);
+    const subject = d.subject || '';
+
+    const numbers = [];
+    for (let k = 0; k < amount; k++) numbers.push(`${nextNum + k}/${year}`);
+
+    // ใส่ทีเดียวทั้งชุด — 500 แถวคือ 500 round trip ถ้ายิงทีละใบ
     await client.query(
       `INSERT INTO sarabun(doc_type,doc_number,subject,requester,target_date,status,file_url,year)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [docType, docNumber, d.subject || '', await resolveRequester(user, d.requester),
-       targetDate, 'รอดำเนินการ', '', year]
+       SELECT $1, n, $2, $3, $4, 'รอดำเนินการ', '', $5 FROM unnest($6::text[]) AS n`,
+      [docType, subject, requester, targetDate, year, numbers]
     );
     await client.query('COMMIT');
-    return { status: 'success', message: 'บันทึกสำเร็จ', docNumber };
+
+    const first = numbers[0];
+    const last = numbers[numbers.length - 1];
+    return {
+      status: 'success',
+      message: amount > 1 ? `บันทึกสำเร็จ ${amount} เลข` : 'บันทึกสำเร็จ',
+      // docNumber ต้องคงเป็นเลขเดียวเสมอ — client เก่าเอาไปแสดงตรง ๆ
+      docNumber: amount > 1 ? `${nextNum}-${nextNum + amount - 1}/${year}` : first,
+      firstNumber: first,
+      lastNumber: last,
+      count: amount,
+    };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
