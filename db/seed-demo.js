@@ -70,7 +70,7 @@ async function main() {
   const YEAR = (cfg[0] && cfg[0].value1) || '2569';
 
   // ข้อมูลตัวอย่างของทุกเมนู อยู่ใน db/demo-content.js
-  const filled = await demoContent.fill({ term: '1', year: YEAR, teacherNames: TEACHER_NAMES });
+  const filled = await demoContent.fill({ term: '1', year: YEAR, teacherNames: TEACHER_NAMES, schoolName: SCHOOL });
   for (const line of filled) console.log('   ·', line);
 
   /**

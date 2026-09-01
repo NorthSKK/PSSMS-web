@@ -62,6 +62,38 @@ const CLASSES = [
   { name: 'ม.6/1', count: 14, idBase: 16001 },
 ];
 
+/**
+ * รายวิชาที่เปิดสอน — ครูหนึ่งคนสอนหลายห้อง เหมือนภาระงานจริง
+ *
+ * seed-dev ให้ครูคนละวิชาห้องเดียว (teacher2 มีคาบเดียวทั้งสัปดาห์) ซึ่งพอเปิด
+ * ตารางสอนบนเดโมแล้วเห็นช่องว่างเกือบทั้งตาราง ไม่มีครูคนไหนสอนแบบนั้นจริง
+ *
+ * [subject_code, ชื่อวิชา, ครู, ห้อง, คาบต่อสัปดาห์]
+ */
+const SUBJECTS = [
+  // teacher4 — ภาษาไทย
+  ['ท21101', 'ภาษาไทย',            'teacher4', 'ม.1/1', 3],
+  ['ท22101', 'ภาษาไทย',            'teacher4', 'ม.2/1', 3],
+  ['ท33101', 'ภาษาไทย',            'teacher4', 'ม.6/1', 2],
+  // teacher3 — วิทยาศาสตร์
+  ['ว21101', 'วิทยาศาสตร์',         'teacher3', 'ม.1/1', 3],
+  ['ว22101', 'วิทยาศาสตร์',         'teacher3', 'ม.2/1', 3],
+  ['ว31101', 'วิทยาศาสตร์กายภาพ',   'teacher3', 'ม.5/1', 3],
+  // teacher1 — ฟิสิกส์ (เพิ่มเติม ม.ปลาย)
+  ['ว30201', 'ฟิสิกส์ 1',           'teacher1', 'ม.5/1', 3],
+  ['ว30205', 'ฟิสิกส์ 3',           'teacher1', 'ม.6/1', 3],
+  // teacher2 — สุขศึกษา (บัญชีครูของเดโม ให้ครบทุกระดับชั้น)
+  ['พ21101', 'สุขศึกษา',            'teacher2', 'ม.1/1', 2],
+  ['พ22101', 'สุขศึกษา',            'teacher2', 'ม.2/1', 2],
+  ['พ32101', 'สุขศึกษา',            'teacher2', 'ม.5/1', 1],
+  ['พ33101', 'สุขศึกษา',            'teacher2', 'ม.6/1', 1],
+  // teacher5 — พลศึกษา
+  ['พ21103', 'พลศึกษา',            'teacher5', 'ม.1/1', 1],
+  ['พ22103', 'พลศึกษา',            'teacher5', 'ม.2/1', 1],
+  ['พ32103', 'พลศึกษา',            'teacher5', 'ม.5/1', 1],
+  ['พ33103', 'พลศึกษา',            'teacher5', 'ม.6/1', 1],
+];
+
 const CLUBS = [
   ['CLUB01', 'ชุมนุมคอมพิวเตอร์', 'ฝึกใช้โปรแกรมสำนักงานและตัดต่อวิดีโอเบื้องต้น', 25, 'teacher3'],
   ['CLUB02', 'ชุมนุมกีฬาเพื่อสุขภาพ', 'ออกกำลังกายและฝึกทักษะกีฬาสากล', 30, 'teacher5'],
@@ -121,8 +153,52 @@ async function insertBatch(head, cols, rowsArr, chunk = 400) {
   }
 }
 
+/**
+ * จัดตารางสอน — คาบ 1-6 วันจันทร์ถึงศุกร์
+ *
+ * ตรวจชนสองทาง: ครูอยู่สองที่พร้อมกันไม่ได้ และห้องเรียนมีสองวิชาซ้อนกันไม่ได้
+ * ถ้าไม่ตรวจ ตารางที่ได้จะขัดแย้งในตัวเอง แล้วระบบจัดสอนแทน (ซึ่งเช็คว่าครูว่างคาบไหน)
+ * จะเสนอชื่อครูที่ติดคาบอยู่ — บั๊กที่มองไม่เห็นจนกว่าจะมีคนกดใช้จริง
+ *
+ * คาบ 0 = โฮมรูม · คาบ 7 วันพฤหัสบดี = ชุมนุม จึงไม่แตะสองช่องนี้
+ */
+function buildTimetable(rand) {
+  const DAYS = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+  const PERIODS = ['1', '2', '3', '4', '5', '6'];
+  const teacherBusy = new Set();   // `${teacher}_${day}_${period}`
+  const classBusy = new Set();     // `${class}_${day}_${period}`
+  const out = [];
+
+  // เรียงวิชาที่มีคาบเยอะไว้ก่อน — วางยากสุดตอนตารางยังโล่ง
+  const ordered = [...SUBJECTS].sort((a, b) => b[4] - a[4]);
+
+  for (const [code, name, teacher, cls, periodsPerWeek] of ordered) {
+    let placed = 0;
+    // ไล่ทุกช่องด้วยลำดับที่สุ่มแบบคงที่ ไม่ใช่สุ่มแล้วลองใหม่ — วางได้แน่นอนถ้ามีที่ว่าง
+    const slots = [];
+    for (const d of DAYS) for (const pd of PERIODS) slots.push([d, pd, rand()]);
+    slots.sort((a, b) => a[2] - b[2]);
+
+    for (const [day, period] of slots) {
+      if (placed >= periodsPerWeek) break;
+      const tKey = `${teacher}_${day}_${period}`;
+      const cKey = `${cls}_${day}_${period}`;
+      if (teacherBusy.has(tKey) || classBusy.has(cKey)) continue;
+      // ไม่ให้วิชาเดียวกันซ้ำวันเดียวกัน — ตารางจริงกระจายทั้งสัปดาห์
+      if (out.some(r => r.code === code && r.cls === cls && r.day === day)) continue;
+      teacherBusy.add(tKey); classBusy.add(cKey);
+      out.push({ code, name, teacher, cls, day, period });
+      placed++;
+    }
+    if (placed < periodsPerWeek) {
+      console.warn(`[demo] ${code} ${cls} วางได้ ${placed}/${periodsPerWeek} คาบ — ตารางแน่นเกินไป`);
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- ตัวเติมข้อมูล
-async function fill({ term, year, teacherNames }) {
+async function fill({ term, year, teacherNames, schoolName }) {
   const r = rng(20260901);           // เมล็ดคงที่ — ล้างแล้ว seed ใหม่ต้องได้ข้อมูลชุดเดิม
   const log = [];
 
@@ -171,6 +247,61 @@ async function fill({ term, year, teacherNames }) {
     );
   }
   log.push(`นักเรียน ${students.length} คน / ${CLASSES.length} ห้อง`);
+
+  // ---------------------------------------------------------------- ตารางสอน
+  // สร้างใหม่ทั้งหมด — seed-dev ให้ครูคนละวิชาห้องเดียว ตารางเลยว่างเกือบทั้งสัปดาห์
+  await query(`DELETE FROM timetable WHERE term=$1 AND year=$2`, [term, year]);
+
+  const HOMEROOM = { 'ม.1/1': 'teacher4', 'ม.2/1': 'teacher2', 'ม.5/1': 'teacher3', 'ม.6/1': 'teacher1' };
+  const WEEKDAYS = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+  const ttBatch = [];
+
+  for (const row of buildTimetable(r)) {
+    const [level, room] = row.cls.split('/');
+    ttBatch.push([row.code, row.name, level, room, row.teacher, row.day, row.period, term, year]);
+  }
+  // โฮมรูมคาบ 0 ทุกวัน — ครูที่ปรึกษาประจำห้อง
+  for (const [cls, tid] of Object.entries(HOMEROOM)) {
+    const [level, room] = cls.split('/');
+    for (const d of WEEKDAYS) {
+      ttBatch.push(['HR', 'กิจกรรมโฮมรูมหน้าเสาธง', level, room, tid, d, '0', term, year]);
+    }
+  }
+  // ชุมนุมวันพฤหัสบดีคาบ 7 — ครูที่ปรึกษาชุมนุมเห็นในตารางตัวเอง
+  for (const [id, name, , , advisor] of CLUBS) {
+    ttBatch.push([`CLUB_${id}`, name, 'ชุมนุม', id, advisor, 'พฤหัสบดี', '7', term, year]);
+  }
+  await insertBatch(
+    `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year)`,
+    9, ttBatch
+  );
+  log.push(`ตารางสอน ${ttBatch.length} คาบ/สัปดาห์ (${SUBJECTS.length} รายวิชา)`);
+
+  // ---------------------------------------------------------------- โครงสร้างรายวิชา
+  // ทุกวิชาต้องมีโครงคะแนน ไม่งั้นครูเปิดหน้ากรอกคะแนนของวิชานั้นมาแล้วไม่มีช่องให้กรอก
+  // และ ปพ.5 พิมพ์ออกมาไม่มีหัวคอลัมน์
+  const RATIO = '50:20:30';
+  const INDICATORS = [
+    { code: 'ว1.1', name: 'ใบงาน/แบบฝึกหัด',   score: 15, description: '' },
+    { code: 'ว1.2', name: 'ชิ้นงานรายบุคคล',    score: 15, description: '' },
+    { code: 'ว2.1', name: 'งานกลุ่ม/นำเสนอ',    score: 10, description: '' },
+    { code: 'ว2.2', name: 'ทดสอบย่อยระหว่างภาค', score: 10, description: '' },
+  ];
+  const EXAM_INDICATORS = [
+    { code: 'กลางภาค', name: 'สอบกลางภาค', score: 20 },
+    { code: 'ปลายภาค', name: 'สอบปลายภาค', score: 30 },
+  ];
+  await query(`DELETE FROM subject_config WHERE term=$1 AND year=$2`, [term, year]);
+  for (const [code, , teacher, cls] of SUBJECTS) {
+    await query(
+      `INSERT INTO subject_config(subject_id,subject_code,class_name,term,year,score_ratio,
+                                  indicators_json,exam_indicators_json,teacher_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [`${code}_${cls}_${term}_${year}`, code, cls, term, year, RATIO,
+       JSON.stringify(INDICATORS), JSON.stringify(EXAM_INDICATORS), teacher]
+    );
+  }
+  log.push(`โครงสร้างรายวิชา ${SUBJECTS.length} วิชา`);
 
   // ---------------------------------------------------------------- เช็คเวลาเรียน
   const { rows: subjects } = await query(
@@ -232,20 +363,7 @@ async function fill({ term, year, teacherNames }) {
   log.push(`เช็คชื่อ ${attRows} แถว (${days.length} วันเรียน ตั้งแต่ ${termStart})`);
 
   // ---------------------------------------------------------------- คะแนน
-  // seed-dev ตั้งตัวชี้วัดไว้แค่ 2 ชิ้น ซึ่งพอเปิด ปพ.5 แล้วเห็นตารางสองคอลัมน์
-  // ไม่เหมือนของจริงที่ครูกรอกกัน — เขียนทับด้วยโครง 50:20:30 เต็มรูปแบบ
-  const RATIO = '50:20:30';
-  const INDICATORS = [
-    { code: 'ว1.1', name: 'ใบงาน/แบบฝึกหัด',   score: 15, description: '' },
-    { code: 'ว1.2', name: 'ชิ้นงานรายบุคคล',    score: 15, description: '' },
-    { code: 'ว2.1', name: 'งานกลุ่ม/นำเสนอ',    score: 10, description: '' },
-    { code: 'ว2.2', name: 'ทดสอบย่อยระหว่างภาค', score: 10, description: '' },
-  ];
-  const EXAM_INDICATORS = [
-    { code: 'กลางภาค', name: 'สอบกลางภาค', score: 20 },
-    { code: 'ปลายภาค', name: 'สอบปลายภาค', score: 30 },
-  ];
-
+  // โครงคะแนนตั้งไว้ตอนสร้าง subject_config ด้านบนแล้ว ที่นี่แค่กรอกคะแนนลงไป
   const { rows: configs } = await query(
     `SELECT subject_code, class_name, teacher_id FROM subject_config WHERE term=$1 AND year=$2`,
     [term, year]
@@ -253,13 +371,6 @@ async function fill({ term, year, teacherNames }) {
   let scoreRows = 0, qualRows = 0;
 
   for (const cfg of configs) {
-    await query(
-      `UPDATE subject_config SET score_ratio=$1, indicators_json=$2, exam_indicators_json=$3
-       WHERE subject_code=$4 AND class_name=$5 AND term=$6 AND year=$7`,
-      [RATIO, JSON.stringify(INDICATORS), JSON.stringify(EXAM_INDICATORS),
-       cfg.subject_code, cfg.class_name, term, year]
-    );
-
     const roster = students.filter(s => s.cls === cfg.class_name);
     for (const s of roster) {
       // นักเรียนแต่ละคนมี "ระดับ" ของตัวเอง ไม่งั้นคะแนนสุ่มล้วนจะเกลี่ยเท่ากันหมด
@@ -387,64 +498,113 @@ async function fill({ term, year, teacherNames }) {
   }
   log.push(`กิจกรรมหน้าเสาธง ${morning} แถว`);
 
-  // ---------------------------------------------------------------- บันทึกหลังสอน
-  const TOPICS = [
-    ['ระบบไหลเวียนโลหิต', 'นักเรียนอธิบายเส้นทางการไหลเวียนโลหิตได้ถูกต้อง',
-     'นักเรียนบางส่วนสับสนระหว่างหลอดเลือดแดงกับหลอดเลือดดำ',
-     'ใช้แผนภาพสีแยกสองระบบ และให้จับคู่อธิบายให้เพื่อนฟัง'],
-    ['อาหารและสารอาหาร', 'นักเรียนจำแนกสารอาหารหลัก 5 หมู่ และคำนวณพลังงานได้',
-     'ตัวอย่างอาหารในหนังสือไม่ใกล้ตัวนักเรียน',
-     'เปลี่ยนมาใช้เมนูอาหารกลางวันของโรงเรียนเป็นโจทย์แทน'],
-    ['การปฐมพยาบาลเบื้องต้น', 'นักเรียนสาธิตการห้ามเลือดและพันผ้าได้ถูกวิธี',
-     'อุปกรณ์ฝึกไม่พอต่อจำนวนนักเรียน',
-     'แบ่งกลุ่มหมุนเวียนสถานี และยืมชุดปฐมพยาบาลจากห้องพยาบาลเพิ่ม'],
-    ['สารเสพติดและการป้องกัน', 'นักเรียนวิเคราะห์ปัจจัยเสี่ยงและเสนอแนวทางปฏิเสธได้',
-     'นักเรียนไม่กล้าแสดงความเห็นในประเด็นอ่อนไหว',
-     'ใช้การเขียนใส่กระดาษโดยไม่ระบุชื่อ แล้วครูอ่านรวมให้ฟัง'],
-  ];
-  let lessons = 0;
-  const teachDays = days.filter(d => d.dow === 'อังคาร').slice(-TOPICS.length);
-  for (const [i, d] of teachDays.entries()) {
-    const [topic, outcomes, problems, solutions] = TOPICS[i % TOPICS.length];
-    await query(
-      `INSERT INTO detailed_lesson_records(date,term,year,subject_code,subject_name,class,period,
-                                           topic,outcomes,problems,solutions,teacher_id,session_id)
-       VALUES($1,$2,$3,'พ22101','สุขศึกษา','ม.2/1','3',$4,$5,$6,$7,'teacher2',$8)`,
-      [d.date, term, year, topic, outcomes, problems, solutions, `lesson_${d.date}`]
-    );
-    lessons++;
-  }
-  log.push(`บันทึกหลังสอน ${lessons} คาบ`);
-
-  // ---------------------------------------------------------------- โฮมรูม + คาบชุมนุม
-  // seed-dev ตั้ง HR ไว้ให้ ม.2/1 ห้องเดียว ห้องอื่นเปิดหน้าโฮมรูมมาแล้วว่าง
-  // และไม่มีคาบชุมนุมในตารางเลย ทั้งที่มีเมนูชุมนุมอยู่
-  const HOMEROOM = { 'ม.1/1': 'teacher4', 'ม.2/1': 'teacher2', 'ม.5/1': 'teacher3', 'ม.6/1': 'teacher1' };
-  const WEEKDAYS = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
-  let ttRows = 0;
-  for (const [cls, tid] of Object.entries(HOMEROOM)) {
-    const [level, room] = cls.split('/');
-    for (const d of WEEKDAYS) {
-      await query(
-        `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year)
-         SELECT 'HR','กิจกรรมโฮมรูมหน้าเสาธง',$1,$2,$3,$4,'0',$5,$6
-         WHERE NOT EXISTS (SELECT 1 FROM timetable WHERE subject_code='HR' AND level=$1 AND room=$2
-                             AND teacher_id=$3 AND day=$4 AND term=$5 AND year=$6)`,
-        [level, room, tid, d, term, year]
-      );
-      ttRows++;
+  // ---------------------------------------------------------------- แฟ้มบันทึกหลังสอน
+  // เดิมมีของครูคนเดียววิชาเดียว 4 คาบ — ครูคนอื่นเปิดแฟ้มตัวเองมาแล้วว่าง
+  // เนื้อหาแยกตามกลุ่มสาระ ใช้ชุดเดียวกันทุกวิชาจะดูเป็นข้อความก๊อปวาง
+  const TOPIC_BANK = {
+    'พ': [
+      ['ระบบไหลเวียนโลหิต', 'นักเรียนอธิบายเส้นทางการไหลเวียนโลหิตได้ถูกต้อง',
+       'นักเรียนบางส่วนสับสนระหว่างหลอดเลือดแดงกับหลอดเลือดดำ',
+       'ใช้แผนภาพสีแยกสองระบบ และให้จับคู่อธิบายให้เพื่อนฟัง'],
+      ['อาหารและสารอาหาร', 'นักเรียนจำแนกสารอาหารหลัก 5 หมู่ และคำนวณพลังงานได้',
+       'ตัวอย่างอาหารในหนังสือไม่ใกล้ตัวนักเรียน',
+       'เปลี่ยนมาใช้เมนูอาหารกลางวันของโรงเรียนเป็นโจทย์แทน'],
+      ['การปฐมพยาบาลเบื้องต้น', 'นักเรียนสาธิตการห้ามเลือดและพันผ้าได้ถูกวิธี',
+       'อุปกรณ์ฝึกไม่พอต่อจำนวนนักเรียน',
+       'แบ่งกลุ่มหมุนเวียนสถานี และยืมชุดปฐมพยาบาลจากห้องพยาบาลเพิ่ม'],
+      ['สารเสพติดและการป้องกัน', 'นักเรียนวิเคราะห์ปัจจัยเสี่ยงและเสนอแนวทางปฏิเสธได้',
+       'นักเรียนไม่กล้าแสดงความเห็นในประเด็นอ่อนไหว',
+       'ใช้การเขียนใส่กระดาษโดยไม่ระบุชื่อ แล้วครูอ่านรวมให้ฟัง'],
+      ['ทักษะการเคลื่อนไหวและสมรรถภาพ', 'นักเรียนทดสอบสมรรถภาพทางกายและบันทึกผลของตนเองได้',
+       'ฝนตกใช้สนามกลางแจ้งไม่ได้', 'ย้ายมาใช้โรงยิมและปรับเป็นสถานีในร่ม'],
+    ],
+    'ท': [
+      ['การอ่านจับใจความสำคัญ', 'นักเรียนสรุปใจความสำคัญของบทอ่านได้ตรงประเด็น',
+       'นักเรียนสรุปยาวเกินไป ยังแยกใจความหลักกับรายละเอียดไม่ออก',
+       'ให้ฝึกเขียนสรุปในกรอบจำกัด 2 บรรทัดก่อน แล้วค่อยขยาย'],
+      ['คำเป็นคำตาย และการผันวรรณยุกต์', 'นักเรียนผันวรรณยุกต์คำเป็นคำตายได้ถูกต้อง',
+       'นักเรียนจำหลักการได้แต่ใช้จริงยังผิด', 'เพิ่มแบบฝึกหัดสั้น ๆ ท้ายคาบทุกครั้ง'],
+      ['การเขียนเรียงความ', 'นักเรียนวางโครงเรื่องและเขียนเรียงความ 3 ย่อหน้าได้',
+       'นักเรียนเริ่มต้นเขียนไม่ได้ ติดที่คำนำ',
+       'ให้เขียนเนื้อเรื่องก่อน แล้วย้อนกลับมาเขียนคำนำทีหลัง'],
+      ['วรรณคดี: นิราศภูเขาทอง', 'นักเรียนถอดคำประพันธ์และอธิบายคุณค่าด้านวรรณศิลป์ได้',
+       'ศัพท์โบราณเยอะ นักเรียนเปิดพจนานุกรมไม่ทัน',
+       'ทำใบความรู้รวมศัพท์แจกล่วงหน้าก่อนเรียน'],
+    ],
+    'ว': [
+      ['หน่วยของสิ่งมีชีวิต', 'นักเรียนใช้กล้องจุลทรรศน์และวาดภาพเซลล์ที่สังเกตได้',
+       'กล้องจุลทรรศน์มีไม่พอ ต้องผลัดกันใช้',
+       'จัดกลุ่มละ 4 คน หมุนเวียนสถานี พร้อมใบงานให้ทำระหว่างรอ'],
+      ['แรงและการเคลื่อนที่', 'นักเรียนคำนวณแรงลัพธ์และอธิบายกฎการเคลื่อนที่ของนิวตันได้',
+       'นักเรียนแทนค่าสูตรได้แต่ตีความโจทย์ไม่ออก',
+       'ฝึกวาดแผนภาพวัตถุอิสระก่อนลงมือคำนวณทุกข้อ'],
+      ['สารและสมบัติของสาร', 'นักเรียนจำแนกสารตามสถานะและทดสอบความเป็นกรด-เบสได้',
+       'สารเคมีบางตัวหมดอายุ ผลการทดลองไม่ชัด',
+       'เบิกสารชุดใหม่จากพัสดุ และใช้กระดาษลิตมัสสำรอง'],
+      ['ไฟฟ้าและวงจรไฟฟ้า', 'นักเรียนต่อวงจรอนุกรมและขนาน พร้อมวัดค่าได้ถูกต้อง',
+       'นักเรียนต่อวงจรผิดขั้วทำให้ผลไม่ตรง',
+       'ทำแผ่นภาพวงจรตัวอย่างติดไว้ที่โต๊ะทดลองทุกโต๊ะ'],
+      ['พลังงานความร้อน', 'นักเรียนอธิบายการถ่ายโอนความร้อนทั้งสามแบบได้',
+       'เวลาไม่พอทำการทดลองให้ครบทั้งสามแบบ',
+       'แบ่งกลุ่มทำคนละแบบแล้วนำเสนอแลกเปลี่ยนกัน'],
+    ],
+  };
+  const lessonBatch = [];
+  const { rows: ttForLesson } = await query(
+    `SELECT DISTINCT subject_code, subject_name, level||'/'||room AS cls, teacher_id, day, period
+     FROM timetable WHERE term=$1 AND year=$2
+       AND subject_code <> 'HR' AND subject_code NOT LIKE 'CLUB%'`,
+    [term, year]
+  );
+  for (const t of ttForLesson) {
+    const bank = TOPIC_BANK[t.subject_code.charAt(0)] || TOPIC_BANK['ว'];
+    // คาบล่าสุดของวิชานั้นย้อนหลังไปเท่าจำนวนหัวข้อที่มี
+    const dayList = days.filter(d => d.dow === t.day).slice(-bank.length);
+    for (const [i, d] of dayList.entries()) {
+      const [topic, outcomes, problems, solutions] = bank[i % bank.length];
+      lessonBatch.push([d.date, term, year, t.subject_code, t.subject_name, t.cls, t.period,
+        topic, outcomes, problems, solutions, t.teacher_id,
+        `lesson_${t.subject_code}_${t.cls}_${d.date}_${t.period}`]);
     }
   }
-  // คาบชุมนุมวันพฤหัสบดี คาบ 7 — ครูที่ปรึกษาชุมนุมเห็นในตารางสอนตัวเอง
-  for (const [id, name, , , advisor] of CLUBS) {
-    await query(
-      `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year)
-       VALUES($1,$2,'ชุมนุม',$3,$4,'พฤหัสบดี','7',$5,$6)`,
-      [`CLUB_${id}`, name, id, advisor, term, year]
-    );
-    ttRows++;
-  }
-  log.push(`ตารางสอน +${ttRows} คาบ (โฮมรูม 4 ห้อง + ชุมนุม)`);
+  await insertBatch(
+    `INSERT INTO detailed_lesson_records(date,term,year,subject_code,subject_name,class,period,
+                                         topic,outcomes,problems,solutions,teacher_id,session_id)`,
+    13, lessonBatch
+  );
+  log.push(`บันทึกหลังสอน ${lessonBatch.length} คาบ (ทุกครู ทุกวิชา)`);
+
+  // ---------------------------------------------------------------- ช่องลงนาม ปพ.5
+  // ปพ.5 มีช่องลงนามครูผู้สอน หัวหน้ากลุ่มสาระ หัวหน้าวัดผล รองวิชาการ และ ผอ.
+  // อ่านจาก print_config — ว่างอยู่แปลว่าพิมพ์ออกมาแล้วช่องลงนามเป็นจุดไข่ปลาทั้งหน้า
+  //
+  // ⚠️ ชื่อทุกชื่อสมมติทั้งหมด ห้ามคัดลอกชื่อบุคลากรจริงมาไว้ที่นี่เด็ดขาด
+  //    เดโมเปิดสาธารณะ = ชื่อจริงของครูจะถูกอ่านได้โดยใครก็ตามที่กดเข้ามา
+  const SIGNERS = {
+    school_name:    schoolName,
+    principal_name: 'นายประสิทธิ์ วุฒิคุณ',
+    academic_head:  'นางสาวพิมพ์ใจ วงศ์สถิตย์',
+    measure_head:   'นายอนุชา พงษ์เจริญ',
+    head_thai:      'นางสาวกมลชนก แสงทวี',
+    head_math:      'นายธนากร ศรีสุวรรณ',
+    head_sci:       'นายพีรพล อินทรโชติ',
+    head_soc:       'นางสาวรุ่งทิวา ชาญบดินทร์',
+    head_pe:        'นางสุภาพร ทองแท้',
+    head_art:       'นายวรากร บุญเรือง',
+    head_occ:       'นางสาวเพ็ญนภา ทรงศิริ',
+    head_eng:       'นางสาวจุฑามาศ เลิศวิไล',
+    head_act:       'นายอนุชา พงษ์เจริญ',
+  };
+  const homeroomRows = Object.entries(HOMEROOM).map(([cls, tid]) => ({
+    cls, t1: teacherNames[tid] || tid, t2: '',
+  }));
+  await query(
+    `INSERT INTO print_config(term,year,sys_data,homeroom_data) VALUES($1,$2,$3,$4)
+     ON CONFLICT (term,year) DO UPDATE SET sys_data=EXCLUDED.sys_data,
+                                           homeroom_data=EXCLUDED.homeroom_data`,
+    [term, year, JSON.stringify(SIGNERS), JSON.stringify(homeroomRows)]
+  );
+  log.push('ช่องลงนาม ปพ.5 ครบทุกตำแหน่ง');
 
   // ---------------------------------------------------------------- เช็คชื่อชุมนุม
   // getClubAttendanceSummary อ่านจากตาราง attendance ที่ subject_code ขึ้นต้น CLUB_
@@ -501,6 +661,54 @@ async function fill({ term, year, teacherNames }) {
     leaveRows++;
   }
   log.push(`ใบลา +${leaveRows} ใบ (รอพิจารณา 3)`);
+
+  // ---------------------------------------------------------------- คาบสอนแทน
+  // ต้องสร้างใหม่จากใบลา + ตารางใหม่ ไม่ใช่ปล่อยของ seed-dev ไว้
+  // ตารางถูกจัดใหม่ทั้งหมด คาบสอนแทนเดิมจึงชี้ไปวัน/คาบที่ครูคนนั้นไม่ได้สอนแล้ว
+  // แล้วหน้าจัดสอนแทนจะโชว์คาบที่ไม่มีอยู่จริงในตาราง
+  await query(`DELETE FROM substitute_assignments`);
+
+  const { rows: leaveRows2 } = await query(
+    `SELECT id, teacher_id, staff_name, to_char(start_date,'YYYY-MM-DD') AS start_date,
+            to_char(end_date,'YYYY-MM-DD') AS end_date, status
+     FROM leave_records WHERE year=$1 AND status IN ('อนุมัติ','รอพิจารณา')`, [year]
+  );
+  const { rows: ttAll } = await query(
+    `SELECT subject_code, subject_name, level, room, teacher_id, day, period
+     FROM timetable WHERE term=$1 AND year=$2 AND subject_code <> 'HR'`, [term, year]
+  );
+  const freeAt = (tid, day, period) =>
+    !ttAll.some(t => t.teacher_id === tid && t.day === day && t.period === period);
+
+  let subRows = 0;
+  for (const lv of leaveRows2) {
+    // ทุกวันที่ครูลา ไปหาคาบที่เขาต้องสอน แล้วหาคนว่างมาแทน
+    for (let d = new Date(`${lv.start_date}T12:00:00`);
+         d <= new Date(`${lv.end_date}T12:00:00`);
+         d = new Date(d.getTime() + 86400000)) {
+      const dow = THAI_DOW[d.getDay()];
+      if (dow === 'เสาร์' || dow === 'อาทิตย์') continue;
+      const slots = ttAll.filter(t => t.teacher_id === lv.teacher_id && t.day === dow);
+      for (const slot of slots) {
+        // ครูที่ว่างคาบนั้นและไม่ใช่คนลาเอง — ใบที่ยังรอพิจารณาปล่อยว่างไว้ให้ผู้ดูแลจัด
+        const candidates = Object.keys(teacherNames)
+          .filter(tid => tid !== 'admin' && tid !== lv.teacher_id && freeAt(tid, dow, slot.period));
+        const pickSub = lv.status === 'อนุมัติ' && candidates.length ? candidates[int(r, 0, candidates.length - 1)] : null;
+        await query(
+          `INSERT INTO substitute_assignments(leave_id,date,period,day_of_week,
+             original_teacher_id,original_teacher_name,sub_teacher_id,sub_teacher_name,
+             subject_code,subject_name,class,room,status,assigned_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+          [lv.id, ymd(d), slot.period, dow,
+           lv.teacher_id, lv.staff_name, pickSub, pickSub ? teacherNames[pickSub] : null,
+           slot.subject_code, slot.subject_name, `${slot.level}/${slot.room}`, slot.room,
+           pickSub ? 'จัดแล้ว' : 'รอจัด', pickSub ? 'admin' : null]
+        );
+        subRows++;
+      }
+    }
+  }
+  log.push(`คาบสอนแทน ${subRows} คาบ`);
 
   // ---------------------------------------------------------------- สรุปคาบสอน (ปพ.5 ช่องลงชื่อ)
   let acadRows = 0;
