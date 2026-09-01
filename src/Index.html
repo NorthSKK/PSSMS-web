@@ -13,13 +13,16 @@
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <?!= include('Styles'); ?>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Crect%20width='100'%20height='100'%20rx='22'%20fill='%2300897b'/%3E%3Crect%20x='18'%20y='26'%20width='64'%20height='13'%20rx='6'%20fill='%23fff'/%3E%3Crect%20x='18'%20y='45'%20width='48'%20height='13'%20rx='6'%20fill='%23fff'%20opacity='.78'/%3E%3Crect%20x='18'%20y='64'%20width='30'%20height='13'%20rx='6'%20fill='%23fff'%20opacity='.56'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20180%20180'%3E%3Crect%20width='180'%20height='180'%20rx='40'%20fill='%2300897b'/%3E%3Crect%20x='32'%20y='47'%20width='116'%20height='23'%20rx='11'%20fill='%23fff'/%3E%3Crect%20x='32'%20y='81'%20width='87'%20height='23'%20rx='11'%20fill='%23fff'%20opacity='.78'/%3E%3Crect%20x='32'%20y='115'%20width='54'%20height='23'%20rx='11'%20fill='%23fff'%20opacity='.56'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/th.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.10/locales-all.global.min.js"></script>
+  <!-- ไอคอนเป็นไฟล์จริงใน public/ ไม่ใช่ data URI — แก้ที่เดียวแล้วทุกหน้าได้ตาม
+       และเบราว์เซอร์แคชได้ .ico ต้องมีจริงด้วยเพราะบางตัวขอ /favicon.ico เองโดยไม่อ่านแท็ก -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 </head>
 <body>
 

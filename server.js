@@ -15,8 +15,19 @@ app.use('/api/assets', require('./routes/assets'));
 app.use('/api/media',  require('./routes/media'));
 app.use('/api/gas',    require('./routes/gas'));
 
-// SPA fallback — serves index.html for any unmatched path
+/**
+ * SPA fallback — คืน index.html ให้ route ของแอป (เช่น /dashboard) ที่ไม่ตรง static ไฟล์ไหน
+ *
+ * แต่ต้องไม่คืน HTML ให้คำขอที่ขอ "ไฟล์" — เดิม `app.get('*')` ตอบ index.html
+ * ให้ทุก path ที่ไม่ match แปลว่า /favicon.ico, /robots.txt, /sitemap.xml ได้ HTML
+ * กลับไปพร้อมสถานะ 200 เบราว์เซอร์ที่ขอ favicon เองจึงได้ HTML มาแทนรูป แล้วขึ้นไอคอน
+ * เปล่าแทนที่จะถอยไปใช้ <link rel="icon"> ในหน้า (ปัญหานี้เห็นชัดที่สุดบน Safari
+ * และแท็บที่ bookmark ไว้)
+ *
+ * path ที่มีนามสกุลถือว่าเป็นคำขอไฟล์ — ไม่มีไฟล์ก็ต้อง 404 ตามความจริง
+ */
 app.get('*', (req, res) => {
+  if (path.extname(req.path)) return res.status(404).type('txt').send('Not found');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
