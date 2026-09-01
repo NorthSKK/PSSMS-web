@@ -57,6 +57,65 @@ node server.js          # หรือ npm run dev (nodemon)
 kill $(lsof -ti :3000) 2>/dev/null
 ```
 
+## สามชั้น: dev → demo → โรงเรียนจริง
+
+| ชั้น | อยู่ที่ | branch | ข้อมูล |
+|---|---|---|---|
+| dev | เครื่องตัวเอง `localhost:5432/pssms_dev` | — | สมมติ ล้างได้ตลอด |
+| เดโมสาธารณะ | `demo.pssms.app` | `main` | สมมติ ล้างเองทุกคืนตี 3 |
+| โรงเรียนจริง | `pw.pssms.app` | **`production`** | **ครูและนักเรียนจริง** |
+
+เดิมทั้งเดโมและโรงเรียนจริงดึง `main` เหมือนกัน แปลว่า push ครั้งเดียวถึงเครื่องที่มี
+ข้อมูลจริงทันทีโดยไม่มีขั้นตอนคั่น — แยก branch เพื่อให้มีจังหวะกดยืนยัน
+
+### ขึ้นเดโม
+```bash
+npm test                        # 133 ตัว ต้องเขียวก่อน
+git commit -m "..."
+git push origin main            # ขึ้น demo.pssms.app ใน ~45 วินาที
+```
+แล้วเปิด `demo.pssms.app` กดจริงทุก role ก่อนไปขั้นถัดไป
+
+### ขึ้นโรงเรียนจริง
+```bash
+git checkout production
+git merge main                  # จุดที่ตัดสินใจ
+git push origin production      # ขึ้น pw.pssms.app
+git checkout main
+```
+
+### ย้อนกลับ
+```bash
+git checkout production
+git revert <commit>
+git push origin production
+```
+
+ตั้งไว้ที่ repo trigger ของ service `PSSMS-web` (project `steadfast-delight`) →
+Settings → Source → branch. เปลี่ยน branch แล้ว **ต้องให้ปลายทางชี้ commit เดียวกับที่
+รันอยู่ก่อน** ไม่งั้น Railway จะ deploy ทับทันทีที่สลับ
+
+### ข้อมูลตัวอย่างบนเครื่องตัวเอง
+```bash
+node db/seed-dev.js                        # ชุดเล็ก — เทสต์ใช้ชุดนี้
+node scripts/mark-demo.js --yes --force    # ครั้งเดียว ปลดล็อกให้ seed-demo รันได้
+node db/seed-demo.js                       # ชุดใหญ่เหมือนเดโมจริง (68 นักเรียน 16 วิชา)
+```
+⚠️ `npm test` รัน `seed-dev` เป็น pretest ทุกครั้ง = **ล้างชุดใหญ่ทิ้ง** กำลังดูข้อมูล
+เดโมอยู่แล้วรันเทสต์ ต้อง `node db/seed-demo.js` ใหม่
+
+### สั่งให้เดโมล้างข้อมูลเดี๋ยวนี้
+แก้ `db/demo-content.js` แล้ว push ขึ้น main — โค้ดขึ้นทันทีแต่**ข้อมูลเก่ายังอยู่จนถึงตี 3**
+อยากเห็นเลย:
+```bash
+railway variables --set "DEMO_RESET_ON_BOOT=1" --service pssms-demo-app
+# รอ deploy แล้วตรวจว่าข้อมูลใหม่ขึ้นจริง
+railway variables delete DEMO_RESET_ON_BOOT --service pssms-demo-app
+```
+**ต้องถอดออกทุกครั้ง** ปล่อยไว้ = ทุก deploy ล้างข้อมูลคนที่กำลังทดลองใช้อยู่
+
+---
+
 ### Environment (`.env`)
 ```
 DATABASE_URL=postgresql://localhost:5432/pssms_dev
@@ -1420,37 +1479,3 @@ Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-h
 ### Domain docs
 
 Single-context repo — `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.
-
-## การขึ้นระบบ (deploy)
-
-สองเครื่องดึงคนละ branch โดยตั้งใจ:
-
-| เครื่อง | branch | ขึ้นเมื่อ |
-|---|---|---|
-| `demo.pssms.app` | `main` | push ขึ้น main → ขึ้นทันที |
-| `pw.pssms.app` (โรงเรียนจริง) | `production` | merge เข้า production เท่านั้น |
-
-เดิมทั้งสองเครื่องดึง `main` เหมือนกัน แปลว่า push ครั้งเดียวถึงเครื่องที่มีข้อมูล
-ครูและนักเรียนจริงทันทีโดยไม่มีขั้นตอนคั่น
-
-**ขั้นตอนขึ้นโรงเรียนจริง**
-
-```
-git checkout production
-git merge main          # ตรงนี้คือการกดยืนยัน
-git push origin production
-git checkout main
-```
-
-ก่อน merge ควรลองบน `demo.pssms.app` ให้พอใจก่อน — ของขึ้น main แล้วจะอยู่ที่นั่นเสมอ
-
-**ย้อนกลับเมื่อของใหม่มีปัญหา**
-
-```
-git checkout production
-git revert <commit>     # หรือ git reset --hard <commit เดิม> แล้ว push --force-with-lease
-git push origin production
-```
-
-**ที่ตั้งไว้ใน Railway** — repo trigger ของ service `PSSMS-web` (project `steadfast-delight`)
-ตั้ง branch เป็น `production` เปลี่ยนได้ที่หน้า service → Settings → Source
