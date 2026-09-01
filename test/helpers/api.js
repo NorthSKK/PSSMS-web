@@ -59,6 +59,8 @@ const TOKENS = {
   teacher1: token({ id: 'teacher1', role: 'Teacher' }),
   teacher2: token({ id: 'teacher2', role: 'Teacher' }),
   student:  token({ id: '01901',    role: 'Student' }),
+  // ผอ./รอง — อ่านได้ทั้งโรงเรียน ไม่มี user แถวนี้ใน seed เพราะ guard อ่าน role จาก JWT ล้วน
+  executive: token({ id: 'director', role: 'Executive' }),
 };
 
 /**

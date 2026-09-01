@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const { isAdmin, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner, verifyMorningBatchOwner } = require('../lib/permissions');
+const { slotsFromRows, expandSlots } = require('../lib/sessionCalendar');
 
 async function saveAttendanceBatch([list], user) {
   if (!Array.isArray(list) || list.length === 0) return { status: 'success', saved: 0 };
@@ -219,8 +220,6 @@ async function getMassiveAttendanceGrid([, subjectCode, className, term, year], 
   return { students: studentsRes, sessions, attendance };
 }
 
-const THAI_DOW = { 'อาทิตย์': 0, 'จันทร์': 1, 'อังคาร': 2, 'พุธ': 3, 'พฤหัสบดี': 4, 'ศุกร์': 5, 'เสาร์': 6 };
-
 // Every (date, period) this subject+class should have been taught, from the term
 // start date up to today. Returns [] when the timetable or term dates are missing —
 // the grid then falls back to showing only what was actually recorded.
@@ -233,10 +232,9 @@ async function _expectedSessions(subjectCode, className, term, year) {
      WHERE subject_code=$1 AND term=$2 AND year=$3`,
     [subjectCode, String(term), String(year)]
   );
-  const slots = ttRes.rows
-    .filter(r => normalize(`${r.level}/${r.room}`) === normClass)
-    .map(r => ({ dow: THAI_DOW[String(r.day || '').trim()], period: String(r.period) }))
-    .filter(s => s.dow !== undefined);
+  const slots = slotsFromRows(
+    ttRes.rows.filter(r => normalize(`${r.level}/${r.room}`) === normClass)
+  );
   if (!slots.length) return [];
 
   const tdRes = await query(
@@ -252,17 +250,7 @@ async function _expectedSessions(subjectCode, className, term, year) {
   if (isNaN(start) || start > end) return [];
 
   const holidays = await _holidayDates(start, end);
-
-  const out = [];
-  for (const d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-    const dow = d.getUTCDay();
-    const dateStr = d.toISOString().slice(0, 10);
-    if (holidays.has(dateStr)) continue;
-    for (const s of slots) {
-      if (s.dow === dow) out.push({ date: dateStr, period: s.period });
-    }
-  }
-  return out;
+  return expandSlots(slots, start, end, holidays);
 }
 
 // Public holidays are flagged in calendar_events by the red colour the import uses
@@ -338,4 +326,6 @@ module.exports = {
   saveMassiveAttendanceGrid,
   getSemesterReport,
   getAllSubjectsReport,
+  // ใช้ร่วมกับกระดานติดตามงานครู — กติกา "วันหยุด = event สีแดง" ต้องมีที่เดียว
+  _holidayDates,
 };

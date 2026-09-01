@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { adminOnly, teacherOrAdmin, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
+const { adminOnly, teacherOrAdmin, adminOrExecutive, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
 const cache = require('../lib/cache');
 const license = require('../lib/license');
 
@@ -58,6 +58,12 @@ const TEACHER_OR_ADMIN = new Set([
   'saveMediaCard', 'deleteMediaCard',
 ]);
 
+// อ่านได้ทั้งโรงเรียน แก้ไม่ได้ — Executive คือ ผอ./รอง ไม่ใช่หัวหน้ากลุ่มสาระ
+// และไม่ถูกจำกัดขอบเขตตาม dept (docs/adr/0001-executive-sees-whole-school.md)
+const ADMIN_OR_EXECUTIVE = new Set([
+  'getTeacherProgressBoard',
+]);
+
 // ---------------------------------------------------------------------------
 // โหมดอ่านอย่างเดียวเมื่อ licence หมดอายุพ้นช่วงผ่อนผัน (lib/license.js)
 //
@@ -88,7 +94,8 @@ const READONLY_ALLOWED = new Set([
     'getStudentDashboardBundle', 'getStudentSummaryStats', 'getStudentsByClass',
     'getStudentsByClub', 'getSubjectConfig', 'getSystemConfig',
     'getTeacherAtRiskDashboard', 'getTeacherDashboardBundle', 'getTeacherListForClubDropdown',
-    'getTeacherListForDropdown', 'getTeacherRiskDashboard', 'getTeacherSubjects',
+    'getTeacherListForDropdown', 'getTeacherProgressBoard', 'getTeacherRiskDashboard',
+    'getTeacherSubjects',
     'getTeacherTimetable', 'getTeacherTimetableByDate', 'getTeacherTimetableWithStatus',
     'getTeachersForTimetable', 'getTodayAttendanceHistory', 'getTodayMorningSummary',
     'getTodoList',
@@ -108,6 +115,7 @@ const scores = require('../functions/scores');
 const morning = require('../functions/morning');
 const leaveWrite = require('../functions/leave');
 const substituteAuto = require('../functions/substituteAuto');
+const progressBoard = require('../functions/teacherProgressBoard');
 const clubsWrite = require('../functions/clubs_write');
 const sarabun = require('../functions/sarabun');
 const budget = require('../functions/budget');
@@ -266,6 +274,7 @@ const handlers = {
   saveBudget:                      (args, user) => budget.saveBudget(args, user),
 
   // Missing functions (Phase 3 supplement)
+  getTeacherProgressBoard:         () => progressBoard.getTeacherProgressBoard(),
   getTeacherRiskDashboard:         (args) => missing.getTeacherRiskDashboard(args),
   getTeacherAtRiskDashboard:       (args) => missing.getTeacherAtRiskDashboard(args),
   getStudentDashboardBundle:       (args, user) => missing.getStudentDashboardBundle(args, user),
@@ -344,6 +353,7 @@ router.post('/:fnName', async (req, res) => {
   // Role-based authorization
   try {
     if (ADMIN_ONLY.has(fnName)) adminOnly(user);
+    else if (ADMIN_OR_EXECUTIVE.has(fnName)) adminOrExecutive(user);
     else if (TEACHER_OR_ADMIN.has(fnName)) teacherOrAdmin(user);
   } catch (e) {
     return res.json({ __error: e.message });
