@@ -127,6 +127,8 @@ async function main() {
     );
   }
 
+  console.log('   ·', await demoContent.fillMediaTrash());
+
   // ทะเบียนสารบรรณให้มีหลายประเภท — โชว์ตัวกรองประเภทได้
   await query(`DELETE FROM sarabun`);
   const DOCS = [
