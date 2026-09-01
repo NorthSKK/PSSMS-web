@@ -1420,3 +1420,37 @@ Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-h
 ### Domain docs
 
 Single-context repo — `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.
+
+## การขึ้นระบบ (deploy)
+
+สองเครื่องดึงคนละ branch โดยตั้งใจ:
+
+| เครื่อง | branch | ขึ้นเมื่อ |
+|---|---|---|
+| `demo.pssms.app` | `main` | push ขึ้น main → ขึ้นทันที |
+| `pw.pssms.app` (โรงเรียนจริง) | `production` | merge เข้า production เท่านั้น |
+
+เดิมทั้งสองเครื่องดึง `main` เหมือนกัน แปลว่า push ครั้งเดียวถึงเครื่องที่มีข้อมูล
+ครูและนักเรียนจริงทันทีโดยไม่มีขั้นตอนคั่น
+
+**ขั้นตอนขึ้นโรงเรียนจริง**
+
+```
+git checkout production
+git merge main          # ตรงนี้คือการกดยืนยัน
+git push origin production
+git checkout main
+```
+
+ก่อน merge ควรลองบน `demo.pssms.app` ให้พอใจก่อน — ของขึ้น main แล้วจะอยู่ที่นั่นเสมอ
+
+**ย้อนกลับเมื่อของใหม่มีปัญหา**
+
+```
+git checkout production
+git revert <commit>     # หรือ git reset --hard <commit เดิม> แล้ว push --force-with-lease
+git push origin production
+```
+
+**ที่ตั้งไว้ใน Railway** — repo trigger ของ service `PSSMS-web` (project `steadfast-delight`)
+ตั้ง branch เป็น `production` เปลี่ยนได้ที่หน้า service → Settings → Source
