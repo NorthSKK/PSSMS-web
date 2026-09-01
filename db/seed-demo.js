@@ -66,11 +66,11 @@ async function main() {
       [name, username]).catch(() => {});
   }
 
-  const { rows: cfg } = await query(`SELECT value1 FROM system_settings WHERE key='year' LIMIT 1`);
-  const YEAR = (cfg[0] && cfg[0].value1) || '2569';
+  // คำนวณจากวันจริง ไม่อ่านจาก DB — ฐานข้อมูลที่สร้างใหม่ยังไม่มีค่านี้
+  const { term: TERM, year: YEAR } = demoContent.currentThaiTerm();
 
   // ข้อมูลตัวอย่างของทุกเมนู อยู่ใน db/demo-content.js
-  const filled = await demoContent.fill({ term: '1', year: YEAR, teacherNames: TEACHER_NAMES, schoolName: SCHOOL });
+  const filled = await demoContent.fill({ term: TERM, year: YEAR, teacherNames: TEACHER_NAMES, schoolName: SCHOOL });
   for (const line of filled) console.log('   ·', line);
 
   /**

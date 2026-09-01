@@ -197,6 +197,32 @@ function buildTimetable(rand) {
   return out;
 }
 
+/**
+ * ภาคเรียนและปีการศึกษาไทยจากวันจริง
+ *
+ * เทอม 1 = พ.ค.–ต.ค. · เทอม 2 = พ.ย.–มี.ค. · เม.ย. ปิดเทอมใหญ่ นับเป็นเทอม 1 ปีถัดไป
+ * ต้องคำนวณ ไม่ใช่ hardcode — เดโมรันข้ามปี พอขึ้นปีการศึกษาใหม่แล้วยังค้างปีเก่า
+ * ครูที่กดเข้ามาจะเห็น "ไม่พบวิชาในเทอมนี้" ทั้งที่ข้อมูลมีอยู่ครบ
+ */
+function currentThaiTerm(now = new Date()) {
+  const m = now.getMonth() + 1;             // 1-12
+  const ce = now.getFullYear();
+  if (m >= 5 && m <= 10) return { term: '1', year: String(ce + 543) };
+  if (m >= 11)           return { term: '2', year: String(ce + 543) };
+  if (m <= 3)            return { term: '2', year: String(ce + 542) };
+  // เมษายนคือปิดเทอมใหญ่ เทอม 1 ยังไม่เปิด — ใช้เทอม 2 ที่เพิ่งจบ ไม่ใช่เทอมที่ยัง
+  // ไม่มีวันเรียนสักวัน ไม่งั้นเดโมทั้งเดือนเมษายนจะไม่มีข้อมูลอะไรเลย
+  return { term: '2', year: String(ce + 542) };
+}
+
+/** ช่วงวันของภาคเรียน — ใช้เป็นวันเริ่มสร้างข้อมูลเช็คชื่อ และโชว์บนแดชบอร์ด */
+function termRange(term, year) {
+  const ce = Number(year) - 543;
+  return term === '1'
+    ? { start: `${ce}-05-11`,     end: `${ce}-10-10` }
+    : { start: `${ce}-11-01`,     end: `${ce + 1}-03-31` };
+}
+
 // ---------------------------------------------------------------- ตัวเติมข้อมูล
 async function fill({ term, year, teacherNames, schoolName }) {
   const r = rng(20260901);           // เมล็ดคงที่ — ล้างแล้ว seed ใหม่ต้องได้ข้อมูลชุดเดิม
@@ -214,6 +240,23 @@ async function fill({ term, year, teacherNames, schoolName }) {
   // โลโก้โรงเรียน — หน้าล็อกอินดึงมาแสดงตั้งแต่ยังไม่ล็อกอินแล้ว (loadLoginBranding)
   // เดโมจึงต้องไม่มีตราของโรงเรียนจริงค้างอยู่ ไม่งั้นตราจริงจะไปคู่กับชื่อโรงเรียนสมมติ
   await query(`DELETE FROM system_settings WHERE key IN ('schoolLogo','school_logo')`);
+
+  // ---------------------------------------------------------------- ภาคเรียนที่ใช้งาน
+  // ฐานข้อมูลที่สร้างใหม่จาก schema.sql ไม่มีแถวนี้ getSystemConfig จึงตกไปใช้ค่า
+  // ตั้งต้นในโค้ด (ปี 2568) ซึ่งไม่ตรงกับข้อมูลที่เรากำลังจะใส่ ผลคือครูเปิดหน้า
+  // กรอกคะแนนหรือรายงานแล้วเจอ "ไม่พบวิชาในเทอมนี้" ทั้งที่ข้อมูลอยู่ครบ
+  const range = termRange(term, year);
+  await query(
+    `INSERT INTO system_settings(key, subkey, value1, value2) VALUES('Active','Term',$1,$2)
+     ON CONFLICT (key, subkey) DO UPDATE SET value1=EXCLUDED.value1, value2=EXCLUDED.value2`,
+    [term, year]
+  );
+  await query(
+    `INSERT INTO system_settings(key, subkey, value1, value2) VALUES('TermData',$1,$2,$3)
+     ON CONFLICT (key, subkey) DO UPDATE SET value1=EXCLUDED.value1, value2=EXCLUDED.value2`,
+    [`${term}_${year}`, range.start, range.end]
+  );
+  log.push(`ภาคเรียน ${term}/${year} (${range.start} ถึง ${range.end})`);
 
   // ---------------------------------------------------------------- ผู้บริหาร
   // แดชบอร์ดผู้บริหารเป็นหนึ่งใน 12 ฟีเจอร์ที่โฆษณาบน pssms.app แต่ seed-dev ไม่มีบัญชี
@@ -309,10 +352,7 @@ async function fill({ term, year, teacherNames, schoolName }) {
        FROM timetable WHERE term=$1 AND year=$2 AND subject_code NOT LIKE 'CLUB%'`,
     [term, year]
   );
-  const { rows: td } = await query(
-    `SELECT value1 FROM system_settings WHERE key='TermData' AND subkey=$1`, [`${term}_${year}`]
-  );
-  const termStart = (td[0] && td[0].value1) || ymd(new Date(Date.now() - 120 * 86400000));
+  const termStart = range.start;
   const days = schoolDaysSince(termStart);
 
   // นิสัยการมาเรียนของนักเรียนแต่ละคน — ห้องที่ทุกคนมาเกือบครบเท่ากันหมดดูปลอม
@@ -910,4 +950,4 @@ async function fillMediaTrash() {
   return 'ถังขยะสื่อ 1 การ์ด';
 }
 
-module.exports = { fill, fillMediaTrash, CLASSES };
+module.exports = { fill, fillMediaTrash, currentThaiTerm, termRange, CLASSES };
