@@ -1,3 +1,4 @@
+const { resolveStudentId } = require('../lib/permissions');
 const { query, pool } = require('../lib/db');
 
 // Normalize student ID: strip non-alphanumeric, drop leading zeros
@@ -52,8 +53,9 @@ async function saveSavingsTransaction([rows, term, year], user) {
 // ── getSavingsBalance ──────────────────────────────────────────────────────
 // args: [studentId]
 // Returns { studentId, balance }  (cumulative across all terms)
-async function getSavingsBalance([studentId]) {
-  const sid = normID(studentId);
+async function getSavingsBalance([studentId], user) {
+  // นักเรียนดูได้เฉพาะสมุดของตัวเอง ครูดูของนักเรียนได้
+  const sid = normID(resolveStudentId(user, studentId));
   const { rows } = await query(
     `SELECT
        COALESCE(SUM(CASE WHEN type='deposit'  THEN amount ELSE 0 END), 0) AS total_deposit,
@@ -126,13 +128,14 @@ async function getSavingsSummary([className]) {
 // ── getSavingsHistory ──────────────────────────────────────────────────────
 // args: [studentId]
 // Returns [{ id, type, amount, date, term, year, recordedBy, note, createdAt }]
-async function getSavingsHistory([studentId]) {
+async function getSavingsHistory([studentId], user) {
+  const sid = normID(resolveStudentId(user, studentId));
   const { rows } = await query(
     `SELECT id, type, amount, date, term, year, recorded_by, note, created_at
      FROM savings_transactions
      WHERE student_id=$1
      ORDER BY date DESC, created_at DESC`,
-    [normID(studentId)]
+    [sid]
   );
   return rows.map(r => ({
     id: r.id,

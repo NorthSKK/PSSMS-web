@@ -2,7 +2,7 @@
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { call, ok, denied, stop } = require('./helpers/api');
-const { TERM, YEAR, PHYSICS, HEALTH } = require('./helpers/fixtures');
+const { TERM, YEAR, PHYSICS, HEALTH, M2_STUDENTS, M6_STUDENTS } = require('./helpers/fixtures');
 
 after(stop);
 
@@ -55,4 +55,56 @@ test('Admin bypass ownership check', async () => {
     PHYSICS.code, TERM, YEAR,
   ], 'admin');
   assert.equal(res.status, 'success');
+});
+
+// ---------------------------------------------------------------------------
+// นักเรียนอ่านข้อมูลของนักเรียนคนอื่นไม่ได้
+//
+// endpoint กลุ่มนี้รับ studentId มาจาก payload ซึ่งเชื่อไม่ได้ — เคยหลุดมาแล้ว
+// ทั้งสี่ตัว นักเรียนเปลี่ยนตัวเลขใน request แล้วอ่านเกรด ยอดเงินออม ประวัติ
+// ธุรกรรม และชุมนุมของเพื่อนได้ทั้งห้อง
+//
+// ครูและผู้ดูแลต้องยังดูได้ตามหน้าที่ เทสต์จึงต้องยืนยันทั้งสองด้าน
+// เพิ่ม endpoint ใหม่ที่รับ studentId เมื่อไหร่ ให้เพิ่มชื่อในลิสต์นี้ด้วย
+
+const SELF = M2_STUDENTS[0];      // นักเรียนที่ล็อกอิน (test/helpers/api.js ใช้คนนี้)
+const OTHER = M6_STUDENTS[0];     // เพื่อนคนละห้อง
+
+const STUDENT_SCOPED = [
+  ['getSavingsBalance',          (id) => [id]],
+  ['getSavingsHistory',          (id) => [id]],
+  ['getMyClub',                  (id) => [id, TERM, YEAR]],
+  ['getStudentDashboardBundle',  (id) => [id, TERM, YEAR]],
+];
+
+for (const [fnName, argsFor] of STUDENT_SCOPED) {
+  test(`${fnName}: นักเรียนขอข้อมูลของคนอื่น ต้องได้ของตัวเองแทน`, async () => {
+    const asOther = await ok(fnName, argsFor(OTHER), 'student');
+    const asSelf  = await ok(fnName, argsFor(SELF),  'student');
+    assert.deepEqual(asOther, asSelf,
+      `${fnName} ยอมให้นักเรียนอ่านข้อมูลของ ${OTHER} — รหัสใน payload ต้องถูกทิ้ง`);
+  });
+}
+
+test('ครูยังดูข้อมูลของนักเรียนได้ตามหน้าที่', async () => {
+  const bal = await ok('getSavingsBalance', [OTHER], 'teacher2');
+  assert.ok(bal && bal.studentId, 'ครูต้องได้สมุดของนักเรียนที่ระบุ ไม่ใช่ของตัวเอง');
+  const hist = await ok('getSavingsHistory', [OTHER], 'teacher2');
+  assert.ok(Array.isArray(hist));
+});
+
+// ---------------------------------------------------------------------------
+// bundle ที่ห่อ error ไว้ ต้องไม่รายงานว่าสำเร็จทั้งที่ query พัง
+//
+// getStudentDashboardBundle จับ error ใส่ { ok:false } แล้วคืน 200 เสมอ
+// เคยมี query อ้างคอลัมน์ที่ไม่มีอยู่จริง (sc.subject_name) พังทุกครั้งอยู่นาน
+// โดยหน้าเว็บแสดงแค่ว่าไม่มีข้อมูล ไม่มีอะไรฟ้องว่าพัง
+
+test('แดชบอร์ดนักเรียน: ทุกส่วนต้อง ok ไม่ใช่ error ที่ถูกกลืน', async () => {
+  const b = await ok('getStudentDashboardBundle', [SELF, TERM, YEAR], 'student');
+  for (const [key, part] of Object.entries(b)) {
+    if (part && typeof part === 'object' && 'ok' in part) {
+      assert.equal(part.ok, true, `${key} พังเงียบ: ${part.error}`);
+    }
+  }
 });

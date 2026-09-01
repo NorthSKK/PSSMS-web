@@ -2,6 +2,7 @@
  * Implements functions referenced in GAS frontend but not yet in Phase 2/3.
  * Grouped here to keep other files clean.
  */
+const { resolveStudentId } = require('../lib/permissions');
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 
@@ -77,9 +78,12 @@ const { getTeacherAtRiskDashboard } = require('./attendanceReport');
 // ============================================================
 // getStudentDashboardBundle
 // ============================================================
-async function getStudentDashboardBundle([studentId, term, year]) {
+async function getStudentDashboardBundle([studentId, term, year], user) {
+  // นักเรียนดูแดชบอร์ดของตัวเองเท่านั้น — เดิมเชื่อรหัสที่ส่งมาใน payload
+  // ทำให้เปลี่ยนตัวเลขใน request แล้วอ่านเกรดของเพื่อนทั้งห้องได้
+  const sid = resolveStudentId(user, studentId);
   const userRes = await query(
-    `SELECT department FROM users WHERE username=$1`, [studentId]
+    `SELECT department FROM users WHERE username=$1`, [sid]
   );
   const className = userRes.rows[0]?.department || '';
   const parts = className.split('/');
@@ -110,11 +114,22 @@ async function getStudentDashboardBundle([studentId, term, year]) {
   let scoreFeed = { ok: true, data: [] };
   try {
     const { rows } = await query(
-      `SELECT gs.subject_code, sc.subject_name, gs.total_score, gs.grade
+      // ชื่อวิชาอยู่ใน timetable ไม่ใช่ subject_config (ซึ่งเก็บแต่โครงคะแนน)
+      // เดิม join subject_config แล้วอ่าน sc.subject_name — คอลัมน์นั้นไม่มีอยู่จริง
+      // ทั้ง query จึงพังทุกครั้ง แต่ถูก try/catch กลืนไว้จนดูเหมือนแค่ไม่มีข้อมูล
+      // fallback เป็นรหัสวิชา ดีกว่าปล่อยว่างถ้าวิชานั้นถูกถอดออกจากตารางไปแล้ว
+      `SELECT gs.subject_code,
+              COALESCE(tt.subject_name, gs.subject_code) AS subject_name,
+              gs.total_score, gs.grade
        FROM grade_summary gs
-       LEFT JOIN subject_config sc ON sc.subject_code = gs.subject_code AND sc.term=$2 AND sc.year=$3
-       WHERE gs.student_id=$1 AND gs.term=$2 AND gs.year=$3`,
-      [studentId, term, year]
+       LEFT JOIN LATERAL (
+         SELECT t.subject_name FROM timetable t
+         WHERE t.subject_code = gs.subject_code AND t.term=$2 AND t.year=$3
+         LIMIT 1
+       ) tt ON TRUE
+       WHERE gs.student_id=$1 AND gs.term=$2 AND gs.year=$3
+       ORDER BY gs.subject_code`,
+      [sid, term, year]
     );
     scoreFeed = { ok: true, data: rows };
   } catch (e) { scoreFeed = { ok: false, error: e.message, data: [] }; }
@@ -437,7 +452,8 @@ async function getPrintConfigData([term, year]) {
 // ============================================================
 // getMyClub — club a student is registered to
 // ============================================================
-async function getMyClub([studentId, term, year]) {
+async function getMyClub([studentId, term, year], user) {
+  const sid = resolveStudentId(user, studentId);
   const { rows } = await query(
     `SELECT cm.club_id, c.club_name, c.capacity,
             (SELECT COUNT(*) FROM club_members m2 WHERE m2.club_id=cm.club_id AND m2.term=$2 AND m2.year=$3) as member_count
@@ -445,7 +461,7 @@ async function getMyClub([studentId, term, year]) {
      JOIN clubs c ON c.club_id=cm.club_id AND c.term=$2 AND c.year=$3
      WHERE cm.student_id=$1 AND cm.term=$2 AND cm.year=$3
      LIMIT 1`,
-    [studentId, term, year]
+    [sid, term, year]
   );
   if (rows.length === 0) return null;
   const r = rows[0];

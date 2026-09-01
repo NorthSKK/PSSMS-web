@@ -268,7 +268,7 @@ const handlers = {
   // Missing functions (Phase 3 supplement)
   getTeacherRiskDashboard:         (args) => missing.getTeacherRiskDashboard(args),
   getTeacherAtRiskDashboard:       (args) => missing.getTeacherAtRiskDashboard(args),
-  getStudentDashboardBundle:       (args) => missing.getStudentDashboardBundle(args),
+  getStudentDashboardBundle:       (args, user) => missing.getStudentDashboardBundle(args, user),
   getExecutiveDashboardBundle:     (args) => missing.getExecutiveDashboardBundle(args),
   getClubMembers:                  (args) => missing.getClubMembers(args),
   getClubMembersForTeacher:        (args) => missing.getClubMembersForTeacher(args),
@@ -292,7 +292,7 @@ const handlers = {
   getPrintConfigData:              (args) => missing.getPrintConfigData(args),
   generatePP5Template:             (args) => pp5.generatePP5Template(args),
   exportClubsForTerm:              (args) => missing.exportClubsForTerm(args),
-  getMyClub:                       (args) => missing.getMyClub(args),
+  getMyClub:                       (args, user) => missing.getMyClub(args, user),
   getMyClubs:                      (args) => missing.getMyClubs(args),
   getCurriculumBySubject:          (args) => missing.getCurriculumBySubject(args),
   getAvailableSubstitutes:         (args) => missing.getAvailableSubstitutes(args),
@@ -304,9 +304,9 @@ const handlers = {
 
   // Savings
   saveSavingsTransaction:          (args, user) => savings.saveSavingsTransaction(args, user),
-  getSavingsBalance:               (args) => savings.getSavingsBalance(args),
+  getSavingsBalance:               (args, user) => savings.getSavingsBalance(args, user),
   getSavingsSummary:               (args) => savings.getSavingsSummary(args),
-  getSavingsHistory:               (args) => savings.getSavingsHistory(args),
+  getSavingsHistory:               (args, user) => savings.getSavingsHistory(args, user),
   deleteSavingsTransaction:        (args) => savings.deleteSavingsTransaction(args),
   importSavingsCSV:                (args) => savings.importSavingsCSV(args),
   getClassListForSavings:          () => savings.getClassListForSavings(),
