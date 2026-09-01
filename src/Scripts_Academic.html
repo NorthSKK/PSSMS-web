@@ -1905,19 +1905,13 @@ function _tpMeterCell(m, unit) {
   pctEl.className = 'tp-meter-pct';
   pctEl.textContent = pct + '%';
 
-  var right = document.createElement('div');
-  right.className = 'tp-meter-right';
   var bar = document.createElement('div');
   bar.className = 'tp-meter-bar';
   var fill = document.createElement('span');
   fill.style.width = pct + '%';
   bar.appendChild(fill);
-  var num = document.createElement('span');
-  num.className = 'tp-meter-num';
-  num.textContent = m.done.toLocaleString() + ' / ' + m.expected.toLocaleString();
-  right.appendChild(bar); right.appendChild(num);
 
-  wrap.appendChild(pctEl); wrap.appendChild(right);
+  wrap.appendChild(pctEl); wrap.appendChild(bar);
   td.appendChild(wrap);
   td.title = m.done.toLocaleString() + ' จาก ' + m.expected.toLocaleString() + (unit ? ' ' + unit : '');
   return td;
