@@ -980,6 +980,7 @@ function _loadStudentBundle(studentId, term, year) {
   var cached = _dashCacheGet(_cacheKey);
 
   if (cached) {
+    if (cached.kpi && cached.kpi.ok) _renderStudentKpi(cached.kpi.data || {});
     if (cached.timetable && cached.timetable.ok) _renderStudentTodaySchedule(cached.timetable.data || []);
     if (cached.scoreFeed && cached.scoreFeed.ok) _renderScoreFeed(cached.scoreFeed.data || []);
   } else {
@@ -994,6 +995,7 @@ function _loadStudentBundle(studentId, term, year) {
       if (!bundle) return;
       if (!document.getElementById('studentName')) return;
       _dashCacheSet(_cacheKey, bundle);
+      if (bundle.kpi && bundle.kpi.ok) _renderStudentKpi(bundle.kpi.data || {});
       if (bundle.timetable && bundle.timetable.ok) _renderStudentTodaySchedule(bundle.timetable.data || []);
       else {
         var el = document.getElementById('studentTodaySchedule');
@@ -1104,6 +1106,16 @@ function _renderStudentTodaySchedule(slots) {
     html += '</div></div>';
   });
   el.innerHTML = html;
+}
+
+/** แถบตัวเลขบนสุด — ยังไม่มีข้อมูลก็ปล่อยขีดไว้ ดีกว่าโชว์ 0% ที่อ่านผิดความหมาย */
+function _renderStudentKpi(kpi) {
+  var pct = document.getElementById('studentAttendPct');
+  if (pct) pct.textContent = (kpi.attendancePercent === null || kpi.attendancePercent === undefined)
+    ? '—' : kpi.attendancePercent + '%';
+  var gpa = document.getElementById('studentGPA');
+  if (gpa) gpa.textContent = (kpi.gpa === null || kpi.gpa === undefined)
+    ? '—' : Number(kpi.gpa).toFixed(2);
 }
 
 function _renderScoreFeed(feed) {

@@ -113,28 +113,111 @@ async function getStudentDashboardBundle([studentId, term, year], user) {
 
   let scoreFeed = { ok: true, data: [] };
   try {
-    const { rows } = await query(
-      // ชื่อวิชาอยู่ใน timetable ไม่ใช่ subject_config (ซึ่งเก็บแต่โครงคะแนน)
-      // เดิม join subject_config แล้วอ่าน sc.subject_name — คอลัมน์นั้นไม่มีอยู่จริง
-      // ทั้ง query จึงพังทุกครั้ง แต่ถูก try/catch กลืนไว้จนดูเหมือนแค่ไม่มีข้อมูล
-      // fallback เป็นรหัสวิชา ดีกว่าปล่อยว่างถ้าวิชานั้นถูกถอดออกจากตารางไปแล้ว
-      `SELECT gs.subject_code,
-              COALESCE(tt.subject_name, gs.subject_code) AS subject_name,
-              gs.total_score, gs.grade
-       FROM grade_summary gs
+    // หน้านักเรียนต้องการคะแนน "รายชิ้น" ไม่ใช่แค่ยอดรวม — ชื่อชิ้นงานกับคะแนนเต็ม
+    // อยู่ใน subject_config.indicators_json / exam_indicators_json ส่วนคะแนนที่ครูกรอก
+    // อยู่ใน score_database (indicator_id = formative_0..N, midterm, final)
+    //
+    // ⚠️ รูปร่างที่คืนต้องตรงกับ _renderScoreFeed ใน src/Scripts_Core.html ทุกชื่อคีย์
+    //    (camelCase + items[]) — เดิมคืน snake_case แบน ๆ ไม่มี items ทำให้ renderer
+    //    โยน TypeError กลางทาง แล้ว skeleton ค้างอยู่อย่างนั้นโดยไม่มี error ให้เห็น
+    const { rows: subjRows } = await query(
+      `SELECT sc.subject_code,
+              COALESCE(tt.subject_name, sc.subject_code) AS subject_name,
+              sc.class_name, sc.indicators_json, sc.exam_indicators_json,
+              gs.total_score, gs.grade, gs.remedial_status
+       FROM subject_config sc
        LEFT JOIN LATERAL (
          SELECT t.subject_name FROM timetable t
-         WHERE t.subject_code = gs.subject_code AND t.term=$2 AND t.year=$3
+         WHERE t.subject_code = sc.subject_code AND t.term = sc.term AND t.year = sc.year
          LIMIT 1
        ) tt ON TRUE
-       WHERE gs.student_id=$1 AND gs.term=$2 AND gs.year=$3
-       ORDER BY gs.subject_code`,
+       LEFT JOIN grade_summary gs
+         ON gs.student_id = $1 AND gs.subject_code = sc.subject_code
+        AND gs.term = sc.term AND gs.year = sc.year
+       WHERE sc.class_name = $2 AND sc.term = $3 AND sc.year = $4
+       ORDER BY sc.subject_code`,
+      [sid, className, term, year]
+    );
+
+    const { rows: scoreRows } = await query(
+      `SELECT subject_code, indicator_id, score
+       FROM score_database WHERE student_id=$1 AND term=$2 AND year=$3`,
       [sid, term, year]
     );
-    scoreFeed = { ok: true, data: rows };
+    const scoreOf = new Map(scoreRows.map(r => [`${r.subject_code}_${r.indicator_id}`, r.score]));
+
+    const asArray = (v) => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch (_) { return []; } }
+      return [];
+    };
+
+    scoreFeed = {
+      ok: true,
+      data: subjRows.map(r => {
+        const items = [];
+        asArray(r.indicators_json).forEach((ind, idx) => {
+          items.push({
+            type: 'formative',
+            name: ind.name || `ชิ้นงานที่ ${idx + 1}`,
+            maxScore: Number(ind.score) || 0,
+            score: scoreOf.get(`${r.subject_code}_formative_${idx}`) ?? null,
+          });
+        });
+        // exam_indicators_json เก็บสองแถวเรียง กลางภาค แล้วปลายภาค
+        const exams = asArray(r.exam_indicators_json);
+        [['midterm', 'สอบกลางภาค'], ['final', 'สอบปลายภาค']].forEach(([key, fallback], k) => {
+          const e = exams[k];
+          if (!e) return;
+          items.push({
+            type: key,
+            name: e.name || fallback,
+            maxScore: Number(e.score) || 0,
+            score: scoreOf.get(`${r.subject_code}_${key}`) ?? null,
+          });
+        });
+        return {
+          subjectCode: r.subject_code,
+          subjectName: r.subject_name,
+          className: r.class_name,
+          totalScore: r.total_score,
+          grade: r.grade,
+          remedialStatus: r.remedial_status,
+          items,
+        };
+      }),
+    };
   } catch (e) { scoreFeed = { ok: false, error: e.message, data: [] }; }
 
-  return { timetable, scoreFeed };
+  // ---- แถบตัวเลขบนสุดของหน้า: ร้อยละการมาเรียน และเกรดเฉลี่ย ----
+  // สองช่องนี้เป็น "—" มาตลอด — มี element ในหน้าแต่ไม่เคยมีใครส่งค่ามาให้
+  let kpi = { ok: true, data: { attendancePercent: null, gpa: null } };
+  try {
+    const { rows: att } = await query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status IN ('มา','สาย'))::int AS present
+       FROM attendance
+       WHERE student_id=$1 AND term=$2 AND year=$3 AND subject_code NOT LIKE 'CLUB%'`,
+      [sid, term, year]
+    );
+    const { rows: gp } = await query(
+      // เกรด 'ร' และ 'มส' ไม่ใช่ตัวเลข ไม่นับเข้าค่าเฉลี่ย
+      `SELECT AVG(NULLIF(grade,'')::numeric) AS gpa
+       FROM grade_summary
+       WHERE student_id=$1 AND term=$2 AND year=$3 AND grade ~ '^[0-9]+(\\.[0-9]+)?$'`,
+      [sid, term, year]
+    );
+    const a = att[0] || { total: 0, present: 0 };
+    kpi = {
+      ok: true,
+      data: {
+        attendancePercent: a.total > 0 ? Math.round((a.present / a.total) * 1000) / 10 : null,
+        gpa: gp[0] && gp[0].gpa !== null ? Number(Number(gp[0].gpa).toFixed(2)) : null,
+      },
+    };
+  } catch (e) { kpi = { ok: false, error: e.message, data: {} }; }
+
+  return { timetable, scoreFeed, kpi };
 }
 
 // ============================================================

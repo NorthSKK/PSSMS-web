@@ -108,3 +108,35 @@ test('แดชบอร์ดนักเรียน: ทุกส่วนต
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// รูปร่างที่ส่งให้หน้านักเรียน ต้องตรงกับที่ _renderScoreFeed อ่าน
+//
+// เคยพังมาแล้วสองชั้นซ้อน: query อ้างคอลัมน์ที่ไม่มี ทำให้ไม่มีใครเห็นว่า
+// renderer ก็ไม่ตรงกับ payload ด้วย พอแก้ query ชั้นแรก หน้าเว็บก็ค้างที่
+// skeleton เพราะ renderer เรียก subj.items.forEach บนค่า undefined
+//
+// เทสต์นี้ล็อก contract ไว้ — แก้ฝั่งไหนแล้วอีกฝั่งไม่ตาม จะแดงที่นี่
+
+test('แดชบอร์ดนักเรียน: payload ต้องมีคีย์ครบตามที่หน้าเว็บใช้', async () => {
+  const b = await ok('getStudentDashboardBundle', [SELF, TERM, YEAR], 'student');
+
+  assert.ok(b.kpi && b.kpi.ok, 'ต้องมี kpi สำหรับแถบร้อยละการมาเรียนและเกรดเฉลี่ย');
+  assert.ok('attendancePercent' in b.kpi.data, 'ไม่มี attendancePercent → ช่องบนหน้าเว็บจะเป็นขีดตลอด');
+  assert.ok('gpa' in b.kpi.data);
+
+  for (const subj of b.scoreFeed.data) {
+    for (const key of ['subjectCode', 'subjectName', 'className', 'totalScore', 'grade', 'items']) {
+      assert.ok(key in subj, `scoreFeed ขาดคีย์ ${key} — _renderScoreFeed อ่านคีย์นี้`);
+    }
+    assert.ok(Array.isArray(subj.items),
+      'items ต้องเป็น array เสมอ — renderer เรียก .forEach ทันทีโดยไม่เช็ค');
+    for (const it of subj.items) {
+      for (const key of ['type', 'name', 'maxScore']) {
+        assert.ok(key in it, `รายการคะแนนขาดคีย์ ${key}`);
+      }
+      assert.ok(['formative', 'midterm', 'final'].includes(it.type),
+        `type '${it.type}' ไม่อยู่ในกลุ่มที่ renderer รู้จัก จะไม่ถูกแสดงเลย`);
+    }
+  }
+});
