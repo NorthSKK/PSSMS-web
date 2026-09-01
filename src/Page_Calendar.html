@@ -1,6 +1,6 @@
 <style>
 /* Calendar — minimal modern theme */
-#calendarPageWrap { --cal-accent: var(--p-accent); --cal-border: var(--p-border); --cal-muted: #8a93a4; }
+#calendarPageWrap { --cal-accent: var(--p-accent); --cal-border: var(--p-border); --cal-muted: #8a93a4; --cal-today: #dc3545; --cal-today-soft: #ffecb3; }
 #calendarPageWrap .fc { font-family: inherit; }
 #calendarPageWrap .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
 #calendarPageWrap .fc-toolbar-title { font-size: 1.15rem; font-weight: 600; color: #222; letter-spacing: -0.01em; }
@@ -32,8 +32,26 @@
 #calendarPageWrap .fc-day-sun .fc-daygrid-day-number { color: #9aa0a6; }
 #calendarPageWrap .fc-col-header-cell.fc-day-sat,
 #calendarPageWrap .fc-col-header-cell.fc-day-sun { color: #b0b6c0; }
-#calendarPageWrap .fc-day-today { background: var(--p-accent-soft) !important; }
-#calendarPageWrap .fc-day-today .fc-daygrid-day-number { color: var(--cal-accent); font-weight: 700; }
+/* Today — grid cells are hardcoded white in both themes, so --cal-today is a
+   fixed value instead of --p-accent (which flips light in dark mode). */
+#calendarPageWrap .fc-day-today { background: var(--cal-today-soft) !important; }
+#calendarPageWrap .fc-day-today .fc-daygrid-day-top { position: relative; padding-left: 46px; }
+#calendarPageWrap .fc-day-today .fc-daygrid-day-top::before {
+    content: 'วันนี้'; position: absolute; left: 6px; top: 7px;
+    font-size: 0.64rem; font-weight: 700; letter-spacing: 0.02em;
+    color: #fff; background: var(--cal-today);
+    padding: 1px 6px; border-radius: 999px; line-height: 1.4;
+}
+#calendarPageWrap .fc-day-today .fc-daygrid-day-number {
+    color: #fff; font-weight: 700; background: var(--cal-today);
+    min-width: 24px; height: 24px; margin: 4px 5px;
+    padding: 0 6px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+#calendarPageWrap .fc-col-header-cell.fc-day-today { color: var(--cal-today); font-weight: 700; }
+#calendarPageWrap .fc-list-day.fc-day-today .fc-list-day-cushion {
+    background: var(--cal-today-soft) !important;
+}
 #calendarPageWrap .fc-daygrid-day-number {
     font-size: 0.82rem; color: #444; padding: 6px 8px; font-weight: 500;
 }
