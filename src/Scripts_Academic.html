@@ -1853,4 +1853,149 @@ async function submitDetailedLesson() {
   }
 }
 
+
+// ============================================================
+// กระดานติดตามงานครู — Page_Teacher_Progress
+//
+// ทั้งกระดานเป็น "ความคืบหน้า" ไม่มีไฟแดง: ตัวเลขบอกว่าไปถึงไหน ไม่ตัดสินว่าใครผิด
+// grade_summary เก็บเฉพาะแถวที่กรอกครบอยู่แล้ว แถวว่างกลางเทอมแปลว่ายังไม่ถึงเวลา
+// เหตุผลเต็ม ๆ อยู่ที่ docs/plan-teacher-progress-board.md
+// ============================================================
+
+var _tpData = null;
+var _tpOpen = {};   // teacherId → กางอยู่ไหม (คงไว้ข้ามการโหลดใหม่)
+
+function initTeacherProgressPage(force) {
+  var body = document.getElementById('tpBody');
+  if (!body) return;
+  if (force) {
+    body.innerHTML = '<tr><td colspan="4" class="p-3"><div class="pssms-skel" style="height:38px;border-radius:8px;"></div></td></tr>';
+  }
+  google.script.run
+    .withSuccessHandler(function(res) { _tpData = res; _tpRender(); })
+    .withFailureHandler(function(err) {
+      body.innerHTML = '';
+      var tr = document.createElement('tr');
+      var td = document.createElement('td');
+      td.colSpan = 4;
+      td.className = 'text-center text-muted py-4';
+      td.textContent = 'โหลดกระดานไม่สำเร็จ: ' + (err && err.message ? err.message : err);
+      tr.appendChild(td); body.appendChild(tr);
+    })
+    .getTeacherProgressBoard();
+}
+
+// เม็ดวัด — คืน <td> พร้อมแถบและตัวเลข · expected=0 แปลว่า "ไม่มีให้ทำ" ไม่ใช่ "ทำไม่ครบ"
+function _tpMeterCell(m) {
+  var td = document.createElement('td');
+  if (!m || !m.expected) {
+    var na = document.createElement('span');
+    na.className = 'tp-meter-na';
+    na.textContent = '—';
+    td.appendChild(na);
+    return td;
+  }
+  var pct = Math.round((m.done / m.expected) * 100);
+  var wrap = document.createElement('div');
+  wrap.className = 'tp-meter' + (m.done >= m.expected ? ' tp-meter-full' : '');
+  var bar = document.createElement('div');
+  bar.className = 'tp-meter-bar';
+  var fill = document.createElement('span');
+  fill.style.width = pct + '%';
+  bar.appendChild(fill);
+  var num = document.createElement('span');
+  num.className = 'tp-meter-num';
+  num.textContent = m.done.toLocaleString() + '/' + m.expected.toLocaleString();
+  wrap.appendChild(bar); wrap.appendChild(num);
+  td.appendChild(wrap);
+  td.title = pct + '%';
+  return td;
+}
+
+function _tpTotalBlock(label, m) {
+  var box = document.createElement('div');
+  box.className = 'tp-total';
+  var lb = document.createElement('span');
+  lb.className = 'tp-total-label';
+  lb.textContent = label;
+  box.appendChild(lb);
+  var cell = _tpMeterCell(m);
+  while (cell.firstChild) box.appendChild(cell.firstChild);
+  return box;
+}
+
+function _tpRender() {
+  var d = _tpData;
+  var body = document.getElementById('tpBody');
+  var totals = document.getElementById('tpTotals');
+  var sub = document.getElementById('tpSubtitle');
+  if (!d || !body) return;
+
+  if (sub) {
+    sub.textContent = 'ภาคเรียนที่ ' + d.term + '/' + d.year + ' · ครู ' + d.teachers.length + ' คน'
+      + (d.datedTerm ? '' : ' · ยังไม่ได้ตั้งวันเปิด-ปิดภาคเรียน คอลัมน์เช็คชื่อจึงว่าง');
+  }
+
+  if (totals) {
+    totals.innerHTML = '';
+    totals.appendChild(_tpTotalBlock('เช็คชื่อ', d.totals.attendance));
+    totals.appendChild(_tpTotalBlock('ตั้งค่าวิชา', d.totals.config));
+    totals.appendChild(_tpTotalBlock('กรอกคะแนน', d.totals.scores));
+  }
+
+  body.innerHTML = '';
+  if (!d.teachers.length) {
+    var empty = document.createElement('tr');
+    var etd = document.createElement('td');
+    etd.colSpan = 4;
+    etd.className = 'text-center text-muted py-4';
+    etd.textContent = 'ยังไม่มีตารางสอนของภาคเรียนนี้';
+    empty.appendChild(etd); body.appendChild(empty);
+    return;
+  }
+
+  d.teachers.forEach(function(t) {
+    var tr = document.createElement('tr');
+    tr.className = 'tp-row-teacher';
+    tr.onclick = function() { _tpToggle(t.teacherId); };
+
+    var nameTd = document.createElement('td');
+    var caret = document.createElement('span');
+    caret.className = 'tp-caret';
+    caret.textContent = _tpOpen[t.teacherId] ? '▾' : '▸';
+    var nm = document.createElement('span');
+    nm.className = 'tp-name';
+    nm.textContent = t.name;
+    nameTd.appendChild(caret); nameTd.appendChild(nm);
+    tr.appendChild(nameTd);
+    tr.appendChild(_tpMeterCell(t.attendance));
+    tr.appendChild(_tpMeterCell(t.config));
+    tr.appendChild(_tpMeterCell(t.scores));
+    body.appendChild(tr);
+
+    if (!_tpOpen[t.teacherId]) return;
+    t.subjects.forEach(function(s) {
+      var sr = document.createElement('tr');
+      sr.className = 'tp-row-subject';
+      var std = document.createElement('td');
+      std.className = 'tp-sub-name';
+      std.textContent = s.isHomeroom ? 'โฮมรูม' : (s.subjectName + ' (' + s.subjectCode + ')');
+      var cls = document.createElement('div');
+      cls.className = 'tp-sub-class';
+      cls.textContent = s.className;
+      std.appendChild(cls);
+      sr.appendChild(std);
+      sr.appendChild(_tpMeterCell(s.attendance));
+      sr.appendChild(_tpMeterCell(s.config));
+      sr.appendChild(_tpMeterCell(s.scores));
+      body.appendChild(sr);
+    });
+  });
+}
+
+function _tpToggle(teacherId) {
+  _tpOpen[teacherId] = !_tpOpen[teacherId];
+  _tpRender();
+}
+
 </script>

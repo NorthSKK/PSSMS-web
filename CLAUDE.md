@@ -867,6 +867,36 @@ function section(fn) {
 - `<โรงเรียน>.pssms.app` = แอปของแต่ละโรงเรียน (ยังไม่ได้ชี้ — ตอนนี้ยังใช้ URL ของ Railway)
 - ภาพหน้าจอบนเว็บขายถ่ายจาก `db/seed-demo.js` **ห้ามถ่ายจาก production**
 
+### กระดานติดตามงานครู — `Page_Teacher_Progress`
+
+ตอบคำถาม "ใครยังไม่ทำ" ของทั้งโรงเรียน — เช็คชื่อ / ตั้งค่าโครงสร้างวิชา / กรอกคะแนน
+แถวคือครู กดกางเป็นวิชา×ห้อง · **แผนเต็มและเหตุผลอยู่ที่ `docs/plan-teacher-progress-board.md`**
+
+- `functions/teacherProgressBoard.js` — `getTeacherProgressBoard()` **ไม่รับ arg** เทอมปัจจุบันเท่านั้น
+- `ADMIN_OR_EXECUTIVE` (set ที่ 3 ใน `routes/gas.js`) + อยู่ใน `READONLY_ALLOWED`
+- `src/Page_Teacher_Progress.html` · `initTeacherProgressPage()` + `_tpRender()` ใน `Scripts_Academic.html`
+  · CSS `tp-*` ใน `Styles.html` · การ์ดสรุปบนแดชบอร์ดแอดมินเรียก RPC เดียวกัน
+  (`_loadAdminProgressSummary` ใน `Scripts_Admin.html` — **ไม่ได้อยู่ใน bundle** โดยตั้งใจ
+  กระดานคำนวณทั้งโรงเรียน ไม่ควรถ่วงการเปิดแดชบอร์ด แคชฝั่ง server ทำให้สองที่ใช้ผลชุดเดียวกัน)
+
+⚠️ **ทุกคอลัมน์เป็นเศษส่วน ห้ามทำเป็นไฟแดง/เขียว** — `grade_summary` เก็บเฉพาะแถวที่ผ่าน
+completeness gate อยู่แล้ว แถวว่างกลางเทอมแปลว่า "ยังไม่ถึงเวลา" ไม่ใช่ "ครูไม่ทำ"
+
+⚠️ **โฮมรูมนับตัวเศษจาก `morning_activity` ไม่ใช่ `attendance`** — มีแถวของ class+date นั้น
+= เช็คแล้ว ไม่ดูว่ากรอกครบกี่ช่องใน `area`/`duty`/`flag` · นับผิดตารางเมื่อไหร่
+ครูที่ปรึกษาทุกคนจะค้าง 100% ตลอดกาลทั้งที่ทำงานครบ
+
+⚠️ **`-` และ `CLUB_*` ไม่เข้าตัวหาร** — `-` (แนะแนว/วิถีพุทธ) ไม่มีตารางเก็บผลการเช็คเลย
+ส่วนชุมนุมไม่ใช่เวลาเรียนรายวิชา ใช้ `isTrackedSubject()` ที่ล้อ `subjectPrefixOf()`
+
+⚠️ **ตัวเศษของเช็คชื่อไม่กรอง `teacher_id`** — ครูสอนแทนเช็คแล้วคาบนั้นถูกเช็คจริง
+เจ้าของคาบไม่ควรค้าง
+
+**สูตร "คาบที่ควรสอน" ย้ายไป `lib/sessionCalendar.js`** (`slotsFromRows` + `expandSlots`)
+ไฟล์นั้น **ไม่แตะ DB เลย** โดยตั้งใจ — `_expectedSessions` โหลดต่อวิชา×ห้อง
+ส่วนกระดานโหลด `timetable` + `TermData` + วันหยุดครั้งเดียวแล้ว expand ทุกคู่ในหน่วยความจำ
+เอา query กลับเข้าไปเมื่อไหร่ = กระดานยิง 180–450 query ต่อการเปิดหนึ่งครั้ง
+
 ### เมนู "สื่อการสอน" — `Page_Teaching_Media`
 
 หน้ารวมการ์ดสื่อการเรียนการสอน คลิกแล้วเปิดในแท็บใหม่
@@ -1062,6 +1092,7 @@ ADMIN_ONLY    = Set{ addUser, editUser, deleteUser, importCSV, saveSystemConfig,
                      timetable admin writes, approveLeave, assignSubstitute,
                      getAutoAssignPreview, applyAutoAssign,
                      getAllUsers, promoteStudentsToNextYear, club admin, ... }
+ADMIN_OR_EXECUTIVE = Set{ getTeacherProgressBoard }
 TEACHER_OR_ADMIN = Set{ saveAttendanceBatch, saveMassiveAttendanceGrid,
                         saveSubjectConfig, saveAllInOneScores, saveAllInOneWithConfig,
                         saveDetailedLessonRecord, saveMorningActivityBatch,
@@ -1207,6 +1238,7 @@ In-memory TTL cache (process-local, resets on restart). ใช้ `cache.get/set
 | `tt_date_{teacherId}_{dateStr}` | 60s | `TIMETABLE_WRITE_FNS` |
 | `tt_status_{teacherId}_{dateStr}` | 60s | `TIMETABLE_WRITE_FNS` (รวม `saveAttendanceBatch`) |
 | `students_{normClass}_{year}` | 300s | `USER_WRITE_FNS` |
+| `progress_board_{term}_{year}` | 600s | — (ปล่อยหมดอายุเอง โดยตั้งใจ) |
 
 Cache invalidation เกิดอัตโนมัติใน `routes/gas.js` หลัง handler สำเร็จ:
 ```js

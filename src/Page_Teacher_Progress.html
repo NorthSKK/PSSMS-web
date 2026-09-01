@@ -1,0 +1,34 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-list-check me-2" style="color: var(--p-accent);"></i>ติดตามงานครู</h4>
+      <p class="pssms-subtitle" id="tpSubtitle">กำลังโหลด...</p>
+    </div>
+    <div class="pssms-actions">
+      <button class="btn btn-soft btn-sm" onclick="initTeacherProgressPage(true)">
+        <i class="fas fa-rotate me-1"></i>โหลดใหม่
+      </button>
+    </div>
+  </div>
+
+  <!-- แถบรวมทั้งโรงเรียน -->
+  <div class="ar-bar" id="tpTotals"></div>
+
+  <div class="pssms-card p-0">
+    <div class="ar-scroll">
+      <table class="table table-sm mb-0 tp-table">
+        <thead>
+          <tr>
+            <th class="tp-col-name">ครู</th>
+            <th class="tp-col-metric">เช็คชื่อ</th>
+            <th class="tp-col-metric">ตั้งค่าวิชา</th>
+            <th class="tp-col-metric">กรอกคะแนน</th>
+          </tr>
+        </thead>
+        <tbody id="tpBody">
+          <tr><td colspan="4" class="p-3"><div class="pssms-skel" style="height:38px;border-radius:8px;"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

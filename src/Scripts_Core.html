@@ -646,6 +646,7 @@ function renderApp(user) {
     menuHTML += `<li class="mb-3"><a href="javascript:void(0)" class="nav-link-custom active" onclick="loadPage('Page_Dashboard_Executive')"><i class="fas fa-chart-line me-2"></i>แดชบอร์ดผู้บริหาร</a></li>`;
     menuHTML += `<div class="menu-divider">ข้อมูลฝ่าย</div>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn academic" onclick="loadPage('Page_Academic_Report')"><i class="fas fa-graduation-cap"></i> <span>รายงานวิชาการ</span></a></li>`;
+    menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size:0.85rem;color:#14b8a6;" onclick="loadPage('Page_Teacher_Progress')"><i class="fas fa-list-check me-2" style="font-size:0.7rem;"></i>ติดตามงานครู</a></li>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn budget" onclick="loadPage('Page_Budget')"><i class="fas fa-wallet"></i> <span>งบประมาณ</span></a></li>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn personnel" onclick="loadPage('Page_Personnel')"><i class="fas fa-users"></i> <span>บุคลากร</span></a></li>`;
     menuHTML += `<li class="mb-1"><div class="dept-btn general" style="cursor:default;"><i class="fas fa-building"></i> <span>ฝ่ายทั่วไป</span></div></li>`;
@@ -677,7 +678,8 @@ function renderApp(user) {
         menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: var(--p-accent);" onclick="loadPage('Page_Admin_Timetable')"><i class="fas fa-calendar-alt me-2" style="font-size: 0.7rem;"></i>ตารางสอน</a></li>`;
         menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #2ecc71;" onclick="loadPage('Page_Admin_Curriculum')"><i class="fas fa-layer-group me-2" style="font-size: 0.7rem;"></i>คลังตัวชี้วัด/ผลการเรียนรู้</a></li>`;
         menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #9c27b0;" onclick="loadPage('Page_Admin_Clubs')"><i class="fas fa-users-cog me-2" style="font-size: 0.7rem;"></i>จัดการชุมนุม</a></li>`;
-        menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #00897b;" onclick="loadPage('Page_Teaching_Media')"><i class="fas fa-book-open-reader me-2" style="font-size: 0.7rem;"></i>สื่อการสอน</a></li>`;
+        menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #00897b;" onclick="loadPage('Page_Teaching_Media')"><i class="fas fa-book-open-reader me-2" style="font-size: 0.7rem;"></i>สื่อการสอน</a></li>`;
+        menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #14b8a6;" onclick="loadPage('Page_Teacher_Progress')"><i class="fas fa-list-check me-2" style="font-size: 0.7rem;"></i>ติดตามงานครู</a></li>`;
     } else {
         // ของครู: ฝ่ายวิชาการเป็น label, เช็คเวลาเรียน + sub-items
         menuHTML += `<li class="mb-1"><div class="dept-btn academic"><i class="fas fa-graduation-cap"></i> <span>ฝ่ายวิชาการ</span></div></li>`;
@@ -763,7 +765,7 @@ function _setupIdlePrefetch(role) {
     ADMIN:     ['Page_Admin_Users','Page_Academic','Page_Score_Entry','Page_Calendar','Page_Budget'],
     TEACHER:   ['Page_Academic','Page_Score_Entry','Page_Calendar','Page_Teacher_Timetable','Page_Lesson_History'],
     STUDENT:   ['Page_Student_Clubs','Page_Calendar'],
-    EXECUTIVE: ['Page_Academic_Report','Page_Budget','Page_Personnel','Page_Calendar']
+    EXECUTIVE: ['Page_Academic_Report','Page_Teacher_Progress','Page_Budget','Page_Personnel','Page_Calendar']
   };
   var pages = rolePages[(role || '').toUpperCase()] || [];
   if (!pages.length) return;
@@ -846,7 +848,8 @@ var PAGE_DEPT = {
   Page_Homeroom:'personnel',
   Page_General:'general',
   Page_Savings:'general',
-  Page_Teaching_Media:'academic'
+  Page_Teaching_Media:'academic',
+  Page_Teacher_Progress:'academic'
 };
 var _DEPT_CLASSES = ['dept-academic','dept-budget','dept-personnel','dept-general'];
 function _setBodyDept(pageName) {
@@ -931,6 +934,7 @@ function setupPageContent(pageName, html) {
   if(pageName === 'Page_Admin_Settings') loadCurrentConfig();
   if(pageName === 'Page_Academic') initAcademicPage();
   if(pageName === 'Page_Admin_Timetable') initAdminTimetable();
+  if(pageName === 'Page_Teacher_Progress') initTeacherProgressPage();
   if(pageName === 'Page_Academic_Report') initAcademicReportPage();
   if(pageName === 'Page_Lesson_History') initLessonHistoryPage();
   if(pageName === 'Page_Subject_Config') initSubjectConfigPage();

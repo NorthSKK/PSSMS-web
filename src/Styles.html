@@ -1461,4 +1461,55 @@ body.dark-mode .pssms-dept-general {
   .ar-chips { margin-left: 0; }
 }
 
+
+/* ==========================================================
+   tp-* — กระดานติดตามงานครู
+   ล้อความหนาแน่นและ token ของ ar-* (รายงานสถิติเวลาเรียน)
+   ⚠️ กระดานนี้เป็น "ความคืบหน้า" ไม่ใช่ไฟเตือน — ห้ามใส่สีแดง/เขียวตัดสินถูกผิด
+      แถวว่างกลางเทอมแปลว่ายังไม่ถึงเวลา ไม่ใช่ครูไม่ทำ (docs/plan-teacher-progress-board.md)
+   ========================================================== */
+.tp-table { font-size: .8rem; }
+.tp-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--p-surface); border-bottom: 1px solid var(--p-border);
+  font-size: .7rem; font-weight: 700; color: var(--p-text-muted);
+  white-space: nowrap; padding: 8px 10px;
+}
+.tp-table td { padding: 7px 10px; vertical-align: middle; border-color: var(--p-border); }
+.tp-col-name   { min-width: 190px; }
+.tp-col-metric { width: 165px; }
+
+.tp-row-teacher { cursor: pointer; }
+.tp-row-teacher:hover { background: var(--p-dom); }
+.tp-name { font-weight: 600; color: var(--p-text); }
+.tp-caret { display: inline-block; width: 12px; color: var(--p-text-muted); font-size: .65rem; }
+
+/* แถววิชาที่กางออกมา */
+.tp-row-subject > td { background: var(--p-dom); }
+.tp-sub-name { padding-left: 26px; color: var(--p-text-muted); font-size: .75rem; }
+.tp-sub-class { color: var(--p-text-muted); font-size: .7rem; }
+
+/* เม็ดวัดความคืบหน้า — ตัวเลขคือของจริง แถบเป็นแค่ตัวช่วยกวาดสายตา */
+.tp-meter { display: flex; align-items: center; gap: .45rem; }
+.tp-meter-bar {
+  flex: 1 1 auto; min-width: 46px; height: 5px;
+  border-radius: 999px; background: var(--p-border); overflow: hidden;
+}
+.tp-meter-bar > span { display: block; height: 100%; background: var(--p-accent); }
+.tp-meter-num {
+  font-size: .7rem; font-variant-numeric: tabular-nums;
+  color: var(--p-text-muted); white-space: nowrap;
+}
+.tp-meter-full .tp-meter-num { color: var(--p-text); font-weight: 600; }
+.tp-meter-na { color: var(--p-text-muted); opacity: .45; font-size: .7rem; }
+
+/* แถบรวมด้านบน — ใช้โครง .ar-bar เดิม */
+.tp-total { display: flex; align-items: center; gap: .5rem; min-width: 190px; }
+.tp-total-label { font-size: .7rem; font-weight: 700; color: var(--p-text-muted); }
+
+@media (max-width: 576px) {
+  .tp-col-metric { width: auto; }
+  .tp-meter-bar { display: none; }
+}
+
 </style>

@@ -15,6 +15,27 @@ function initAdminDashboard() {
     })
     .withFailureHandler(function(e) { console.error('admin bundle fail', e); })
     .getAdminDashboardBundle();
+
+  // เรียกแยกจาก bundle โดยตั้งใจ — กระดานคำนวณทั้งโรงเรียน ไม่ควรถ่วงการเปิดแดชบอร์ด
+  // ฝั่ง server แคชไว้ 10 นาที หน้าเต็มกับการ์ดนี้จึงใช้ผลการคำนวณชุดเดียวกัน
+  _loadAdminProgressSummary();
+}
+
+function _loadAdminProgressSummary() {
+  var box = document.getElementById('adminProgressTotals');
+  if (!box) return;
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.totals) return;
+      box.innerHTML = '';
+      box.appendChild(_tpTotalBlock('เช็คชื่อ', d.totals.attendance));
+      box.appendChild(_tpTotalBlock('ตั้งค่าวิชา', d.totals.config));
+      box.appendChild(_tpTotalBlock('กรอกคะแนน', d.totals.scores));
+    })
+    .withFailureHandler(function() {
+      box.innerHTML = '<span class="small text-muted">โหลดยอดติดตามงานครูไม่สำเร็จ</span>';
+    })
+    .getTeacherProgressBoard();
 }
 
 function _renderAdminDashboard(bundle) {
