@@ -1,4 +1,5 @@
 const { resolveStudentId } = require('../lib/permissions');
+const { schoolToday } = require('../lib/schoolDate');
 const { query, pool } = require('../lib/db');
 
 // Normalize student ID: strip non-alphanumeric, drop leading zeros
@@ -12,7 +13,7 @@ async function saveSavingsTransaction([rows, term, year], user) {
   if (!Array.isArray(rows) || rows.length === 0)
     return { status: 'success', saved: 0, message: 'ไม่มีข้อมูลที่บันทึก' };
 
-  const date = new Date().toISOString().slice(0, 10);
+  const date = schoolToday();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

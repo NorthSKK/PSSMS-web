@@ -1,4 +1,5 @@
 const { query } = require('../lib/db');
+const { schoolToday } = require('../lib/schoolDate');
 const getSystemConfig = require('./getSystemConfig');
 const getCalendarEvents = require('./getCalendarEvents');
 
@@ -7,7 +8,7 @@ function section(fn) {
 }
 
 async function adminStaffStats(config) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = schoolToday();
   const [leaveRes, subRes, pendingListRes, staffCountRes, onLeaveRes] = await Promise.all([
     query(
       `SELECT COUNT(*) as cnt FROM leave_records WHERE status='รอพิจารณา' AND year=$1`,
@@ -44,7 +45,7 @@ async function adminStaffStats(config) {
 }
 
 async function todayStudentsAttendance() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = schoolToday();
   const { rows } = await query(
     `SELECT class,
             COUNT(*) as total,

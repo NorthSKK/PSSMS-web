@@ -14,6 +14,7 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 const { slotsFromRows, expandSlots } = require('../lib/sessionCalendar');
+const { schoolToday } = require('../lib/schoolDate');
 const { _holidayDates } = require('./attendance');
 const { subjectPrefixOf, isHomeroomSubject } = require('../lib/subjectGroup');
 
@@ -79,7 +80,7 @@ async function _loadBoard() {
   const startRaw = termRes.rows[0]?.value1;
   const start = startRaw ? new Date(`${String(startRaw).slice(0, 10)}T00:00:00Z`) : null;
   const termEnd = termRes.rows[0]?.value2 ? new Date(`${String(termRes.rows[0].value2).slice(0, 10)}T00:00:00Z`) : null;
-  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const today = new Date(`${schoolToday()}T00:00:00Z`);
   const end = termEnd && termEnd < today ? termEnd : today;
   const datedTerm = start && !isNaN(start) && start <= end;
   const holidays = datedTerm ? await _holidayDates(start, end) : new Set();

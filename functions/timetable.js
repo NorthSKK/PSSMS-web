@@ -1,6 +1,7 @@
 const { query } = require('../lib/db');
 const getSystemConfig = require('./getSystemConfig');
 const cache = require('../lib/cache');
+const { schoolDateStr, schoolDayIndex } = require('../lib/schoolDate');
 
 const DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
@@ -24,11 +25,9 @@ function _applyClubOverride(arr, club) {
   return ['CLUB_' + club.clubId, club.clubName, 'ชุมนุม', arr[3], arr[4], arr[5], arr[6], arr[7]];
 }
 
-// Local (Asia/Bangkok) date string — toISOString() shifts midnight-to-07:00 back a day,
-// which would disagree with getDay() below and drop the whole day's substitute slots.
-function _localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// วันตามเวลาโรงเรียน — ทั้งสตริงวันที่และเลขวันในสัปดาห์ต้องมาจาก TZ เดียวกัน
+// ห้ามใช้ getFullYear()/getDay() ตรง ๆ: บน Railway process รันเป็น UTC (ดู lib/schoolDate.js)
+const _localDateStr = schoolDateStr;
 
 // Slots this teacher covers for someone else on the given date, shaped like a timetable row.
 // 'ยืนยันแล้ว' must be included — the slot stays theirs after they confirm it.
@@ -62,7 +61,7 @@ async function getTeacherTimetableByDate([teacherId, dateStr]) {
   if (cached) return cached;
 
   const config = await getSystemConfig();
-  const targetDay = DAYS[targetDate.getDay()];
+  const targetDay = DAYS[schoolDayIndex(targetDateOnly)];
   const { term, year } = config;
 
   const [ttRes, club] = await Promise.all([
@@ -100,7 +99,7 @@ async function getTeacherTimetableWithStatus([teacherId]) {
   if (cached) return cached;
 
   const config = await getSystemConfig();
-  const today = DAYS[now.getDay()];
+  const today = DAYS[schoolDayIndex(todayStr)];
   const { term, year } = config;
 
   const [ttRes, club] = await Promise.all([

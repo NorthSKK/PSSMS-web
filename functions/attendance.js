@@ -1,6 +1,7 @@
 const { query } = require('../lib/db');
 const { isAdmin, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner, verifyMorningBatchOwner } = require('../lib/permissions');
 const { slotsFromRows, expandSlots } = require('../lib/sessionCalendar');
+const { schoolToday } = require('../lib/schoolDate');
 
 async function saveAttendanceBatch([list], user) {
   if (!Array.isArray(list) || list.length === 0) return { status: 'success', saved: 0 };
@@ -245,7 +246,7 @@ async function _expectedSessions(subjectCode, className, term, year) {
 
   const start = new Date(`${String(tdRes.rows[0].value1).slice(0, 10)}T00:00:00Z`);
   const termEnd = tdRes.rows[0].value2 ? new Date(`${String(tdRes.rows[0].value2).slice(0, 10)}T00:00:00Z`) : null;
-  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const today = new Date(`${schoolToday()}T00:00:00Z`);
   const end = termEnd && termEnd < today ? termEnd : today;
   if (isNaN(start) || start > end) return [];
 

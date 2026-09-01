@@ -1391,6 +1391,32 @@ test/
 
 ---
 
+## วันที่ — ต้องคิดตามเวลาโรงเรียนเสมอ
+
+`lib/schoolDate.js` — `schoolToday()` / `schoolDateStr(d)` / `schoolDayIndex(dateStr)`
+ทั้งหมดผูก `timeZone: 'Asia/Bangkok'` ไว้ตรง ๆ
+
+⚠️ **ห้ามหา "วันนี้" ด้วย 2 วิธีนี้:**
+
+| วิธี | ได้อะไร | พังตอนไหน |
+|---|---|---|
+| `new Date().toISOString().slice(0,10)` | วัน **UTC** | เวลาไทย 00:00–07:00 ได้เมื่อวาน |
+| `d.getFullYear()` / `d.getDay()` | วันตาม **TZ ของ process** | **บน Railway process รันเป็น UTC** (ไม่ได้ตั้ง `TZ` ที่ไหนเลย) |
+
+แบบที่สองอันตรายกว่า เพราะเครื่อง dev เป็นเวลาไทยจึงผ่านเสมอ แล้วไปพลาดเฉพาะบน production
+`_localDateStr` ใน `functions/timetable.js` เคยเป็นแบบนี้ ทั้งที่คอมเมนต์เขียนว่ากันบั๊ก TZ ไว้แล้ว
+
+**วันที่กับวันในสัปดาห์ต้องมาจากวันเดียวกัน** — คิดสตริงวันที่ก่อนด้วย `schoolDateStr()`
+แล้วค่อยหาวันในสัปดาห์ด้วย `schoolDayIndex(สตริงนั้น)` ห้ามเรียก `getDay()` บน Date คู่กัน
+ไม่งั้นตารางสอนทั้งวันเลื่อนไปหนึ่งวันช่วงเช้ามืด
+
+เทสต์ล็อกไว้ที่ `test/school_date.test.js` — รันผ่านทุก TZ (`TZ=UTC npm test` ต้องเขียว)
+
+ยังเหลือที่ใช้ `toISOString()` โดยถูกต้อง: การ format ค่า `DATE` ที่มาจาก Postgres
+(เป็น UTC midnight อยู่แล้ว) และการวนวันใน `lib/sessionCalendar.js` ที่ยึด UTC ทั้งลูป
+
+---
+
 ## Conventions
 
 - ปีการศึกษาเป็น **พ.ศ.** (2568, 2569) string ไม่ใช่ number
