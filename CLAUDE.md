@@ -1051,7 +1051,7 @@ Frontend เช็ค `res.status === 'success'` ทุก write function. ค�
 | `Admin` | ทุก endpoint, bypass permission checks |
 | `Teacher` | เช็คชื่อ/คะแนน/ปพ.5 เฉพาะวิชาที่สอน (verify ผ่าน timetable); เห็นเอกสารสารบรรณทั้งหมด (เทียบเท่า Admin) |
 | `Student` | ดูข้อมูลตัวเอง |
-| `Executive` | read-only, dept-scoped |
+| `Executive` | ผอ./รอง — read-only **เห็นทั้งโรงเรียน ไม่ scope ตาม dept** (ดู `docs/adr/0001`) |
 
 เปรียบเทียบด้วย `String(role).trim().toUpperCase()` ทุกครั้ง
 
