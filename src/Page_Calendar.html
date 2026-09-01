@@ -1,6 +1,8 @@
 <style>
 /* Calendar — minimal modern theme */
-#calendarPageWrap { --cal-accent: var(--p-accent); --cal-border: var(--p-border); --cal-muted: #8a93a4; --cal-today: #dc3545; --cal-today-soft: #ffecb3; }
+#calendarPageWrap { --cal-accent: var(--p-accent); --cal-border: var(--p-border); --cal-muted: #8a93a4; --cal-today: #dc3545;
+    /* kill FullCalendar's default yellow today wash — the date pill marks today instead */
+    --fc-today-bg-color: transparent; }
 #calendarPageWrap .fc { font-family: inherit; }
 #calendarPageWrap .fc-toolbar.fc-header-toolbar { margin-bottom: 1rem; }
 #calendarPageWrap .fc-toolbar-title { font-size: 1.15rem; font-weight: 600; color: #222; letter-spacing: -0.01em; }
@@ -33,8 +35,8 @@
 #calendarPageWrap .fc-col-header-cell.fc-day-sat,
 #calendarPageWrap .fc-col-header-cell.fc-day-sun { color: #b0b6c0; }
 /* Today — grid cells are hardcoded white in both themes, so --cal-today is a
-   fixed value instead of --p-accent (which flips light in dark mode). */
-#calendarPageWrap .fc-day-today { background: var(--cal-today-soft) !important; }
+   fixed value instead of --p-accent (which flips light in dark mode). No cell
+   background: the red date pill and the tag carry the marker on their own. */
 #calendarPageWrap .fc-day-today .fc-daygrid-day-top { position: relative; padding-left: 46px; }
 #calendarPageWrap .fc-day-today .fc-daygrid-day-top::before {
     content: 'วันนี้'; position: absolute; left: 6px; top: 7px;
@@ -49,9 +51,6 @@
     display: inline-flex; align-items: center; justify-content: center;
 }
 #calendarPageWrap .fc-col-header-cell.fc-day-today { color: var(--cal-today); font-weight: 700; }
-#calendarPageWrap .fc-list-day.fc-day-today .fc-list-day-cushion {
-    background: var(--cal-today-soft) !important;
-}
 #calendarPageWrap .fc-daygrid-day-number {
     font-size: 0.82rem; color: #444; padding: 6px 8px; font-weight: 500;
 }
