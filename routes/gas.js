@@ -62,6 +62,8 @@ const TEACHER_OR_ADMIN = new Set([
 // และไม่ถูกจำกัดขอบเขตตาม dept (docs/adr/0001-executive-sees-whole-school.md)
 const ADMIN_OR_EXECUTIVE = new Set([
   'getTeacherProgressBoard',
+  // ข้อมูลพฤติกรรมรายคนทั้งโรงเรียน ไม่ใช่ของครูรายวิชา
+  'getDailyStudentWatch', 'getStudentAttendanceProfile',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -83,6 +85,7 @@ const READONLY_ALLOWED = new Set([
     'getCalendarEvents', 'getClassListForSavings', 'getClubAttendanceSummary',
     'getClubList', 'getClubMembers', 'getClubMembersForTeacher',
     'getCourseSessionList', 'getCurriculumBySubject', 'getCurriculumData',
+    'getDailyStudentWatch', 'getStudentAttendanceProfile',
     'getDeletedMediaCards', 'getDetailedLessonRecords', 'getExecutiveDashboardBundle',
     'getFilteredTimetables', 'getHomeroomAssignments', 'getLeaveRequestBundle',
     'getMassiveAttendanceGrid', 'getMediaCardOptions', 'getMediaCards',
@@ -116,6 +119,7 @@ const morning = require('../functions/morning');
 const leaveWrite = require('../functions/leave');
 const substituteAuto = require('../functions/substituteAuto');
 const progressBoard = require('../functions/teacherProgressBoard');
+const studentWatch = require('../functions/studentWatch');
 const clubsWrite = require('../functions/clubs_write');
 const sarabun = require('../functions/sarabun');
 const budget = require('../functions/budget');
@@ -275,6 +279,8 @@ const handlers = {
 
   // Missing functions (Phase 3 supplement)
   getTeacherProgressBoard:         () => progressBoard.getTeacherProgressBoard(),
+  getDailyStudentWatch:            (args) => studentWatch.getDailyStudentWatch(args),
+  getStudentAttendanceProfile:     (args) => studentWatch.getStudentAttendanceProfile(args),
   getTeacherRiskDashboard:         (args) => missing.getTeacherRiskDashboard(args),
   getTeacherAtRiskDashboard:       (args) => missing.getTeacherAtRiskDashboard(args),
   getStudentDashboardBundle:       (args, user) => missing.getStudentDashboardBundle(args, user),

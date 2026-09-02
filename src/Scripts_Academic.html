@@ -2021,4 +2021,317 @@ function _tpToggle(teacherId) {
   _tpRender();
 }
 
+
+// ============================================================
+// ติดตามนักเรียนรายวัน — Page_Student_Watch
+//
+// แสดง "เฉพาะเด็กที่มีอาการ" โรงเรียน 600 คน วันปกติมีอาการ 10-30 คน
+// อาการมาจาก functions/studentWatch.js `classify()` ฝั่ง server ที่เดียว
+// ห้ามคำนวณอาการซ้ำฝั่ง client — สองสูตรจะ drift แล้วหน้าจอกับรายงานเถียงกัน
+// ============================================================
+
+var SW_LABEL = {
+  away: 'ขาดโรงเรียน',
+  fled: 'มาแล้วหนี',
+  skip: 'โดด',
+  late: 'สาย',
+};
+// เรียงจากหนักไปเบา — ใช้ทั้งชิปนับและป้ายในแถว
+var SW_ORDER = ['away', 'fled', 'skip', 'late'];
+
+var _swData = null;
+var _swFilter = '';
+
+function swShiftDay(delta) {
+  var el = document.getElementById('swDate');
+  if (!el || !el.value) return;
+  var d = new Date(el.value + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + delta);
+  setDateValue('swDate', d.toISOString().slice(0, 10));
+  initStudentWatchPage();
+}
+
+function swToday() {
+  setDateValue('swDate', '');
+  _swData = null;
+  initStudentWatchPage();
+}
+
+function initStudentWatchPage() {
+  var list = document.getElementById('swList');
+  if (!list) return;
+  list.innerHTML = '<div class="pssms-skel mb-2" style="height:52px;border-radius:8px;"></div>'
+                 + '<div class="pssms-skel" style="height:52px;border-radius:8px;"></div>';
+  var el = document.getElementById('swDate');
+  google.script.run
+    .withSuccessHandler(function(res) {
+      _swData = res;
+      // เปิดหน้ามาไม่ได้เลือกวัน — เติมวันที่ server ตัดสินว่าเป็น "วันนี้" กลับเข้าช่อง
+      if (el && !el.value && res && res.date) setDateValue('swDate', res.date);
+      _swRender();
+    })
+    .withFailureHandler(function(err) {
+      list.innerHTML = '';
+      var p = document.createElement('p');
+      p.className = 'text-center text-muted py-4';
+      p.textContent = 'โหลดไม่สำเร็จ: ' + (err && err.message ? err.message : err);
+      list.appendChild(p);
+    })
+    .getDailyStudentWatch(el && el.value ? el.value : null);
+}
+
+function _swChip(key, count) {
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'ar-chip sw-chip-' + key + (_swFilter === key ? ' ar-on' : '');
+  b.onclick = function() { _swFilter = (_swFilter === key) ? '' : key; _swRender(); };
+  b.appendChild(document.createTextNode(SW_LABEL[key] + ' '));
+  var n = document.createElement('b');
+  n.textContent = count;
+  b.appendChild(n);
+  return b;
+}
+
+function _swRender() {
+  var d = _swData;
+  var list = document.getElementById('swList');
+  var chips = document.getElementById('swChips');
+  var sub = document.getElementById('swSubtitle');
+  if (!d || !list) return;
+
+  if (sub) {
+    sub.textContent = d.students.length
+      ? ('มีนักเรียนที่ต้องดู ' + d.students.length + ' คน จากที่เช็คชื่อแล้ว ' + d.checkedStudents + ' คน')
+      : ('เช็คชื่อแล้ว ' + d.checkedStudents + ' คน ไม่มีใครมีอาการ');
+  }
+
+  if (chips) {
+    chips.innerHTML = '';
+    var title = document.createElement('span');
+    title.className = 'ar-bar-title';
+    title.textContent = _swThaiDate(d.date);
+    chips.appendChild(title);
+    var wrap = document.createElement('div');
+    wrap.className = 'ar-chips';
+    SW_ORDER.forEach(function(k) { wrap.appendChild(_swChip(k, d.counts[k] || 0)); });
+    chips.appendChild(wrap);
+  }
+
+  var rows = _swFilter
+    ? d.students.filter(function(s) { return s.symptoms.indexOf(_swFilter) >= 0; })
+    : d.students;
+
+  list.innerHTML = '';
+  if (!rows.length) {
+    var empty = document.createElement('div');
+    empty.className = 'pssms-card p-4 text-center text-muted';
+    empty.textContent = d.checkedStudents
+      ? 'ไม่มีนักเรียนที่เข้าเงื่อนไขในวันนี้'
+      : 'ยังไม่มีการเช็คชื่อของวันนี้';
+    list.appendChild(empty);
+    return;
+  }
+
+  // จัดกลุ่มตามห้อง — ฝ่ายปกครองทำงานเป็นห้อง ไม่ใช่เป็นรายชื่อยาว
+  var byClass = [];
+  var idx = {};
+  rows.forEach(function(s) {
+    if (!(s.className in idx)) { idx[s.className] = byClass.length; byClass.push({ cls: s.className, items: [] }); }
+    byClass[idx[s.className]].items.push(s);
+  });
+
+  byClass.forEach(function(g) {
+    var card = document.createElement('div');
+    card.className = 'pssms-card mb-3';
+
+    var head = document.createElement('div');
+    head.className = 'pssms-card-header d-flex justify-content-between align-items-center';
+    var h = document.createElement('span');
+    h.textContent = g.cls || '(ไม่ระบุห้อง)';
+    var cnt = document.createElement('span');
+    cnt.className = 'small text-muted';
+    cnt.textContent = g.items.length + ' คน';
+    head.appendChild(h); head.appendChild(cnt);
+    card.appendChild(head);
+
+    g.items.forEach(function(s) { card.appendChild(_swStudentRow(s)); });
+    list.appendChild(card);
+  });
+}
+
+function _swStudentRow(s) {
+  var row = document.createElement('div');
+  row.className = 'sw-row';
+  row.onclick = function() { openStudentProfile(s.studentId, s.name); };
+
+  var left = document.createElement('div');
+  left.className = 'sw-row-main';
+  var nm = document.createElement('div');
+  nm.className = 'sw-name';
+  nm.textContent = s.name;
+  var id = document.createElement('span');
+  id.className = 'sw-id';
+  id.textContent = ' ' + s.studentId;
+  nm.appendChild(id);
+  left.appendChild(nm);
+
+  var tags = document.createElement('div');
+  tags.className = 'sw-tags';
+  SW_ORDER.forEach(function(k) {
+    if (s.symptoms.indexOf(k) < 0) return;
+    var t = document.createElement('span');
+    t.className = 'sw-tag sw-tag-' + k;
+    t.textContent = SW_LABEL[k];
+    tags.appendChild(t);
+  });
+  if (s.missedPeriods && s.missedPeriods.length) {
+    var pd = document.createElement('span');
+    pd.className = 'sw-periods';
+    pd.textContent = 'คาบ ' + s.missedPeriods.join(', ');
+    tags.appendChild(pd);
+  }
+  left.appendChild(tags);
+
+  var strip = document.createElement('div');
+  strip.className = 'sw-strip';
+  (s.periods || []).forEach(function(p) {
+    var cell = document.createElement('span');
+    cell.className = 'sw-cell sw-' + _swStatusKey(p.status);
+    cell.textContent = p.period;
+    cell.title = 'คาบ ' + p.period + ' · ' + (p.subjectName || p.subjectCode || '') + ' · ' + p.status;
+    strip.appendChild(cell);
+  });
+
+  row.appendChild(left);
+  row.appendChild(strip);
+  return row;
+}
+
+function _swStatusKey(st) {
+  if (st === 'มา') return 'ok';
+  if (st === 'สาย') return 'late';
+  if (st === 'โดด') return 'skip';
+  if (st === 'ขาด') return 'absent';
+  return 'other';
+}
+
+function _swThaiDate(iso) {
+  var m = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var d = new Date(iso + 'T00:00:00Z');
+  var days = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+  return days[d.getUTCDay()] + 'ที่ ' + d.getUTCDate() + ' ' + m[d.getUTCMonth()] + ' ' + (d.getUTCFullYear() + 543);
+}
+
+// ---------------------------------------------------- ประวัติสะสมรายคน
+
+function openStudentProfile(studentId, name) {
+  var body = document.getElementById('swProfileBody');
+  var title = document.getElementById('swProfileTitle');
+  if (!body) return;
+  if (title) title.textContent = name + ' · ' + studentId;
+  body.innerHTML = '<div class="pssms-skel" style="height:120px;border-radius:8px;"></div>';
+  var modal = new bootstrap.Modal(document.getElementById('swProfileModal'));
+  modal.show();
+
+  google.script.run
+    .withSuccessHandler(function(p) { _swRenderProfile(p); })
+    .withFailureHandler(function(err) {
+      body.innerHTML = '';
+      body.textContent = 'โหลดไม่สำเร็จ: ' + (err && err.message ? err.message : err);
+    })
+    .getStudentAttendanceProfile(studentId, user.currentTerm, user.currentYear);
+}
+
+function _swRenderProfile(p) {
+  var body = document.getElementById('swProfileBody');
+  if (!body || !p) return;
+  body.innerHTML = '';
+
+  var sum = document.createElement('div');
+  sum.className = 'sw-prof-sum';
+  SW_ORDER.forEach(function(k) {
+    var box = document.createElement('div');
+    box.className = 'sw-prof-stat';
+    var n = document.createElement('div');
+    n.className = 'sw-prof-num sw-tag-' + k;
+    n.textContent = p.totals[k] || 0;
+    var l = document.createElement('div');
+    l.className = 'sw-prof-lab';
+    l.textContent = SW_LABEL[k] + (k === 'late' || k === 'skip' ? ' (วัน)' : ' (วัน)');
+    box.appendChild(n); box.appendChild(l);
+    sum.appendChild(box);
+  });
+  body.appendChild(sum);
+
+  body.appendChild(_swRank('คาบที่หายบ่อย', p.byPeriod.map(function(r) {
+    return { label: 'คาบ ' + r.period, count: r.count };
+  })));
+  body.appendChild(_swRank('วิชาที่หายบ่อย', p.bySubject.map(function(r) {
+    return { label: (r.subjectName || r.subjectCode), count: r.count };
+  })));
+
+  var h = document.createElement('div');
+  h.className = 'sw-prof-head';
+  h.textContent = 'รายวัน (' + p.days.length + ' วันที่มีอาการ)';
+  body.appendChild(h);
+
+  if (!p.days.length) {
+    var none = document.createElement('div');
+    none.className = 'text-muted small';
+    none.textContent = 'ไม่มีวันที่เข้าเงื่อนไขในภาคเรียนนี้';
+    body.appendChild(none);
+    return;
+  }
+  p.days.forEach(function(d) {
+    var r = document.createElement('div');
+    r.className = 'sw-prof-day';
+    var dt = document.createElement('span');
+    dt.className = 'sw-prof-date';
+    dt.textContent = _swThaiDate(d.date);
+    r.appendChild(dt);
+    SW_ORDER.forEach(function(k) {
+      if (d.symptoms.indexOf(k) < 0) return;
+      var t = document.createElement('span');
+      t.className = 'sw-tag sw-tag-' + k;
+      t.textContent = SW_LABEL[k];
+      r.appendChild(t);
+    });
+    if (d.missedPeriods.length) {
+      var pd = document.createElement('span');
+      pd.className = 'sw-periods';
+      pd.textContent = 'คาบ ' + d.missedPeriods.join(', ');
+      r.appendChild(pd);
+    }
+    body.appendChild(r);
+  });
+}
+
+function _swRank(title, items) {
+  var wrap = document.createElement('div');
+  if (!items.length) return wrap;
+  var h = document.createElement('div');
+  h.className = 'sw-prof-head';
+  h.textContent = title;
+  wrap.appendChild(h);
+  var max = items[0].count || 1;
+  items.slice(0, 5).forEach(function(it) {
+    var row = document.createElement('div');
+    row.className = 'sw-rank';
+    var lab = document.createElement('span');
+    lab.className = 'sw-rank-lab';
+    lab.textContent = it.label;
+    var bar = document.createElement('span');
+    bar.className = 'sw-rank-bar';
+    var fill = document.createElement('span');
+    fill.style.width = Math.round((it.count / max) * 100) + '%';
+    bar.appendChild(fill);
+    var n = document.createElement('span');
+    n.className = 'sw-rank-num';
+    n.textContent = it.count;
+    row.appendChild(lab); row.appendChild(bar); row.appendChild(n);
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
 </script>

@@ -1546,4 +1546,90 @@ body.dark-mode .pssms-dept-general {
   .tp-meter-bar { display: none; }
 }
 
+
+/* ==========================================================
+   sw-* — ติดตามนักเรียนรายวัน
+   ที่นี่ **ใช้สีเตือนได้** ต่างจาก tp-* (กระดานครู) เพราะแต่ละแถวคือเหตุการณ์
+   ที่เกิดขึ้นจริงแล้ว ไม่ใช่ความคืบหน้าที่ยังไม่ถึงเวลา
+   ========================================================== */
+.sw-legend {
+  font-size: .7rem; line-height: 1.6; color: var(--p-text-muted);
+  margin: 0 0 .6rem; padding: 0 2px;
+}
+.sw-legend b { color: var(--p-text); font-weight: 600; }
+.sw-legend-note { display: block; opacity: .75; }
+
+.sw-row {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  padding: 9px 12px; cursor: pointer;
+  border-top: 1px solid var(--p-border);
+}
+.pssms-card-header + .sw-row { border-top: none; }
+.sw-row:hover { background: var(--p-dom); }
+.sw-row-main { flex: 1 1 200px; min-width: 0; }
+.sw-name { font-size: .82rem; font-weight: 600; color: var(--p-text); }
+.sw-id { font-size: .68rem; font-weight: 400; color: var(--p-text-muted); }
+.sw-tags { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; margin-top: 3px; }
+
+.sw-tag {
+  font-size: .62rem; font-weight: 700; padding: 1px 7px;
+  border-radius: 999px; color: #fff; white-space: nowrap;
+}
+.sw-tag-away { background: var(--p-danger); }
+.sw-tag-fled { background: #7f1d1d; }
+.sw-tag-skip { background: #b45309; }
+.sw-tag-late { background: #a16207; }
+.sw-periods { font-size: .65rem; color: var(--p-text-muted); }
+
+/* แถบคาบของวันนั้น — เห็นรูปทรงว่าหายช่วงไหนโดยไม่ต้องอ่านตัวเลข */
+.sw-strip { display: flex; gap: 2px; flex-wrap: wrap; }
+.sw-cell {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 4px;
+  font-size: .6rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.sw-ok     { background: var(--p-border); color: var(--p-text-muted); }
+.sw-late   { background: #fef3c7; color: #92400e; }
+.sw-absent { background: var(--p-danger); color: #fff; }
+.sw-skip   { background: #7f1d1d; color: #fff; }
+.sw-other  { background: var(--p-dom); color: var(--p-text-muted); }
+
+.ar-chip.sw-chip-away b { color: var(--p-danger); }
+.ar-chip.sw-chip-fled b { color: #b91c1c; }
+.ar-chip.sw-chip-skip b { color: #b45309; }
+.ar-chip.sw-chip-late b { color: var(--p-warning); }
+.ar-chip.ar-on b { color: #fff; }
+
+/* ── ประวัติสะสมรายคน (โมดัล) ── */
+.sw-prof-sum { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.sw-prof-stat {
+  flex: 1 1 90px; text-align: center; padding: 10px 6px;
+  border: 1px solid var(--p-border); border-radius: var(--p-radius-sm);
+}
+.sw-prof-num {
+  display: inline-block; min-width: 30px; padding: 0 6px;
+  font-size: 1.1rem; font-weight: 700; border-radius: 6px; color: #fff;
+}
+.sw-prof-lab { font-size: .64rem; color: var(--p-text-muted); margin-top: 4px; }
+.sw-prof-head {
+  font-size: .7rem; font-weight: 700; color: var(--p-text-muted);
+  margin: 1rem 0 .4rem; padding-bottom: 3px; border-bottom: 1px solid var(--p-border);
+}
+.sw-rank { display: flex; align-items: center; gap: .5rem; margin-bottom: 4px; }
+.sw-rank-lab { flex: 0 0 110px; font-size: .72rem; color: var(--p-text); }
+.sw-rank-bar { flex: 1 1 auto; height: 6px; border-radius: 999px; background: var(--p-border); overflow: hidden; }
+.sw-rank-bar > span { display: block; height: 100%; background: var(--p-danger); }
+.sw-rank-num { font-size: .7rem; font-variant-numeric: tabular-nums; color: var(--p-text-muted); min-width: 18px; text-align: right; }
+.sw-prof-day {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  padding: 5px 0; border-bottom: 1px solid var(--p-border);
+}
+.sw-prof-date { font-size: .72rem; color: var(--p-text); min-width: 150px; }
+
+@media (max-width: 576px) {
+  .sw-strip { width: 100%; }
+  .sw-rank-lab { flex-basis: 80px; }
+  .sw-prof-date { min-width: 100%; }
+}
+
 </style>

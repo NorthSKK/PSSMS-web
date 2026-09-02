@@ -1,0 +1,39 @@
+<div class="container-fluid pssms-page pssms-dept-academic">
+  <div class="pssms-page-header">
+    <div>
+      <h4><i class="fas fa-user-clock me-2" style="color: var(--p-accent);"></i>ติดตามนักเรียนรายวัน</h4>
+      <p class="pssms-subtitle" id="swSubtitle">กำลังโหลด...</p>
+    </div>
+    <div class="pssms-actions d-flex align-items-center gap-2">
+      <button class="btn btn-soft btn-sm" onclick="swShiftDay(-1)" title="วันก่อนหน้า"><i class="fas fa-chevron-left"></i></button>
+      <input type="date" id="swDate" class="form-control form-control-sm" style="width:auto;" onchange="initStudentWatchPage()">
+      <button class="btn btn-soft btn-sm" onclick="swShiftDay(1)" title="วันถัดไป"><i class="fas fa-chevron-right"></i></button>
+      <button class="btn btn-soft btn-sm" onclick="swToday()">วันนี้</button>
+    </div>
+  </div>
+
+  <div class="ar-bar" id="swChips"></div>
+
+  <p class="sw-legend">
+    <b>ขาดโรงเรียน</b> ไม่มีคาบไหนมาเลย และไม่ได้เข้าแถว ·
+    <b>มาแล้วหนี</b> เข้าแถวแล้วแต่ไม่เข้าเรียนสักคาบ ·
+    <b>โดด</b> มาบางคาบ หายบางคาบ (ครูกดเอง หรือระบบสรุปจากคาบอื่น) ·
+    <b>สาย</b> มีคาบที่ครูกดสาย
+    <span class="sw-legend-note">ตัดสินจากคาบที่ครูเช็คแล้วเท่านั้น — คาบที่ไม่มีข้อมูลไม่ถูกนับ ไม่ถูกเดา · การลาที่อนุมัติแล้วไม่นับเป็นอาการ</span>
+  </p>
+
+  <div id="swList"></div>
+</div>
+
+<!-- ประวัติสะสมของเด็กคนเดียว — เปิดจากการกดชื่อ -->
+<div class="modal fade" id="swProfileModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="swProfileTitle">ประวัติ</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="swProfileBody"></div>
+    </div>
+  </div>
+</div>
