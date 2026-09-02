@@ -5,6 +5,7 @@
 const { resolveStudentId } = require('../lib/permissions');
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
+const { schoolToday, schoolDayIndex } = require('../lib/schoolDate');
 
 // ============================================================
 // getTeacherRiskDashboard — grade-based risk (0, ร, มส)
@@ -91,7 +92,9 @@ async function getStudentDashboardBundle([studentId, term, year], user) {
   const room = parts[1] || '';
 
   const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
-  const todayDay = DAYS[new Date().getDay()];
+  // ห้ามใช้ new Date().getDay() — บน Railway process รันเป็น UTC เด็กเปิดแอปตีห้า
+  // จะได้ตารางเรียนของเมื่อวาน (ดู lib/schoolDate.js)
+  const todayDay = DAYS[schoolDayIndex(schoolToday())];
 
   let timetable = { ok: false, data: [] };
   try {
