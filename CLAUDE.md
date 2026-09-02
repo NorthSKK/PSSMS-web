@@ -1255,6 +1255,23 @@ document.getElementById('subFilterFrom').value = '2026-08-17';  // ❌ ช่อ
 `setDateValue(id, val)` เรียก `el._flatpickr.setDate(val, false)` ให้ด้วย
 (`false` = ไม่ยิง `onChange` — คนเรียกจัดการ reload เอง)
 
+### class กับ style ของช่องวันที่ ต้องส่งต่อเอง
+
+flatpickr สร้าง **input ตัวใหม่** มาโชว์ (`altInput`) และให้ class จาก `altInputClass`
+**เท่านั้น** ไม่ก๊อปจากตัวเดิม ไม่ก๊อป `style` — default คือ `"form-control input"`
+
+```js
+w.altInput = d(w.input.nodeName, w.config.altInputClass)   // flatpickr source
+```
+
+แปลว่าเดิม `class="form-control form-control-sm border-secondary text-center px-1"` และ
+`style="max-width:180px"` ที่เขียนไว้ในหน้า **ไม่เคยมีผลกับช่องที่ผู้ใช้เห็นเลยสักหน้า**
+(ช่องวันที่จึงตัวสูงกว่า select ข้าง ๆ ทั้งระบบ)
+
+`applyThaiDatePickers()` ส่งต่อให้แล้วทั้งสองอย่าง — `altInputClass` จาก `input.className`
+และ copy `style` ใน `onReady` · **แก้ที่นั่นที่เดียวมีผลทุกหน้า อย่าไปไล่แก้ทีละหน้า**
+ช่องที่ผู้ใช้เห็นมี class `flatpickr-alt` ติดไว้ให้เลือกเจาะจงได้
+
 ### ชื่อ RPC ต้องตรงกับ handlers map เป๊ะ
 
 `routes/gas.js` ตอบ `'<fn>' not implemented in web prototype yet` เมื่อไม่เจอชื่อ —

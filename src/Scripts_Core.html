@@ -1258,14 +1258,27 @@ function setDateValue(id, val) {
   if (el._flatpickr) el._flatpickr.setDate(val || null, false); // false = ไม่ยิง onChange
 }
 
+// ⚠️ flatpickr แบบ altInput **สร้าง input ตัวใหม่** มาโชว์แทนตัวจริง (ตัวจริงถูกซ่อน)
+// ตัวใหม่ได้ class จาก `altInputClass` **เท่านั้น** ไม่ได้ก๊อปจากตัวเดิม และไม่ก๊อป inline style
+//   flatpickr: w.altInput = d(w.input.nodeName, w.config.altInputClass)
+// ค่า default คือ "form-control input" แปลว่า class ที่เขียนไว้ในหน้า (form-control-sm,
+// border-secondary, text-center, px-1 ฯลฯ) กับ style="..." **ไม่เคยมีผลกับช่องที่ผู้ใช้เห็น**
+// จึงต้องส่งต่อเองทั้งสองอย่าง — แก้ที่นี่ที่เดียวมีผลกับช่องวันที่ทุกหน้า
 function applyThaiDatePickers() {
   const dateInputs = document.querySelectorAll('input[type="date"]');
   dateInputs.forEach(input => {
-    input.type = 'text'; input.classList.add('bg-white'); 
+    input.type = 'text'; input.classList.add('bg-white');
+    const carriedClass = input.className;
+    const carriedStyle = input.getAttribute('style');
     flatpickr(input, {
-      locale: "th", dateFormat: "Y-m-d", altInput: true, altFormat: "d M Y", 
+      locale: "th", dateFormat: "Y-m-d", altInput: true, altFormat: "d M Y",
+      altInputClass: (carriedClass + ' flatpickr-alt').trim(), 
       formatDate: (date, format, locale) => { if (format === "d M Y") { const d = date.getDate(); const m = flatpickr.l10ns.th.months.longhand[date.getMonth()]; const y = date.getFullYear() + 543; return `${d} ${m} ${y}`; } return flatpickr.formatDate(date, format, locale); },
-      onReady: function(selectedDates, dateStr, instance) { if(instance.currentYearElement) instance.currentYearElement.value = instance.currentYear + 543; },
+      onReady: function(selectedDates, dateStr, instance) {
+        if(instance.currentYearElement) instance.currentYearElement.value = instance.currentYear + 543;
+        // style ต้องยกมาเอง — ไม่มี option ให้ตั้ง ต่างจาก class
+        if(instance.altInput && carriedStyle) instance.altInput.setAttribute('style', carriedStyle);
+      },
       onYearChange: function(selectedDates, dateStr, instance) { if(instance.currentYearElement) instance.currentYearElement.value = instance.currentYear + 543; },
       onMonthChange: function(selectedDates, dateStr, instance) { if(instance.currentYearElement) instance.currentYearElement.value = instance.currentYear + 543; },
       onChange: function(selectedDates, dateStr, instance) { input.value = dateStr; if (input.id === 'teachingDate') { if (typeof updateThaiDateDisplay === 'function') updateThaiDateDisplay(); if (typeof reloadTimetableByDate === 'function') reloadTimetableByDate(); } }

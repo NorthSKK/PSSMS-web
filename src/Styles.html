@@ -1553,8 +1553,8 @@ body.dark-mode .pssms-dept-general {
    ที่เกิดขึ้นจริงแล้ว ไม่ใช่ความคืบหน้าที่ยังไม่ถึงเวลา
    ========================================================== */
 /* แถวเลื่อนวัน — ปุ่มกับช่องวันที่ต้องอยู่บรรทัดเดียวกันเสมอ
-   ⚠️ flatpickr สร้าง input ตัวใหม่ (altInput) แล้วก๊อปแค่ class ไม่ก๊อป inline style
-      ตั้ง width ที่ tag ตรง ๆ จึงไม่มีผล ต้องคุมด้วย CSS ที่นี่ */
+   คุมความกว้างด้วย CSS ไม่ใช่ inline style: ช่องที่ผู้ใช้เห็นเป็น altInput ที่ flatpickr
+   สร้างขึ้นใหม่ (ดู applyThaiDatePickers ใน Scripts_Core) — selector ตัวนี้ครอบทั้งคู่ */
 .pssms-actions.sw-daynav {
   /* specificity ต้องเท่า `.pssms-page-header .pssms-actions` ที่ตั้ง flex-wrap: wrap ไว้ */
   display: flex; align-items: center; gap: .4rem;
