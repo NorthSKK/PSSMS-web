@@ -57,3 +57,31 @@ test('getSemesterReport หารด้วยคาบตามตาราง�
   const pct = Number(row.percent ?? row.percentage);
   assert.ok(pct > 90 && pct < 100, `percent ควรราว 95 (60 คาบ ขาด 3) ได้ ${pct}`);
 });
+
+// ---------------------------------------------------------------- โดด
+
+test("'โดด' นับเป็นขาดเต็มจำนวนในรายงานเวลาเรียน", async () => {
+  const sid = M6_STUDENTS[0];
+
+  const one = (status, date, period) => ok('saveAttendanceBatch', [[{
+    date, term: TERM, year: YEAR, subjectCode: PHYSICS.code, subjectName: PHYSICS.name,
+    className: PHYSICS.className, period, studentId: sid, studentName: 'ทดสอบ', status,
+  }]], 'teacher1');
+
+  const rowOf = async () => {
+    const rep = await ok('getSemesterReport', [PHYSICS.code, PHYSICS.className, TERM, YEAR], 'teacher1');
+    const list = Array.isArray(rep) ? rep : (rep.students || rep.data || []);
+    const row = list.find(r => String(r.studentId ?? r.id ?? r.student_id) === sid);
+    assert.ok(row, `ต้องเจอ ${sid} ในรายงาน`);
+    return { absent: Number(row.absent), percent: Number(row.percent ?? row.percentage) };
+  };
+
+  await one('ขาด', '2026-06-01', '9');
+  const a = await rowOf();
+
+  await one('โดด', '2026-06-02', '9');
+  const b = await rowOf();
+
+  assert.equal(b.absent, a.absent + 1, "'โดด' ต้องบวกเข้ายอดขาด ไม่ใช่ตกร่องหายไป");
+  assert.ok(b.percent < a.percent, 'เปอร์เซ็นต์เวลาเรียนต้องลดลง — โดดคือขาดที่มีเจตนา ไม่ใช่ขาดน้อยกว่า');
+});

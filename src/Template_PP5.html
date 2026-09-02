@@ -544,7 +544,7 @@
                         if(status === 'มา') { mark = '/'; color = 'text-black'; }
                         else if(status === 'สาย') { mark = 'ส'; color = 'text-yellow-600'; }
                         else if(status === 'ลา') { mark = 'ล'; color = 'text-cyan-600'; }
-                        else if(status === 'ขาด') { mark = 'ข'; color = 'text-red-600'; }
+                        else if(status === 'ขาด' || status === 'โดด') { mark = 'ข'; color = 'text-red-600'; }
                         sessHtml += `<td class="text-center font-bold ${color} p-1 border-l text-[11px]">${mark}</td>`;
                     });
                     

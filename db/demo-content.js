@@ -757,7 +757,7 @@ async function fill({ term, year, teacherNames, schoolName }) {
             MIN(subject_name) AS subject_name, MIN(class) AS class, MIN(period) AS period,
             MIN(teacher_id) AS teacher_id,
             COUNT(*) FILTER (WHERE status='มา')  AS present,
-            COUNT(*) FILTER (WHERE status='ขาด') AS absent,
+            COUNT(*) FILTER (WHERE status IN ('ขาด','โดด')) AS absent,
             COUNT(*) FILTER (WHERE status IN ('ลา','ป่วย')) AS leave
      FROM attendance WHERE term=$1 AND year=$2 AND subject_code NOT LIKE 'CLUB_%'
      GROUP BY session_id`,

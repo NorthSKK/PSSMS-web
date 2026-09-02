@@ -248,7 +248,7 @@ function renderAttendanceTable(students, historyMap = {}) {
         if (historyMap[cleanId]) { currentStatus = historyMap[cleanId]; isMatched = true; } 
         else if (historyMap[rawId]) { currentStatus = historyMap[rawId]; isMatched = true; }
         
-        html += `<tr><td class="text-center fw-bold text-muted">${index + 1}</td><td><div class="fw-bold">${stdName}</div><div class="small text-muted">ID: ${rawId} ${isMatched ? '<i class="fas fa-check-circle text-success ms-1"></i>' : ''}</div></td><td><div class="btn-group w-100" role="group"><input type="radio" class="btn-check" name="status_${rawId}" id="present_${rawId}" value="มา" ${currentStatus === 'มา' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-success btn-sm" for="present_${rawId}">มา</label><input type="radio" class="btn-check" name="status_${rawId}" id="late_${rawId}" value="สาย" ${currentStatus === 'สาย' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-warning btn-sm" for="late_${rawId}">สาย</label><input type="radio" class="btn-check" name="status_${rawId}" id="leave_${rawId}" value="ลา" ${currentStatus === 'ลา' || currentStatus === 'leave' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-info btn-sm" for="leave_${rawId}">ลา</label><input type="radio" class="btn-check" name="status_${rawId}" id="absent_${rawId}" value="ขาด" ${currentStatus === 'ขาด' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-danger btn-sm" for="absent_${rawId}">ขาด</label></div></td></tr>`;
+        html += `<tr><td class="text-center fw-bold text-muted">${index + 1}</td><td><div class="fw-bold">${stdName}</div><div class="small text-muted">ID: ${rawId} ${isMatched ? '<i class="fas fa-check-circle text-success ms-1"></i>' : ''}</div></td><td><div class="btn-group w-100" role="group"><input type="radio" class="btn-check" name="status_${rawId}" id="present_${rawId}" value="มา" ${currentStatus === 'มา' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-success btn-sm" for="present_${rawId}">มา</label><input type="radio" class="btn-check" name="status_${rawId}" id="late_${rawId}" value="สาย" ${currentStatus === 'สาย' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-warning btn-sm" for="late_${rawId}">สาย</label><input type="radio" class="btn-check" name="status_${rawId}" id="leave_${rawId}" value="ลา" ${currentStatus === 'ลา' || currentStatus === 'leave' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-info btn-sm" for="leave_${rawId}">ลา</label><input type="radio" class="btn-check" name="status_${rawId}" id="absent_${rawId}" value="ขาด" ${currentStatus === 'ขาด' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-danger btn-sm" for="absent_${rawId}">ขาด</label><input type="radio" class="btn-check" name="status_${rawId}" id="skip_${rawId}" value="โดด" ${currentStatus === 'โดด' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-dark btn-sm" for="skip_${rawId}" title="มาโรงเรียนแต่ไม่เข้าคาบนี้ — นับเป็นขาดเต็มจำนวน">โดด</label></div></td></tr>`;
       });
       
       tbody.innerHTML = html;
@@ -264,12 +264,14 @@ function updateSummary() {
   const late = document.querySelectorAll('input[value="สาย"]:checked').length;
   const leave = document.querySelectorAll('input[value="ลา"]:checked').length;
   const absent = document.querySelectorAll('input[value="ขาด"]:checked').length;
+  // โดด นับรวมในยอดขาดเสมอ — ต่างกันแค่ป้าย ไม่ใช่ต่างกันที่น้ำหนัก
+  const skip = document.querySelectorAll('input[value="โดด"]:checked').length;
 
   if(document.getElementById('sumPresent')) document.getElementById('sumPresent').innerText = present;
-  if(document.getElementById('sumAbsent')) document.getElementById('sumAbsent').innerText = absent;
+  if(document.getElementById('sumAbsent')) document.getElementById('sumAbsent').innerText = absent + skip;
   if(document.getElementById('sumOther')) document.getElementById('sumOther').innerText = late + leave;
 
-  let absentNames = [], lateNames = [], leaveNames = [];
+  let absentNames = [], lateNames = [], leaveNames = [], skipNames = [];
   document.querySelectorAll('#studentRows tr').forEach(tr => {
       const nameDiv = tr.querySelector('div.fw-bold');
       if(!nameDiv) return;
@@ -277,6 +279,7 @@ function updateSummary() {
       if(tr.querySelector('input[value="ขาด"]:checked')) absentNames.push(name);
       if(tr.querySelector('input[value="สาย"]:checked')) lateNames.push(name);
       if(tr.querySelector('input[value="ลา"]:checked')) leaveNames.push(name);
+      if(tr.querySelector('input[value="โดด"]:checked')) skipNames.push(name);
   });
 
   const oldSummary = document.getElementById('attendanceSummaryAlert');
@@ -284,12 +287,13 @@ function updateSummary() {
 
   let summaryHtml = `<div id="attendanceSummaryAlert" class="alert alert-primary shadow-sm py-2 mb-3 border-start border-4 border-primary animate__animated animate__fadeIn">
       <div class="fw-bold mb-1" style="font-size:0.9rem;"><i class="fas fa-users me-1"></i> สรุปรายชื่อผู้ที่ไม่ได้เข้าเรียนปกติ:</div>`;
-  if (absentNames.length === 0 && lateNames.length === 0 && leaveNames.length === 0) {
+  if (absentNames.length === 0 && lateNames.length === 0 && leaveNames.length === 0 && skipNames.length === 0) {
       summaryHtml += `<div class="text-success small fw-bold"><i class="fas fa-check-circle me-1"></i>มาครบทุกคน 🎉</div>`;
   } else {
       if(absentNames.length > 0) summaryHtml += `<div class="text-danger small mb-1"><b>ขาด (${absentNames.length}):</b> ${absentNames.join(', ')}</div>`;
       if(lateNames.length > 0) summaryHtml += `<div class="text-warning text-dark small mb-1"><b>สาย (${lateNames.length}):</b> ${lateNames.join(', ')}</div>`;
       if(leaveNames.length > 0) summaryHtml += `<div class="text-info text-dark small mb-1"><b>ลา (${leaveNames.length}):</b> ${leaveNames.join(', ')}</div>`;
+      if(skipNames.length > 0) summaryHtml += `<div class="text-danger small mb-1"><b>โดด (${skipNames.length}):</b> ${skipNames.join(', ')}</div>`;
   }
   summaryHtml += `</div>`;
   
@@ -484,8 +488,8 @@ function loadHistoryForEdit(dateStr) {
 
 function renderHistoryModal(subjectCode) {
   let html = tempHistoryData.map((h, index) => {
-    let badgeClass = h.status === 'มา' ? 'bg-success' : (h.status === 'สาย' ? 'bg-warning text-dark' : 'bg-danger');
-    return `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div style="flex-grow: 1;"><div class="fw-bold" style="font-size: 0.85rem;">${h.studentName}</div><div id="status-badge-${index}" class="badge ${badgeClass}" style="font-size: 0.7rem;">${h.status}</div></div><div class="btn-group btn-group-sm"><button class="btn btn-outline-success" onclick="updateLocalStatus(${index}, 'มา')">มา</button><button class="btn btn-outline-warning" onclick="updateLocalStatus(${index}, 'สาย')">สาย</button><button class="btn btn-outline-info" onclick="updateLocalStatus(${index}, 'ลา')">ลา</button><button class="btn btn-outline-danger" onclick="updateLocalStatus(${index}, 'ขาด')">ขาด</button></div></div>`;
+    let badgeClass = _attStatusBadge(h.status);
+    return `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div style="flex-grow: 1;"><div class="fw-bold" style="font-size: 0.85rem;">${h.studentName}</div><div id="status-badge-${index}" class="badge ${badgeClass}" style="font-size: 0.7rem;">${h.status}</div></div><div class="btn-group btn-group-sm"><button class="btn btn-outline-success" onclick="updateLocalStatus(${index}, 'มา')">มา</button><button class="btn btn-outline-warning" onclick="updateLocalStatus(${index}, 'สาย')">สาย</button><button class="btn btn-outline-info" onclick="updateLocalStatus(${index}, 'ลา')">ลา</button><button class="btn btn-outline-danger" onclick="updateLocalStatus(${index}, 'ขาด')">ขาด</button><button class="btn btn-outline-dark" onclick="updateLocalStatus(${index}, 'โดด')" title="มาโรงเรียนแต่ไม่เข้าคาบนี้">โดด</button></div></div>`;
   }).join('');
 
   const modalHtml = `<div id="historyModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:center; justify-content:center; padding:15px;"><div class="bg-white rounded-3 shadow-lg" style="width:100%; max-width:450px; max-height:85vh; display:flex; flex-direction:column;"><div class="p-3 bg-dark text-white d-flex justify-content-between align-items-center"><h6 class="mb-0 fw-bold"><i class="fas fa-user-edit me-2"></i>แก้ไขประวัติ</h6><button class="btn-close btn-close-white" onclick="document.getElementById('historyModal').remove()"></button></div><div class="p-3" style="overflow-y:auto;"><div class="alert alert-secondary small py-1 mb-2">แก้ไขข้อมูลให้เรียบร้อยแล้วกดปุ่ม "บันทึกการแก้ไข" ด้านล่าง</div>${html}</div><div class="p-3 bg-light border-top"><button class="btn btn-primary w-100 fw-bold py-2" onclick="saveAllHistoryChanges()"><i class="fas fa-save me-2"></i>บันทึกการแก้ไขทั้งหมด</button></div></div></div>`;
@@ -497,7 +501,7 @@ function updateLocalStatus(index, newStatus) {
   tempHistoryData[index].status = newStatus;
   const badge = document.getElementById(`status-badge-${index}`);
   badge.innerText = newStatus;
-  badge.className = `badge ${newStatus === 'มา' ? 'bg-success' : (newStatus === 'สาย' ? 'bg-warning text-dark' : (newStatus === 'ลา' ? 'bg-info text-dark' : 'bg-danger'))}`;
+  badge.className = 'badge ' + _attStatusBadge(newStatus);
 }
 
 function saveAllHistoryChanges() {
@@ -706,10 +710,21 @@ function openMassiveGrid() {
     .getMassiveAttendanceGrid(user.id, subjectCode, className, user.currentTerm, user.currentYear);
 }
 
+// สีของ badge สถานะ — ที่เดียวสำหรับทุกที่ที่แสดงสถานะเป็นป้าย
+// โดด ใช้สีเข้มแยกจากขาด เพื่อให้เห็นด้วยตาว่าเป็นคนละอาการ ทั้งที่นับเท่ากัน
+function _attStatusBadge(status) {
+    if(status === 'มา') return 'bg-success';
+    if(status === 'สาย') return 'bg-warning text-dark';
+    if(status === 'ลา') return 'bg-info text-dark';
+    if(status === 'โดด') return 'bg-dark';
+    return 'bg-danger';
+}
+
 function getSelectColor(status) {
     if(['มา','ปกติ','ทำหน้าที่','เข้าแถว'].includes(status)) return 'mg-ok';
     if(status === 'สาย') return 'mg-late';
     if(status === 'ลา') return 'mg-leave';
+    if(status === 'โดด') return 'mg-skip';
     if(['ขาด','ไม่ปกติ','ไม่ทำหน้าที่','ไม่เข้าแถว'].includes(status)) return 'mg-absent';
     if(status === '-') return 'mg-empty';
     return '';
@@ -795,7 +810,8 @@ function renderMassiveGridModal() {
                    <option value="มา"  ${status==='มา' ?'selected':''}>มา</option>
                    <option value="สาย" ${status==='สาย'?'selected':''}>สาย</option>
                    <option value="ลา"  ${status==='ลา' ?'selected':''}>ลา</option>
-                   <option value="ขาด" ${status==='ขาด'?'selected':''}>ขาด</option>`;
+                   <option value="ขาด" ${status==='ขาด'?'selected':''}>ขาด</option>
+                   <option value="โดด" ${status==='โดด'?'selected':''}>โดด</option>`;
             tbodyHtml += `<td class="align-middle">
                 <select id="mass_${cleanStdId}_${sessionKey}" data-rowidx="${rowIdx}" data-isnew="${isNew}" data-hrtype="${sess.type||''}"
                     class="mg-cell ${getSelectColor(status)}"

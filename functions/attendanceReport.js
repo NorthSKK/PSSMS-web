@@ -12,16 +12,19 @@ function normID(id) {
   return String(id || '').replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, '') || '0';
 }
 
+// 'โดด' = ขาดคาบนี้ทั้งที่มาโรงเรียน — **นับเป็นขาดเต็มจำนวน** ต่างกันแค่ป้ายพฤติกรรม
+// ห้ามปล่อยให้ตกร่อง else ไม่งั้นเด็กที่โดดประจำจะไม่ติด มส. เพราะ totalMissed ต่ำกว่าจริง
 function tallyStatuses(records) {
-  let present = 0, late = 0, leave = 0, absent = 0;
+  let present = 0, late = 0, leave = 0, absent = 0, skip = 0;
   for (const k in records) {
     const s = records[k];
     if (s === 'มา' || s === 'present') present++;
     else if (s === 'สาย' || s === 'late') late++;
     else if (s === 'ลา' || s === 'leave') leave++;
+    else if (s === 'โดด' || s === 'skip') { absent++; skip++; }
     else if (s === 'ขาด' || s === 'absent') absent++;
   }
-  return { present, late, leave, absent };
+  return { present, late, leave, absent, skip };
 }
 
 async function loadTimetableMap(term, year) {
