@@ -4,9 +4,9 @@
       <h4><i class="fas fa-user-clock me-2" style="color: var(--p-accent);"></i>ติดตามนักเรียนรายวัน</h4>
       <p class="pssms-subtitle" id="swSubtitle">กำลังโหลด...</p>
     </div>
-    <div class="pssms-actions d-flex align-items-center gap-2">
+    <div class="pssms-actions sw-daynav">
       <button class="btn btn-soft btn-sm" onclick="swShiftDay(-1)" title="วันก่อนหน้า"><i class="fas fa-chevron-left"></i></button>
-      <input type="date" id="swDate" class="form-control form-control-sm" style="width:auto;" onchange="initStudentWatchPage()">
+      <input type="date" id="swDate" class="form-control form-control-sm" onchange="initStudentWatchPage()">
       <button class="btn btn-soft btn-sm" onclick="swShiftDay(1)" title="วันถัดไป"><i class="fas fa-chevron-right"></i></button>
       <button class="btn btn-soft btn-sm" onclick="swToday()">วันนี้</button>
     </div>

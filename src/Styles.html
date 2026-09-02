@@ -1552,6 +1552,19 @@ body.dark-mode .pssms-dept-general {
    ที่นี่ **ใช้สีเตือนได้** ต่างจาก tp-* (กระดานครู) เพราะแต่ละแถวคือเหตุการณ์
    ที่เกิดขึ้นจริงแล้ว ไม่ใช่ความคืบหน้าที่ยังไม่ถึงเวลา
    ========================================================== */
+/* แถวเลื่อนวัน — ปุ่มกับช่องวันที่ต้องอยู่บรรทัดเดียวกันเสมอ
+   ⚠️ flatpickr สร้าง input ตัวใหม่ (altInput) แล้วก๊อปแค่ class ไม่ก๊อป inline style
+      ตั้ง width ที่ tag ตรง ๆ จึงไม่มีผล ต้องคุมด้วย CSS ที่นี่ */
+.pssms-actions.sw-daynav {
+  /* specificity ต้องเท่า `.pssms-page-header .pssms-actions` ที่ตั้ง flex-wrap: wrap ไว้ */
+  display: flex; align-items: center; gap: .4rem;
+  flex-wrap: nowrap;
+}
+.sw-daynav .form-control {
+  width: auto; flex: 0 1 auto; min-width: 130px; max-width: 190px;
+}
+.sw-daynav .btn { flex: 0 0 auto; }
+
 .sw-legend {
   font-size: .7rem; line-height: 1.6; color: var(--p-text-muted);
   margin: 0 0 .6rem; padding: 0 2px;
