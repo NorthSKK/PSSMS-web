@@ -30,6 +30,14 @@
   --p-warning: #d97706;
   --p-danger:  #dc3545;
 
+  /* อาการการมาเรียน (หน้าติดตามนักเรียน) — ยึดสีจากปุ่มเช็คชื่อของครูเป็นหลัก
+     ครูกดปุ่มสีไหน ฝ่ายปกครองเห็นสีเดียวกัน ไม่ต้องจำสองชุด
+     4 เฉดคนละโทน (แดง / ม่วง / เทาเข้ม / เหลือง) ต้องแยกออกแม้มองเร็ว ๆ */
+  --sw-away: var(--p-danger);    /* ขาดโรงเรียน = ปุ่ม "ขาด" */
+  --sw-fled: #7c3aed;            /* มาแล้วหนี — สีที่ไม่อยู่ในชุดสถานะ ให้สะดุดตา */
+  --sw-skip: #334155;            /* โดด = ปุ่ม "โดด" (btn-outline-dark) */
+  --sw-late: var(--p-warning);   /* สาย = ปุ่ม "สาย" */
+
   /* Geometry */
   --p-radius:    14px;
   --p-radius-sm: 8px;
@@ -700,6 +708,8 @@ body.dark-mode {
 .dark-mode {
   --bs-form-control-bg: #2d2d2d;
   --bs-form-control-disabled-bg: #1e1e1e;
+  /* #334155 จมไปกับพื้นมืด ต้องยกให้สว่างขึ้น — อีกสามสียังคอนทราสต์พอ */
+  --sw-skip: #64748b;
 }
 
 /* --- Sidebar already dark by default — no override needed --- */
@@ -1179,8 +1189,9 @@ body.dark-mode .pssms-dept-general {
 .mg-leave   { background-color: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
 .mg-absent  { background-color: var(--p-danger); color: #fff; border-color: var(--p-danger); }
 /* โดด — มาโรงเรียนแต่ไม่เข้าคาบ นับเป็นขาดเต็มจำนวน แต่ต้องแยกออกด้วยตา
-   ใช้แดงเข้มกว่า mg-absent ไม่ใช่สีใหม่ทั้งชุด เพราะมันคือขาดชนิดหนึ่ง */
-.mg-skip    { background-color: #7f1d1d; color: #fff; border-color: #7f1d1d; }
+   เทาเข้มตัวเดียวกับปุ่ม "โดด" บนหน้าเช็คชื่อและป้ายบนหน้าติดตามนักเรียน —
+   เดิมเป็นแดงเข้มที่นี่แต่เกือบดำบนปุ่ม โดดจึงมีสองสีในระบบเดียวกัน */
+.mg-skip    { background-color: var(--sw-skip); color: #fff; border-color: var(--sw-skip); }
 .mg-empty   { color: #cbd5e1; border-style: dashed; border-color: #dbe3ea; font-weight: 400; }
 
 /* ── แถวสรุป ── */
@@ -1588,10 +1599,10 @@ body.dark-mode .pssms-dept-general {
   font-size: .62rem; font-weight: 700; padding: 1px 7px;
   border-radius: 999px; color: #fff; white-space: nowrap;
 }
-.sw-tag-away { background: var(--p-danger); }
-.sw-tag-fled { background: #7f1d1d; }
-.sw-tag-skip { background: #b45309; }
-.sw-tag-late { background: #a16207; }
+.sw-tag-away { background: var(--sw-away); }
+.sw-tag-fled { background: var(--sw-fled); }
+.sw-tag-skip { background: var(--sw-skip); }
+.sw-tag-late { background: var(--sw-late); }
 .sw-periods { font-size: .65rem; color: var(--p-text-muted); }
 
 /* แถบคาบของวันนั้น — เห็นรูปทรงว่าหายช่วงไหนโดยไม่ต้องอ่านตัวเลข */
@@ -1603,14 +1614,14 @@ body.dark-mode .pssms-dept-general {
 }
 .sw-ok     { background: var(--p-border); color: var(--p-text-muted); }
 .sw-late   { background: #fef3c7; color: #92400e; }
-.sw-absent { background: var(--p-danger); color: #fff; }
-.sw-skip   { background: #7f1d1d; color: #fff; }
+.sw-absent { background: var(--sw-away); color: #fff; }
+.sw-skip   { background: var(--sw-skip); color: #fff; }
 .sw-other  { background: var(--p-dom); color: var(--p-text-muted); }
 
-.ar-chip.sw-chip-away b { color: var(--p-danger); }
-.ar-chip.sw-chip-fled b { color: #b91c1c; }
-.ar-chip.sw-chip-skip b { color: #b45309; }
-.ar-chip.sw-chip-late b { color: var(--p-warning); }
+.ar-chip.sw-chip-away b { color: var(--sw-away); }
+.ar-chip.sw-chip-fled b { color: var(--sw-fled); }
+.ar-chip.sw-chip-skip b { color: var(--sw-skip); }
+.ar-chip.sw-chip-late b { color: var(--sw-late); }
 .ar-chip.ar-on b { color: #fff; }
 
 /* ── ประวัติสะสมรายคน (โมดัล) ── */
