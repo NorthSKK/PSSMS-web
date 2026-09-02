@@ -15,6 +15,14 @@ node server.js           # one-shot
 # Kill & restart
 kill $(lsof -ti :3000) 2>/dev/null; node server.js &
 
+# เทส — TZ=UTC คือตัวที่จับบั๊กวันที่ที่เครื่อง dev มองไม่เห็น
+npm test
+TZ=UTC npm test
+
+# ขึ้นเดโม → ขึ้นโรงเรียนจริง (คนละ branch โดยตั้งใจ)
+git push origin main
+git checkout production && git merge main && git push origin production && git checkout main
+
 # Run migration SQL
 node -e "
 require('dotenv').config();
@@ -108,8 +116,11 @@ web/
 ├── lib/
 │   ├── db.js                    PostgreSQL pool + query() helper
 │   ├── cache.js                 In-memory TTL cache { get, set, del, delPrefix }
-│   ├── permissions.js           isAdmin / adminOnly / verify*Owner / normalizeKey
+│   ├── permissions.js           isAdmin / adminOnly / adminOrExecutive / verify*Owner
+│   ├── schoolDate.js            ⭐ "วันนี้" ตามเวลาไทย — ห้ามใช้ toISOString()/getDay() เอง
+│   ├── sessionCalendar.js       คาบที่ควรสอน (pure ไม่แตะ DB)
 │   ├── subjectGroup.js          subject_code → กลุ่มสาระ + isHomeroomSubject
+│   ├── storage/                 ที่เก็บไฟล์ (disk / s3) เลือกด้วย STORAGE_DRIVER
 │   └── sheets.js                Legacy Sheets client (migration เท่านั้น)
 │
 ├── middleware/
@@ -123,12 +134,18 @@ web/
 │   ├── checkLogin.js
 │   ├── leave.js                 ใบลา + คาบสอนแทน (assign/unassign/manualCreateAffected)
 │   ├── substituteAuto.js        จัดสอนแทนอัตโนมัติ (preview + apply)
+│   ├── studentWatch.js          ⭐ ติดตามนักเรียน — classify() 4 อาการ อยู่ที่นี่ที่เดียว
+│   ├── teacherProgressBoard.js  กระดานติดตามงานครู (**พักไว้ ติดป้ายกำลังพัฒนา**)
 │   ├── missing.js               Catch-all สำหรับ functions เล็กๆ เยอะ
 │   └── ... (ดูรายการครบด้านล่าง)
 │
 ├── test/                        node:test — ยิงผ่าน HTTP layer จริง (ดูหัวข้อ Testing)
 │   ├── helpers/api.js           boot app in-process + call/ok/denied + tokens
 │   └── helpers/fixtures.js      ค่าคงที่ที่ต้องตรงกับ db/seed-dev.js
+│
+├── CONTEXT.md                   อภิธานศัพท์โดเมน — อ่านก่อนตั้งชื่ออะไรใหม่
+├── docs/adr/                    การตัดสินใจที่ย้อนยาก + เหตุผล
+├── docs/plan-*.md               แผนงานที่ตกลงแล้ว
 │
 ├── public/
 │   ├── index.html               SPA shell (compiled จาก GAS HTML)
@@ -209,9 +226,19 @@ module.exports = { getMyData, saveMyData };
 const myDomain = require('../functions/myDomain');
 
 // เพิ่มใน handlers object:
-getMyData:   (args) => myDomain.getMyData(args),
-saveMyData:  (args) => myDomain.saveMyData(args),
+getMyData:   (args)       => myDomain.getMyData(args),
+saveMyData:  (args, user) => myDomain.saveMyData(args, user),   // write ที่เช็คสิทธิ์ ต้องรับ user
 ```
+
+**อย่าลืม allowlist ในไฟล์เดียวกัน** — สิทธิ์ตัดสินจาก **ชื่อฟังก์ชัน** ไม่ใช่จาก flag ใน payload:
+
+| Set | ใคร |
+|---|---|
+| `ADMIN_ONLY` | Admin |
+| `ADMIN_OR_EXECUTIVE` | Admin + ผอ./รอง (อ่านทั้งโรงเรียน แก้ไม่ได้) |
+| `TEACHER_OR_ADMIN` | ครู + Admin |
+| `PUBLIC_FNS` | ไม่ต้อง JWT |
+| **`READONLY_ALLOWED`** | **ฟังก์ชัน *อ่าน* ทุกตัวต้องอยู่ที่นี่** — เป็น allowlist ลืมแล้วโรงเรียนที่ licence หมดอายุจะเปิดไม่ได้ |
 
 ### Step 3 — ทดสอบ
 
@@ -231,7 +258,8 @@ saveMyData:  (args) => myDomain.saveMyData(args),
 เลยครอบ JWT verify, role check, ownership check ไปด้วยในตัว
 
 ```bash
-npm test                          # pretest reseed dev DB → รันทุกไฟล์ใน test/
+npm test                          # 174 ตัว · pretest reseed dev DB → รันทุกไฟล์ใน test/
+TZ=UTC npm test                   # ⭐ อย่างน้อยหนึ่งรอบก่อน push — production รันเป็น UTC
 npm run test:only test/scores.test.js
 ```
 
@@ -671,6 +699,11 @@ Railway ใช้ HTTP check — server.js ตอบ `200` ทุก GET request
 | **ตัวเลือกใน dropdown เปลี่ยน แต่แถวเก่ากรองไม่เจอ** | คอลัมน์เก็บ label เป็นสตริงตรง ๆ (เช่น `leave_records.type`) | เปลี่ยน option แล้วต้อง UPDATE แถวเก่าใน DB ด้วย |
 | **การ์ดหายทั้งใบทั้งที่ render สำเร็จ** | ไป render ลง container ที่ตัวอื่นสั่ง `d-none` ตอนไม่มีข้อมูล (เช่น `#dashCalendarStrip`) | วาง container ของตัวเองไว้นอก strip ที่ถูก toggle |
 | **ตัวเลขบนบรรทัดเดียวกันชนกันจนอ่านไม่ออก** | คั่นด้วย margin utility (`ms-2`) ล้วน ไม่มีตัวอักษรคั่น | ใส่ separator จริง (`·`) — margin หายตอน copy และช่องไฟบางเกินบนจอ |
+| **โมดัลเปิดมาแล้วค้างที่ skeleton ไม่มี error** | อ้าง `user.xxx` ลอย ๆ — **ไม่มี global ชื่อ `user`** ในระบบนี้ · throw ก่อนที่ `google.script.run` จะถูกผูก failure handler เลยไม่มีอะไรแสดง | เรียก `getSessionUser()` เองในทุกฟังก์ชัน |
+| **ฟังก์ชันหายไปเฉย ๆ กลายเป็น `undefined`** | `Scripts_*.html` ทุกไฟล์อยู่ใน **global scope เดียวกัน** — `var x` ทับ `function x` ที่ประกาศไว้ก่อนตอนโหลดสคริปต์ | อย่าตั้งชื่อตัวแปรซ้ำกับฟังก์ชัน (เคยหลุด: `var _swRank` ทับ `function _swRank`) |
+| **class/style ของช่องวันที่ไม่มีผล** | flatpickr `altInput` สร้าง input **ตัวใหม่** ให้ class จาก `altInputClass` เท่านั้น ไม่ก๊อปจากตัวเดิม ไม่ก๊อป `style` | `applyThaiDatePickers()` ส่งต่อให้แล้ว — **แก้ที่นั่นที่เดียว อย่าไล่แก้ทีละหน้า** · ช่องที่เห็นมี class `flatpickr-alt` |
+| **เปิดระบบเช้ามืดแล้วเห็นข้อมูลของเมื่อวาน** | `toISOString()` ให้วัน UTC · `getDay()/getFullYear()` ใช้ TZ ของ process ซึ่งบน Railway คือ **UTC** (เครื่อง dev เป็นเวลาไทยจึงผ่านเสมอ) | ใช้ `lib/schoolDate.js` — `schoolToday()` / `schoolDateStr()` / `schoolDayIndex()` · รัน `TZ=UTC npm test` ก่อน push |
+| **สถานะใหม่ตกร่องเงียบ ๆ** | `attendance.status` ถูก branch แบบ hardcode หลายที่ (`tallyStatuses`, ปพ.5, roll-up, สี) ค่าที่ไม่รู้จักไม่เข้าเงื่อนไขไหนเลย | ดูตาราง "สถานะการเช็คชื่อ — 5 ค่า" ใน `CLAUDE.md` ไล่ให้ครบทุกจุด |
 
 ---
 

@@ -70,7 +70,7 @@ kill $(lsof -ti :3000) 2>/dev/null
 
 ### ขึ้นเดโม
 ```bash
-npm test                        # 133 ตัว ต้องเขียวก่อน
+npm test                        # 174 ตัว ต้องเขียวก่อน (เช็ค TZ=UTC npm test ด้วย)
 git commit -m "..."
 git push origin main            # ขึ้น demo.pssms.app ใน ~45 วินาที
 ```
@@ -225,6 +225,9 @@ web/
 │   ├── db.js                    PostgreSQL pool + query() helper (max:20, idleTimeout:30s)
 │   ├── cache.js                 in-memory TTL cache (get/set/del)
 │   ├── permissions.js           ตรวจสิทธิ์รายแถว/รายวิชา — ใช้ทุกที่ที่เขียนข้อมูล
+│   ├── schoolDate.js            ⭐ "วันนี้" ตามเวลาไทย — ห้ามใช้ toISOString()/getDay() เอง
+│   ├── sessionCalendar.js       คาบที่ควรสอน (ไม่แตะ DB) ใช้ร่วม massive grid + กระดานครู
+│   ├── subjectGroup.js          subject_code → กลุ่มสาระ · isHomeroomSubject()
 │   ├── storage/                 ที่เก็บไฟล์ เลือก driver ด้วย STORAGE_DRIVER
 │   │   ├── index.js             เลือก driver + interface ที่ทั้งสองต้องมี
 │   │   ├── disk.js              เขียนดิสก์ (dev/เทสต์)
@@ -255,6 +258,11 @@ web/
 │   ├── config.js                system config + calendar
 │   ├── getTeacherDashboardBundle.js  parallel sections
 │   ├── getAdminDashboardBundle.js
+│   ├── studentWatch.js          ⭐ ติดตามนักเรียน — classify() 4 อาการ อยู่ที่นี่ที่เดียว
+│   ├── teacherProgressBoard.js  กระดานติดตามงานครู (**พักไว้ ติดป้ายกำลังพัฒนา**)
+│   ├── substituteAuto.js        จัดสอนแทนอัตโนมัติ (preview / apply)
+│   ├── mediaCards.js            สื่อการสอน
+│   ├── savings.js               ระบบออมเงิน
 │   ├── missing.js               catch-all สำหรับ functions เล็ก ๆ เยอะ
 │   │                              (risk dashboards, club admin, promote, etc.)
 │   └── ... (อื่น ๆ ตามชื่อ)
@@ -1538,12 +1546,25 @@ npm run test:only test/scores.test.js
 ```
 test/
 ├── helpers/api.js       boot app in-process (port 0) + call/ok/denied + tokens
+│                        TOKENS: admin / teacher1 / teacher2 / student / executive
 ├── helpers/fixtures.js  ค่าคงที่ที่ต้องตรงกับ db/seed-dev.js
 ├── permissions.test.js  auth, ADMIN_ONLY, ownership, admin bypass
-├── substitute_timetable.test.js  คาบสอนแทนในตารางวันนี้ + สิทธิ์เช็คชื่อของครูสอนแทน
+├── attendance.test.js   session overwrite, teacher_id จาก JWT, getSemesterReport, 'โดด'
 ├── scores.test.js       ล้างคะแนน=ลบแถว, completeness gate, remark, leading zero
-└── attendance.test.js   session overwrite, teacher_id จาก JWT, getSemesterReport
+├── student_watch.test.js  4 อาการ, อันดับสะสม, ช่วงเวลา/เดือน, วิชาที่หาย
+├── progress_board.test.js กระดานติดตามงานครู (HR จาก morning_activity, สิทธิ์)
+├── school_date.test.js  "วันนี้" ตามเวลาไทย — **ผ่านทุก TZ** (`TZ=UTC npm test`)
+├── substitute_timetable.test.js  คาบสอนแทนในตารางวันนี้ + สิทธิ์เช็คชื่อของครูสอนแทน
+├── substituteAuto.test.js  preview/apply จัดสอนแทนอัตโนมัติ
+├── license.test.js      สถานะ licence + READONLY_ALLOWED (พิมพ์ ปพ.5 ต้องได้เสมอ)
+├── media_cards.test.js / media_upload.test.js / storage.test.js
+├── sarabun.test.js      สิทธิ์ทะเบียนสารบรรณ + ไฟล์แนบ
+├── migrate.test.js      schema.sql ต้องตรงกับ db/migrations/
+└── demo.test.js         เครื่องหมายเดโม + ตัวกันล้างข้อมูล
 ```
+
+⚠️ **รันด้วย `TZ=UTC npm test` อย่างน้อยหนึ่งรอบก่อน push** — production บน Railway
+รันเป็น UTC ส่วนเครื่อง dev เป็นเวลาไทย บั๊กวันที่จะผ่านบนเครื่องแล้วไปพังบน production
 
 ### กติกา
 
