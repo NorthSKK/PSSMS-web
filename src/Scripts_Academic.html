@@ -2239,6 +2239,11 @@ function openStudentProfile(studentId, name) {
   var body = document.getElementById('swProfileBody');
   var title = document.getElementById('swProfileTitle');
   if (!body) return;
+  // ⚠️ ไม่มีตัวแปร global ชื่อ `user` ในระบบนี้ — ทุกฟังก์ชันต้องเรียก getSessionUser() เอง
+  // เดิมอ้าง user.currentTerm ลอย ๆ → ReferenceError ก่อนยิง API → modal ค้างที่ skeleton
+  // โดยไม่มี error ให้เห็น เพราะ failure handler ยังไม่ทันถูกผูก
+  var u = getSessionUser();
+  if (!u) { body.textContent = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'; return; }
   if (title) title.textContent = name + ' · ' + studentId;
   body.innerHTML = '<div class="pssms-skel" style="height:120px;border-radius:8px;"></div>';
   var modal = new bootstrap.Modal(document.getElementById('swProfileModal'));
@@ -2250,7 +2255,7 @@ function openStudentProfile(studentId, name) {
       body.innerHTML = '';
       body.textContent = 'โหลดไม่สำเร็จ: ' + (err && err.message ? err.message : err);
     })
-    .getStudentAttendanceProfile(studentId, user.currentTerm, user.currentYear);
+    .getStudentAttendanceProfile(studentId, u.currentTerm, u.currentYear);
 }
 
 function _swRenderProfile(p) {
@@ -2274,10 +2279,10 @@ function _swRenderProfile(p) {
   });
   body.appendChild(sum);
 
-  body.appendChild(_swRank('คาบที่หายบ่อย', p.byPeriod.map(function(r) {
+  body.appendChild(_swRankBlock('คาบที่หายบ่อย', p.byPeriod.map(function(r) {
     return { label: 'คาบ ' + r.period, count: r.count };
   })));
-  body.appendChild(_swRank('วิชาที่หายบ่อย', p.bySubject.map(function(r) {
+  body.appendChild(_swRankBlock('วิชาที่หายบ่อย', p.bySubject.map(function(r) {
     return { label: (r.subjectName || r.subjectCode), count: r.count };
   })));
 
@@ -2317,7 +2322,9 @@ function _swRenderProfile(p) {
   });
 }
 
-function _swRank(title, items) {
+// ตั้งชื่อ _swRankBlock ไม่ใช่ _swRank เพราะ `var _swRank` เป็นตัวแปรเก็บผลอันดับ
+// var ทับ function ตอนโหลดสคริปต์ แล้วฟังก์ชันหายไปเงียบ ๆ
+function _swRankBlock(title, items) {
   var wrap = document.createElement('div');
   if (!items.length) return wrap;
   var h = document.createElement('div');

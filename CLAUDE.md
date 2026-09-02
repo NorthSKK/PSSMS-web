@@ -973,6 +973,15 @@ function section(fn) {
 
 เด็กหนึ่งคนมีได้หลายอาการพร้อมกัน (สายตอนเช้า + โดดคาบบ่าย) · เทส `test/student_watch.test.js`
 
+⚠️ **ไม่มีตัวแปร global ชื่อ `user`** — ทุกฟังก์ชันต้องเรียก `getSessionUser()` เอง
+(`src/Scripts_Academic.html:429` อ่านจาก `localStorage.pssms_user`) · อ้าง `user.xxx` ลอย ๆ
+= **ReferenceError ก่อนยิง API** แล้วหน้าจอค้างที่ skeleton โดยไม่มี error ให้เห็น เพราะ
+failure handler ของ `google.script.run` ยังไม่ทันถูกผูก · เคยหลุดจริงใน `openStudentProfile`
+
+⚠️ **`Scripts_*.html` ทุกไฟล์อยู่ใน global scope เดียวกัน** — `var x` ทับ `function x`
+ที่ประกาศไว้ก่อนหน้าเงียบ ๆ ตอนโหลดสคริปต์ · เคยหลุดจริง: `var _swRank` (ตัวแปรเก็บผลอันดับ)
+ทับ `function _swRank()` (ตัวสร้างบล็อกในโมดัล) ทำให้โมดัลพัง ต้องเปลี่ยนชื่อเป็น `_swRankBlock`
+
 **CSS `sw-*` ใช้สีเตือนได้** ต่างจาก `tp-*` เพราะแต่ละแถวคือเหตุการณ์ที่เกิดแล้ว
 ไม่ใช่ความคืบหน้าที่ยังไม่ถึงเวลา
 
