@@ -209,7 +209,7 @@ async function getStudentAttendanceProfile([studentId, term, year]) {
  * getStudentWatchRanking([range]) — อันดับเด็กสะสม แยก 4 ลิสต์ตามอาการ
  *
  * `range` = `'7'` / `'30'` (วันล่าสุด) · `'term'` (ทั้งภาคเรียน) · `'YYYY-MM'` (เดือนเดียว)
- * default `'30'` · ค่าที่ไม่รู้จักตกกลับไปที่ default ไม่ throw
+ * default `'term'` · ค่าที่ไม่รู้จักตกกลับไปที่ default ไม่ throw
  *
  * **เรียงด้วยเลขดิบ ไม่ใช่อัตราส่วน** และ **ไม่มี % เวลาเรียน** — ดู
  * docs/adr/0002-behaviour-stats-never-restate-attendance-percent.md
@@ -220,7 +220,7 @@ const RANK_SIZE = 50;         // ส่งไปเยอะกว่าที�
 const RANK_VISIBLE = 10;      // frontend โชว์เท่านี้ก่อน
 const SUBJECT_TOP = 3;        // วิชาที่หายบ่อยสุดต่อคน
 const MIN_OCCURRENCES = 2;   // ต่ำกว่านี้ยังไม่เป็นรูปแบบ แค่วันแย่ ๆ วันเดียว
-const DEFAULT_RANGE = '30';
+const DEFAULT_RANGE = 'term';   // เปิดมาเห็นภาพรวมทั้งเทอมก่อน แล้วค่อยหุบช่วงเอง
 const THAI_MONTH_ABBR = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
 /** เดือนที่ภาคเรียนนี้คร่อมอยู่ — ไม่ใช่ 12 เดือนลอย ๆ เดือนที่ไม่มีทางมีข้อมูลไม่ต้องให้เลือก */

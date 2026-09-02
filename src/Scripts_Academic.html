@@ -2362,7 +2362,7 @@ function _swRankBlock(title, items) {
 // ⚠️ ห้ามเติมคอลัมน์ % เวลาเรียนที่นี่ — docs/adr/0002-*
 
 var _swTab = 'daily';
-var _swWindow = '30';   // '7' | '30' | 'term' | 'YYYY-MM'
+var _swWindow = 'term';   // '7' | '30' | 'term' | 'YYYY-MM' — ต้องตรงกับ DEFAULT_RANGE ฝั่ง server
 var _swRank = null;
 var _swExpanded = {};   // อาการ → กาง "ดูเพิ่มเติม" อยู่ไหม
 

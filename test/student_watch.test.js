@@ -187,11 +187,12 @@ test('ชื่อมาจาก users สด ไม่ใช่ชื่อท
   assert.equal(r.name, rows[0].full_name);
 });
 
-test('ช่วงที่ไม่รู้จักตกกลับไปที่ 30 วัน', async () => {
-  cache.del(`student_rank_${TERM}_${YEAR}_30`);
+test('ช่วงที่ไม่รู้จักตกกลับไปที่ค่าตั้งต้น (ทั้งภาคเรียน)', async () => {
+  cache.del(`student_rank_${TERM}_${YEAR}_term`);
   for (const bad of [999, '2026-13', 'พรุ่งนี้', null]) {
     const r = await ok('getStudentWatchRanking', [bad], 'admin');
-    assert.equal(r.range, '30', `${bad} ต้องตกกลับไป default ไม่ใช่ throw`);
+    assert.equal(r.range, 'term', `${bad} ต้องตกกลับไป default ไม่ใช่ throw`);
+    assert.equal(r.from, null, 'ทั้งภาคเรียน = ไม่มีขอบล่าง');
   }
 });
 
