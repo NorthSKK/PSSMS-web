@@ -1645,4 +1645,44 @@ body.dark-mode .pssms-dept-general {
   .sw-prof-date { min-width: 100%; }
 }
 
+
+/* ── แท็บสะสม (อันดับ) ── */
+.sw-tabs { border-bottom: 1px solid var(--p-border); gap: .25rem; }
+.sw-tabs .nav-link {
+  font-size: .8rem; font-weight: 600; padding: .4rem .9rem;
+  color: var(--p-text-muted); border: 1px solid transparent; border-bottom: none;
+  background: transparent;
+}
+.sw-tabs .nav-link:hover { color: var(--p-text); }
+.sw-tabs .nav-link.active {
+  color: var(--p-accent); background: var(--p-surface);
+  border-color: var(--p-border); border-bottom-color: var(--p-surface);
+}
+
+.sw-rank-row {
+  display: flex; align-items: center; gap: .6rem;
+  padding: 7px 12px; cursor: pointer;
+  border-top: 1px solid var(--p-border);
+}
+.pssms-card-header + .sw-rank-row { border-top: none; }
+.sw-rank-row:hover { background: var(--p-dom); }
+.sw-rank-pos {
+  flex: 0 0 20px; text-align: center;
+  font-size: .68rem; font-weight: 700; color: var(--p-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sw-rank-mid { flex: 1 1 auto; min-width: 0; }
+.sw-rank-sub { font-size: .65rem; color: var(--p-text-muted); }
+.sw-rank-count { flex: 0 0 auto; text-align: right; white-space: nowrap; }
+.sw-rank-big {
+  display: inline-block; min-width: 24px; padding: 0 6px;
+  font-size: .82rem; font-weight: 700; border-radius: 6px; color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+/* ตัวหารจงใจทำจาง — เป็นบริบทให้ตีความ ไม่ใช่ตัวจัดอันดับ (docs/adr/0002) */
+.sw-rank-den {
+  display: block; font-size: .6rem; color: var(--p-text-muted);
+  opacity: .8; margin-top: 2px;
+}
+
 </style>

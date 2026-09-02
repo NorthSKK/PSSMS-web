@@ -12,6 +12,12 @@
     </div>
   </div>
 
+  <ul class="nav nav-tabs sw-tabs mb-3">
+    <li class="nav-item"><a class="nav-link active" id="swTabDaily" href="javascript:void(0)" onclick="swShowTab('daily')">รายวัน</a></li>
+    <li class="nav-item"><a class="nav-link" id="swTabRank" href="javascript:void(0)" onclick="swShowTab('rank')">สะสม</a></li>
+  </ul>
+
+  <div id="swPaneDaily">
   <div class="ar-bar" id="swChips"></div>
 
   <p class="sw-legend">
@@ -23,6 +29,27 @@
   </p>
 
   <div id="swList"></div>
+  </div>
+
+  <div id="swPaneRank" class="d-none">
+    <div class="ar-bar">
+      <span class="ar-bar-title">ย้อนหลัง</span>
+      <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn btn-soft" id="swWin7"  onclick="swSetWindow(7)">7 วัน</button>
+        <button type="button" class="btn btn-soft" id="swWin30" onclick="swSetWindow(30)">30 วัน</button>
+        <button type="button" class="btn btn-soft" id="swWin0"  onclick="swSetWindow(0)">ทั้งภาคเรียน</button>
+      </div>
+      <span class="ar-bar-meta" id="swRankMeta"></span>
+    </div>
+
+    <p class="sw-legend">
+      เรียงด้วย<b>จำนวนวันที่มีอาการ</b> ตัวเลขหลังเครื่องหมาย / คือจำนวนวันที่ครูเช็คชื่อเด็กคนนั้น
+      แสดงไว้ให้เทียบเอง <b>ไม่ได้เอาไปหาร</b>
+      <span class="sw-legend-note">ไม่ใช่ % เวลาเรียน — ตัวเลขทางการที่ใช้ตัดสิน มส. อยู่ที่หน้ารายงานสถิติเวลาเรียน · แสดงเฉพาะคนที่มีอาการตั้งแต่ 2 วันขึ้นไป สูงสุดลิสต์ละ 10 คน</span>
+    </p>
+
+    <div class="row g-3" id="swRankGrid"></div>
+  </div>
 </div>
 
 <!-- ประวัติสะสมของเด็กคนเดียว — เปิดจากการกดชื่อ -->

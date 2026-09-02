@@ -2334,4 +2334,136 @@ function _swRank(title, items) {
   return wrap;
 }
 
+
+// ---------------------------------------------------- แท็บสะสม (อันดับ)
+//
+// 4 ลิสต์แยกตามอาการ ไม่รวมเป็นคะแนนเดียว — น้ำหนักแบบ "โดด 2 = ขาด 1" ไม่มีฐานอ้างอิง
+// และแต่ละอาการนำไปสู่คนละการกระทำ (โทรผู้ปกครอง / ตามหาในโรงเรียน / คุยกับเด็ก)
+//
+// ⚠️ ห้ามเติมคอลัมน์ % เวลาเรียนที่นี่ — docs/adr/0002-*
+
+var _swTab = 'daily';
+var _swWindow = 30;
+var _swRank = null;
+
+function swShowTab(tab) {
+  _swTab = tab;
+  var daily = document.getElementById('swPaneDaily');
+  var rank  = document.getElementById('swPaneRank');
+  if (!daily || !rank) return;
+  daily.classList.toggle('d-none', tab !== 'daily');
+  rank.classList.toggle('d-none', tab !== 'rank');
+  var td = document.getElementById('swTabDaily');
+  var tr = document.getElementById('swTabRank');
+  if (td) td.classList.toggle('active', tab === 'daily');
+  if (tr) tr.classList.toggle('active', tab === 'rank');
+  // ตัวเลื่อนวันเป็นของแท็บรายวันอย่างเดียว
+  var nav = document.querySelector('.sw-daynav');
+  if (nav) nav.classList.toggle('d-none', tab !== 'daily');
+  if (tab === 'rank' && !_swRank) _swLoadRank();
+}
+
+function swSetWindow(days) {
+  _swWindow = days;
+  _swRank = null;
+  _swLoadRank();
+}
+
+function _swLoadRank() {
+  var grid = document.getElementById('swRankGrid');
+  if (!grid) return;
+  [0, 7, 30].forEach(function(d) {
+    var b = document.getElementById('swWin' + d);
+    if (b) b.classList.toggle('btn-accent', d === _swWindow);
+  });
+  grid.innerHTML = '<div class="col-12"><div class="pssms-skel" style="height:180px;border-radius:8px;"></div></div>';
+  google.script.run
+    .withSuccessHandler(function(res) { _swRank = res; _swRenderRank(); })
+    .withFailureHandler(function(err) {
+      grid.innerHTML = '';
+      var p = document.createElement('div');
+      p.className = 'col-12 text-center text-muted py-4';
+      p.textContent = 'โหลดไม่สำเร็จ: ' + (err && err.message ? err.message : err);
+      grid.appendChild(p);
+    })
+    .getStudentWatchRanking(_swWindow);
+}
+
+function _swRenderRank() {
+  var r = _swRank;
+  var grid = document.getElementById('swRankGrid');
+  var meta = document.getElementById('swRankMeta');
+  if (!r || !grid) return;
+
+  if (meta) {
+    meta.textContent = 'ภาคเรียนที่ ' + r.term + '/' + r.year
+      + ' · มีข้อมูลนักเรียน ' + r.studentsWithData + ' คน';
+  }
+
+  grid.innerHTML = '';
+  SW_ORDER.forEach(function(k) {
+    var col = document.createElement('div');
+    col.className = 'col-12 col-lg-6';
+    var card = document.createElement('div');
+    card.className = 'pssms-card h-100 p-0';
+
+    var head = document.createElement('div');
+    head.className = 'pssms-card-header d-flex justify-content-between align-items-center';
+    var badge = document.createElement('span');
+    badge.className = 'sw-tag sw-tag-' + k;
+    badge.textContent = SW_LABEL[k];
+    head.appendChild(badge);
+    var n = document.createElement('span');
+    n.className = 'small text-muted';
+    n.textContent = r.lists[k].length ? (r.lists[k].length + ' คน') : '';
+    head.appendChild(n);
+    card.appendChild(head);
+
+    if (!r.lists[k].length) {
+      var none = document.createElement('div');
+      none.className = 'p-3 small text-muted';
+      none.textContent = 'ไม่มีใครถึงเกณฑ์ ' + r.minOccurrences + ' วันขึ้นไป';
+      card.appendChild(none);
+    } else {
+      r.lists[k].forEach(function(s, i) { card.appendChild(_swRankRow(s, i, k)); });
+    }
+    col.appendChild(card);
+    grid.appendChild(col);
+  });
+}
+
+function _swRankRow(s, i, symptom) {
+  var row = document.createElement('div');
+  row.className = 'sw-rank-row';
+  row.onclick = function() { openStudentProfile(s.studentId, s.name); };
+
+  var pos = document.createElement('span');
+  pos.className = 'sw-rank-pos';
+  pos.textContent = (i + 1);
+
+  var mid = document.createElement('div');
+  mid.className = 'sw-rank-mid';
+  var nm = document.createElement('div');
+  nm.className = 'sw-name';
+  nm.textContent = s.name;
+  var sub = document.createElement('div');
+  sub.className = 'sw-rank-sub';
+  sub.textContent = s.className + ' · ล่าสุด ' + _swThaiDate(s.lastDate);
+  mid.appendChild(nm); mid.appendChild(sub);
+
+  var right = document.createElement('div');
+  right.className = 'sw-rank-count';
+  var big = document.createElement('span');
+  big.className = 'sw-rank-big sw-tag-' + symptom;
+  big.textContent = s.count;
+  var den = document.createElement('span');
+  den.className = 'sw-rank-den';
+  den.textContent = '/ ' + s.daysWithData + ' วัน';
+  right.appendChild(big); right.appendChild(den);
+  right.title = s.count + ' วันที่มีอาการ จาก ' + s.daysWithData + ' วันที่ครูเช็คชื่อ';
+
+  row.appendChild(pos); row.appendChild(mid); row.appendChild(right);
+  return row;
+}
+
 </script>

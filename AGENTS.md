@@ -16,5 +16,5 @@
 | [`.claude/commands/`](./.claude/commands/) | slash command (`/dev`, `/debug`, `/migrate`, `/schema`, `/test-fn`) |
 | [`docs/agents/`](./docs/agents/) | issue tracker, triage labels, domain docs |
 | [`CONTEXT.md`](./CONTEXT.md) | อภิธานศัพท์โดเมน — บทบาท, กลุ่มสาระ vs วิชาเอก, กับดัก `department` |
-| [`docs/adr/`](./docs/adr/) | บันทึกการตัดสินใจเชิงสถาปัตยกรรม |
+| [`docs/adr/`](./docs/adr/) | บันทึกการตัดสินใจเชิงสถาปัตยกรรม — 0001 ขอบเขตของ Executive · 0002 ห้ามคำนวณ % เวลาเรียนซ้ำ |
 | [`docs/plan-teacher-progress-board.md`](./docs/plan-teacher-progress-board.md) | แผนกระดานติดตามงานครู — **พร้อมเริ่มเขียน** |

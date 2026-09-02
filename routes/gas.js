@@ -63,7 +63,7 @@ const TEACHER_OR_ADMIN = new Set([
 const ADMIN_OR_EXECUTIVE = new Set([
   'getTeacherProgressBoard',
   // ข้อมูลพฤติกรรมรายคนทั้งโรงเรียน ไม่ใช่ของครูรายวิชา
-  'getDailyStudentWatch', 'getStudentAttendanceProfile',
+  'getDailyStudentWatch', 'getStudentAttendanceProfile', 'getStudentWatchRanking',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ const READONLY_ALLOWED = new Set([
     'getCalendarEvents', 'getClassListForSavings', 'getClubAttendanceSummary',
     'getClubList', 'getClubMembers', 'getClubMembersForTeacher',
     'getCourseSessionList', 'getCurriculumBySubject', 'getCurriculumData',
-    'getDailyStudentWatch', 'getStudentAttendanceProfile',
+    'getDailyStudentWatch', 'getStudentAttendanceProfile', 'getStudentWatchRanking',
     'getDeletedMediaCards', 'getDetailedLessonRecords', 'getExecutiveDashboardBundle',
     'getFilteredTimetables', 'getHomeroomAssignments', 'getLeaveRequestBundle',
     'getMassiveAttendanceGrid', 'getMediaCardOptions', 'getMediaCards',
@@ -281,6 +281,7 @@ const handlers = {
   getTeacherProgressBoard:         () => progressBoard.getTeacherProgressBoard(),
   getDailyStudentWatch:            (args) => studentWatch.getDailyStudentWatch(args),
   getStudentAttendanceProfile:     (args) => studentWatch.getStudentAttendanceProfile(args),
+  getStudentWatchRanking:          (args) => studentWatch.getStudentWatchRanking(args),
   getTeacherRiskDashboard:         (args) => missing.getTeacherRiskDashboard(args),
   getTeacherAtRiskDashboard:       (args) => missing.getTeacherAtRiskDashboard(args),
   getStudentDashboardBundle:       (args, user) => missing.getStudentDashboardBundle(args, user),
