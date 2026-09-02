@@ -7,6 +7,9 @@
  *
  * ครูและ Admin เห็นทุกรายการและเปิดไฟล์แนบได้ทั้งหมด — เป็นทะเบียนกลางของงานธุรการ
  * **ไม่ใช่ที่เก็บเอกสารลับ** (เรื่องบุคคล เงินเดือน วินัย ไม่ควรแนบที่นี่)
+ *
+ * **เขียน (แก้ไข/แนบไฟล์) ได้เฉพาะผู้รับผิดชอบเอกสารหรือ Admin** — ดู _assertOwnsSarabun
+ * requester ว่าง (ข้อมูลเก่า/นำเข้า) สงวนให้ Admin แก้ (หลักเดียวกับ budgets.created_by)
  */
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
@@ -31,10 +34,36 @@ async function resolveRequester(user, given) {
   return String((rows[0] && rows[0].full_name) || user?.name || '');
 }
 
+/**
+ * เจ้าของเอกสาร = แถวที่ requester ตรงกับชื่อจริงสดของผู้เรียก — Admin ผ่านเสมอ
+ *
+ * ตาราง sarabun ไม่มีคอลัมน์ username ของเจ้าของ — การเทียบด้วยชื่อคือกลไกที่ยอมรับ
+ * ของทะเบียนนี้ ข้อจำกัดที่รู้อยู่: ชื่อ-สกุลซ้ำกันสองคน หรือชื่อที่ Admin พิมพ์แทน
+ * (สะกดไม่ตรง users.full_name) จะเทียบไม่ตรงได้ — ให้ Admin แก้แทน
+ *
+ * ⚠️ ห้ามเทียบกับค่าจาก payload — requester ต้องมาจากแถวใน DB และชื่อผู้เรียก
+ * query สดจาก users (JWT อยู่ได้ 90 วัน ชื่อใน token อาจเก่า)
+ * ⚠️ requester ว่าง → Admin เท่านั้น — ค่าว่างเทียบเท่าชื่อว่างแล้วจะกลายเป็นของทุกคน
+ */
+async function _assertOwnsSarabun(user, requester, msg) {
+  if (isAdmin(user)) return;
+  const owner = String(requester || '').trim();
+  if (!owner) throw new Error(msg);
+  const { rows } = await query(
+    `SELECT full_name FROM users WHERE username=$1`, [String(user?.id || '')]
+  );
+  const name = String((rows[0] && rows[0].full_name) || '').trim();
+  if (!name || name !== owner) throw new Error(msg);
+}
+
 async function saveSarabun([data], user) {
   const d = data || {};
   const requester = await resolveRequester(user, d.requester);
   if (d.id) {
+    const existing = await query(`SELECT requester FROM sarabun WHERE id=$1`, [d.id]);
+    if (!existing.rows.length) throw new Error('ไม่พบทะเบียนเอกสารนี้');
+    await _assertOwnsSarabun(user, existing.rows[0].requester,
+      'แก้ไขได้เฉพาะผู้รับผิดชอบเอกสารนี้');
     await query(
       `UPDATE sarabun SET doc_type=$1,doc_number=$2,subject=$3,requester=$4,
        target_date=$5,status=$6,file_url=$7,year=$8 WHERE id=$9`,
@@ -72,15 +101,19 @@ async function deleteSarabun([id]) {
 
 /**
  * แนบไฟล์ — เรียกจาก routes/media.js เท่านั้น (multipart ไม่ผ่าน /api/gas)
+ * เฉพาะผู้รับผิดชอบเอกสารหรือ Admin (_assertOwnsSarabun) — ครูคนอื่นอ่านได้อย่างเดียว
  * แนบทับ: อัปไฟล์ใหม่ให้สำเร็จก่อน แล้วค่อยลบของเก่า (ลบก่อนแล้วอัปพัง = เสียของเดิมฟรี)
  */
 async function attachSarabunFile(id, file, user) {
   const docId = parseInt(id, 10);
   if (!Number.isInteger(docId)) throw new Error('ไม่พบทะเบียนเอกสารนี้');
 
-  const { rows } = await query(`SELECT id, file_key FROM sarabun WHERE id=$1`, [docId]);
+  const { rows } = await query(`SELECT id, file_key, requester FROM sarabun WHERE id=$1`, [docId]);
   if (!rows.length) throw new Error('ไม่พบทะเบียนเอกสารนี้');
   const oldKey = rows[0].file_key;
+
+  // ตรวจสิทธิ์ก่อนเขียนไฟล์เสมอ — เขียนก่อนแล้วค่อยเช็ค = ไฟล์กำพร้าเมื่อโดนปฏิเสธ
+  await _assertOwnsSarabun(user, rows[0].requester, 'แนบไฟล์ได้เฉพาะผู้รับผิดชอบเอกสารนี้');
 
   const saved = await storage.put({ buffer: file.buffer, ext: file.detectedExt });
   try {

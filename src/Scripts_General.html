@@ -237,7 +237,10 @@ window.renderSarabunTable = function(dataList) {
             if (row.hasFile) {
                 fileHtml += `<button class="btn btn-sm btn-success rounded-circle" title="${_escH(row.fileName || 'ดูไฟล์')}" ${btnStyle} onclick="openSarabunFile(${row.id})"><i class="fas fa-search" style="font-size:.75rem;"></i></button>`;
             }
-            fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" title="${attachTitle}" ${btnStyle} onclick="pickSarabunFile(${row.id},'${_escH(row.docNumber)}')"><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
+            // แนบไฟล์ได้เฉพาะเจ้าของทะเบียน (server ส่ง mine=true ให้ Admin ทุกแถวอยู่แล้ว)
+            if (row.mine) {
+                fileHtml += `<button class="btn btn-sm btn-outline-secondary rounded-circle" title="${attachTitle}" ${btnStyle} onclick="pickSarabunFile(${row.id},'${_escH(row.docNumber)}')"><i class="fas fa-paperclip" style="font-size:.75rem;"></i></button>`;
+            }
             if (isAdmin) {
                 fileHtml += `<button class="btn btn-sm btn-outline-primary rounded-circle" title="แก้ไข" ${btnStyle} onclick="editSarabunRecord(${row.id})"><i class="fas fa-pen" style="font-size:.75rem;"></i></button>`;
                 fileHtml += `<button class="btn btn-sm btn-outline-danger rounded-circle" title="ลบ" ${btnStyle} onclick="confirmDeleteSarabun(${row.id},'${_escH(row.docNumber)}')"><i class="fas fa-trash" style="font-size:.75rem;"></i></button>`;

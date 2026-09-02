@@ -10,7 +10,18 @@ const { isAdmin } = require('../lib/permissions');
  */
 module.exports = async function getSarabunHistory(_args, user) {
   const role = String(user?.role || '').trim().toUpperCase();
-  const staff = isAdmin(user) || role === 'TEACHER';
+  const admin = isAdmin(user);
+  const staff = admin || role === 'TEACHER';
+
+  // ชื่อจริงสดสำหรับธง mine (เขียนได้ไหม) — query ครั้งเดียว ไม่ใช่ต่อแถว
+  // Admin ไม่ต้องถาม (mine=true ทุกแถว) · requester ว่าง = ของ Admin เท่านั้น
+  let callerName = '';
+  if (!admin) {
+    const r = await query(
+      `SELECT full_name FROM users WHERE username=$1`, [String(user?.id || '')]
+    );
+    callerName = String((r.rows[0] && r.rows[0].full_name) || '').trim();
+  }
 
   const params = [];
   let sql = `SELECT id, to_char(timestamp, 'YYYY-MM-DD HH24:MI') as timestamp,
@@ -40,5 +51,7 @@ module.exports = async function getSarabunHistory(_args, user) {
     fileSize:   r.file_size == null ? null : Number(r.file_size),
     hasFile:    !!r.file_key,
     year:       r.year        || '',
+    // ผู้เรียกเขียนแถวนี้ได้ไหม (แก้ไข/แนบไฟล์) — กติกาเดียวกับ _assertOwnsSarabun
+    mine:       admin || (!!callerName && String(r.requester || '').trim() === callerName),
   }));
 };

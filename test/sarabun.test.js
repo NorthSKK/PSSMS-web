@@ -17,7 +17,9 @@ after(stop);
 
 const STUDENT = token({ id: '02001', role: 'Student' });
 
-async function makeDoc(subject = 'ทดสอบสารบรรณ', requester = 'ครูสมหญิง ตั้งใจสอน') {
+// default requester = teacher1 — เทสแนบไฟล์ส่วนใหญ่อัปโหลดด้วย token teacher1
+// และตอนนี้แนบได้เฉพาะเจ้าของ (ผู้รับผิดชอบ) หรือ Admin
+async function makeDoc(subject = 'ทดสอบสารบรรณ', requester = 'ครูสมชาย ใจดี') {
   const { rows } = await query(
     `INSERT INTO sarabun(doc_type, doc_number, subject, requester, target_date, status, year)
      VALUES('บันทึกข้อความ','ศธ 999/2569',$1,$2,'2026-08-28','รอดำเนินการ','2569')
@@ -208,6 +210,75 @@ test('ลบทะเบียนแล้วไฟล์ต้องถูก�
   assert.equal(storage.disk.statSync(key), null, 'ลบทะเบียนแล้วไฟล์ต้องไม่เหลือ');
   const left = await query(`SELECT id FROM sarabun WHERE id=$1`, [id]);
   assert.equal(left.rows.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// เขียนได้เฉพาะผู้รับผิดชอบ (owner-or-admin) — ครูคนอื่นอ่านได้อย่างเดียว
+
+test('แนบไฟล์: เจ้าของแนบได้ ครูคนอื่นโดนปฏิเสธ Admin แนบได้ทุกใบ', async () => {
+  const id = await makeDoc('เอกสารของ teacher1', 'ครูสมชาย ใจดี');
+
+  // ครูคนอื่น (teacher2) — ปฏิเสธก่อนเขียนไฟล์
+  const rejected = await upload({ docId: id, token: TOKENS.teacher2 });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.body.__error, /แนบไฟล์ได้เฉพาะผู้รับผิดชอบ/);
+  const noFile = await query(`SELECT file_key FROM sarabun WHERE id=$1`, [id]);
+  assert.equal(noFile.rows[0].file_key, null, 'ต้องไม่มีไฟล์ถูกเขียนเมื่อโดนปฏิเสธ');
+
+  // เจ้าของแนบได้
+  const owned = await upload({ docId: id, token: TOKENS.teacher1 });
+  assert.equal(owned.status, 200);
+
+  // Admin แนบทับได้แม้ไม่ใช่เจ้าของ
+  const asAdmin = await upload({ docId: id, token: TOKENS.admin, filename: 'admin.pdf' });
+  assert.equal(asAdmin.status, 200);
+
+  await ok('deleteSarabun', [id], 'admin');
+});
+
+test('แก้ไขทะเบียน: เจ้าของแก้ได้ ครูคนอื่นโดน __error Admin แก้ได้', async () => {
+  const id = await makeDoc('แก้ไขทดสอบ', 'ครูสมชาย ใจดี');
+  const payload = (extra) => [{
+    id, docType: 'บันทึกข้อความ', docNumber: 'ศธ 999/2569',
+    subject: 'แก้แล้ว', year: '2569', ...extra,
+  }];
+
+  const err = await denied('saveSarabun', payload({}), 'teacher2');
+  assert.match(err, /แก้ไขได้เฉพาะผู้รับผิดชอบ/);
+
+  await ok('saveSarabun', payload({}), 'teacher1');
+  await ok('saveSarabun', payload({ requester: 'ครูสมชาย ใจดี' }), 'admin');
+  await query(`DELETE FROM sarabun WHERE id=$1`, [id]);
+});
+
+test('requester ว่าง (ข้อมูลเก่า) = Admin เท่านั้น', async () => {
+  const id = await makeDoc('แถวนำเข้าไม่มีผู้รับผิดชอบ', '');
+
+  const res = await upload({ docId: id, token: TOKENS.teacher1 });
+  assert.equal(res.status, 400, 'ครูแนบแถว requester ว่างไม่ได้');
+
+  await denied('saveSarabun', [{ id, docType: 'บันทึกข้อความ', subject: 'x', year: '2569' }], 'teacher1');
+  await ok('saveSarabun',
+    [{ id, docType: 'บันทึกข้อความ', subject: 'x', requester: '', year: '2569' }], 'admin');
+  await query(`DELETE FROM sarabun WHERE id=$1`, [id]);
+});
+
+test('getSarabunHistory ติดธง mine ตามเจ้าของ — Admin ได้ true ทุกแถว', async () => {
+  const mineId  = await makeDoc('ของ teacher1', 'ครูสมชาย ใจดี');
+  const otherId = await makeDoc('ของ teacher2', 'ครูสมหญิง ตั้งใจสอน');
+  const blankId = await makeDoc('ไม่มีผู้รับผิดชอบ', '');
+
+  const asT1 = await ok('getSarabunHistory', [], 'teacher1');
+  assert.equal(asT1.find(r => r.id === mineId).mine,  true);
+  assert.equal(asT1.find(r => r.id === otherId).mine, false);
+  assert.equal(asT1.find(r => r.id === blankId).mine, false, 'requester ว่างต้องไม่เป็นของใคร');
+
+  const asAdmin = await ok('getSarabunHistory', [], 'admin');
+  for (const rid of [mineId, otherId, blankId]) {
+    assert.equal(asAdmin.find(r => r.id === rid).mine, true, 'Admin เขียนได้ทุกแถว');
+  }
+
+  await query(`DELETE FROM sarabun WHERE id = ANY($1)`, [[mineId, otherId, blankId]]);
 });
 
 test('ลบทะเบียนเป็นของ Admin ครูลบไม่ได้', async () => {
