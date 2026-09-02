@@ -206,9 +206,10 @@ async function getStudentAttendanceProfile([studentId, term, year]) {
 }
 
 /**
- * getStudentWatchRanking([days]) — อันดับเด็กสะสม แยก 4 ลิสต์ตามอาการ
+ * getStudentWatchRanking([range]) — อันดับเด็กสะสม แยก 4 ลิสต์ตามอาการ
  *
- * `days` = 7 / 30 / 0 (0 = ทั้งภาคเรียน) · default 30
+ * `range` = `'7'` / `'30'` (วันล่าสุด) · `'term'` (ทั้งภาคเรียน) · `'YYYY-MM'` (เดือนเดียว)
+ * default `'30'` · ค่าที่ไม่รู้จักตกกลับไปที่ default ไม่ throw
  *
  * **เรียงด้วยเลขดิบ ไม่ใช่อัตราส่วน** และ **ไม่มี % เวลาเรียน** — ดู
  * docs/adr/0002-behaviour-stats-never-restate-attendance-percent.md
@@ -217,22 +218,66 @@ async function getStudentAttendanceProfile([studentId, term, year]) {
  */
 const RANK_SIZE = 10;
 const MIN_OCCURRENCES = 2;   // ต่ำกว่านี้ยังไม่เป็นรูปแบบ แค่วันแย่ ๆ วันเดียว
-const ALLOWED_DAYS = [0, 7, 30];
+const DEFAULT_RANGE = '30';
+const THAI_MONTH_ABBR = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
-async function getStudentWatchRanking([days]) {
-  let window = Number(days);
-  if (!ALLOWED_DAYS.includes(window)) window = 30;
+/** เดือนที่ภาคเรียนนี้คร่อมอยู่ — ไม่ใช่ 12 เดือนลอย ๆ เดือนที่ไม่มีทางมีข้อมูลไม่ต้องให้เลือก */
+function _termMonths(startStr, endStr) {
+  if (!startStr) return [];
+  const out = [];
+  const [sy, sm] = String(startStr).slice(0, 7).split('-').map(Number);
+  const endRaw = String(endStr || '').slice(0, 7);
+  const [ey, em] = (endRaw || schoolToday().slice(0, 7)).split('-').map(Number);
+  if (!sy || !sm || !ey || !em) return [];
+  let y = sy, m = sm;
+  // เผื่อ TermData เพี้ยน — กันวนไม่จบ ภาคเรียนจริงยาวไม่เกินปีเดียวอยู่แล้ว
+  for (let guard = 0; guard < 24 && (y < ey || (y === ey && m <= em)); guard++) {
+    out.push({
+      value: `${y}-${String(m).padStart(2, '0')}`,
+      label: `${THAI_MONTH_ABBR[m - 1]} ${y + 543}`,
+    });
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
 
+/** range → ขอบล่าง/ขอบบนของวันที่ (ทั้งคู่เป็น 'YYYY-MM-DD' หรือ null = ไม่จำกัด) */
+function _rangeBounds(range) {
+  if (range === 'term') return { from: null, to: null };
+  if (range === '7' || range === '30') {
+    const d = new Date(`${schoolToday()}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - Number(range));
+    return { from: d.toISOString().slice(0, 10), to: null };
+  }
+  // 'YYYY-MM' — ต้องมีขอบบนด้วย ไม่งั้นเลือก ส.ค. แล้วกินข้อมูล ก.ย. ต่อท้ายมาหมด
+  const [y, m] = range.split('-').map(Number);
+  const from = new Date(Date.UTC(y, m - 1, 1));
+  const to   = new Date(Date.UTC(y, m, 0));     // วันสุดท้ายของเดือนนั้น
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
+async function getStudentWatchRanking([range]) {
   const config = await require('./getSystemConfig')();
   const term = String(config.term);
   const year = String(config.year);
-  const key = `student_rank_${term}_${year}_${window}`;
+
+  const tdRes = await query(
+    `SELECT value1, value2 FROM system_settings WHERE key='TermData' AND subkey=$1`,
+    [`${term}_${year}`]
+  );
+  const months = _termMonths(tdRes.rows[0]?.value1, tdRes.rows[0]?.value2);
+
+  let win = String(range == null ? '' : range).trim();
+  const valid = ['7', '30', 'term', ...months.map(m => m.value)];
+  if (!valid.includes(win)) win = DEFAULT_RANGE;
+
+  const key = `student_rank_${term}_${year}_${win}`;
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit) return { ...hit, months };
 
   // ยุบเป็น 1 แถวต่อ นักเรียน×วัน ใน SQL ก่อน — ทั้งเทอมมีแถวรายคาบระดับ 4 แสนแถว
   // ดึงเข้า node ทั้งหมดไม่ไหว · 'ลา' ตัดทิ้งที่นี่ ตรงกับที่หน้ารายวันตัดตอนอ่านแถว
-  const since = window ? `${window} days` : null;
+  const { from, to } = _rangeBounds(win);
   const [dayRes, mornRes] = await Promise.all([
     query(
       // ชื่อดึงจาก users สด ไม่ใช่ attendance.student_name ที่ copy ไว้ตอนเช็คชื่อ —
@@ -250,16 +295,18 @@ async function getStudentWatchRanking([days]) {
        LEFT JOIN users u ON u.username = a.student_id
        WHERE a.term=$1 AND a.year=$2 AND a.status <> 'ลา'
          AND a.subject_code NOT LIKE 'CLUB_%'
-         AND ($3::text IS NULL OR a.date >= CURRENT_DATE - $3::interval)
+         AND ($3::date IS NULL OR a.date >= $3::date)
+         AND ($4::date IS NULL OR a.date <= $4::date)
        GROUP BY a.student_id, a.date`,
-      [term, year, since]
+      [term, year, from, to]
     ),
     query(
       `SELECT student_id, to_char(date,'YYYY-MM-DD') AS d, flag_status
        FROM morning_activity
        WHERE term=$1 AND year=$2
-         AND ($3::text IS NULL OR date >= CURRENT_DATE - $3::interval)`,
-      [term, year, since]
+         AND ($3::date IS NULL OR date >= $3::date)
+         AND ($4::date IS NULL OR date <= $4::date)`,
+      [term, year, from, to]
     ),
   ]);
 
@@ -306,13 +353,14 @@ async function getStudentWatchRanking([days]) {
   }
 
   const out = {
-    term, year, days: window,
+    term, year, range: win, from, to,
     minOccurrences: MIN_OCCURRENCES,
     studentsWithData: people.size,
     lists,
   };
   cache.set(key, out, CACHE_TTL);
-  return out;
+  // months ไม่เข้า cache — มันขึ้นกับ TermData ไม่ใช่ผลการนับ
+  return { ...out, months };
 }
 
 module.exports = {

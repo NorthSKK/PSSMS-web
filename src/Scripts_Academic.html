@@ -2068,6 +2068,9 @@ function swToday() {
 function initStudentWatchPage() {
   var list = document.getElementById('swList');
   if (!list) return;
+  // ตัวเดียวกับที่ใช้บนหน้าปฏิทินและแดชบอร์ด — ไม่ส่ง cfg จะยิง getSystemConfig เอง
+  // (PUBLIC + cache 300s) · ตัดสินใจซ่อน/แสดงเองเมื่อไม่มี TermData
+  if (typeof renderTermProgressBar === 'function') renderTermProgressBar('swTermProgress');
   list.innerHTML = '<div class="pssms-skel mb-2" style="height:52px;border-radius:8px;"></div>'
                  + '<div class="pssms-skel" style="height:52px;border-radius:8px;"></div>';
   var el = document.getElementById('swDate');
@@ -2351,7 +2354,7 @@ function _swRank(title, items) {
 // ⚠️ ห้ามเติมคอลัมน์ % เวลาเรียนที่นี่ — docs/adr/0002-*
 
 var _swTab = 'daily';
-var _swWindow = 30;
+var _swWindow = '30';   // '7' | '30' | 'term' | 'YYYY-MM'
 var _swRank = null;
 
 function swShowTab(tab) {
@@ -2371,22 +2374,51 @@ function swShowTab(tab) {
   if (tab === 'rank' && !_swRank) _swLoadRank();
 }
 
-function swSetWindow(days) {
-  _swWindow = days;
+function swSetWindow(range) {
+  // ช่อง dropdown ส่ง '' มาตอนเลือกหัวข้อ "รายเดือน…" — ไม่ต้องทำอะไร
+  if (!range) { _swSyncWindowUI(); return; }
+  _swWindow = String(range);
   _swRank = null;
   _swLoadRank();
+}
+
+// ไฮไลต์ปุ่ม/ค่า dropdown ให้ตรงกับช่วงที่เลือกอยู่ — เลือกเดือนแล้วปุ่มต้องคลาย
+// และกดปุ่มแล้ว dropdown ต้องกลับไปที่ "รายเดือน…" ไม่งั้นดูเหมือนเลือกไว้สองอย่าง
+function _swSyncWindowUI() {
+  ['7', '30', 'term'].forEach(function(r) {
+    var b = document.getElementById('swWin' + r);
+    if (b) b.classList.toggle('btn-accent', r === _swWindow);
+  });
+  var sel = document.getElementById('swMonth');
+  if (sel) sel.value = (_swWindow.indexOf('-') > 0) ? _swWindow : '';
+}
+
+function _swFillMonths(months) {
+  var sel = document.getElementById('swMonth');
+  if (!sel || !months) return;
+  if (sel.dataset.filled === String(months.length)) return;   // เติมครั้งเดียวพอ
+  sel.innerHTML = '';
+  var head = document.createElement('option');
+  head.value = '';
+  head.textContent = 'รายเดือน…';
+  sel.appendChild(head);
+  months.forEach(function(m) {
+    var o = document.createElement('option');
+    o.value = m.value;
+    o.textContent = m.label;
+    sel.appendChild(o);
+  });
+  sel.dataset.filled = String(months.length);
+  _swSyncWindowUI();
 }
 
 function _swLoadRank() {
   var grid = document.getElementById('swRankGrid');
   if (!grid) return;
-  [0, 7, 30].forEach(function(d) {
-    var b = document.getElementById('swWin' + d);
-    if (b) b.classList.toggle('btn-accent', d === _swWindow);
-  });
+  _swSyncWindowUI();
   grid.innerHTML = '<div class="col-12"><div class="pssms-skel" style="height:180px;border-radius:8px;"></div></div>';
   google.script.run
-    .withSuccessHandler(function(res) { _swRank = res; _swRenderRank(); })
+    .withSuccessHandler(function(res) { _swRank = res; _swFillMonths(res.months); _swRenderRank(); })
     .withFailureHandler(function(err) {
       grid.innerHTML = '';
       var p = document.createElement('div');
@@ -2404,8 +2436,11 @@ function _swRenderRank() {
   if (!r || !grid) return;
 
   if (meta) {
-    meta.textContent = 'ภาคเรียนที่ ' + r.term + '/' + r.year
-      + ' · มีข้อมูลนักเรียน ' + r.studentsWithData + ' คน';
+    // ช่วงจริงที่นับ ไม่ใช่แค่ชื่อปุ่ม — "30 วัน" กับ "ส.ค." ต้องอ่านออกว่าครอบวันไหนบ้าง
+    var span = r.from
+      ? (_swThaiDate(r.from) + (r.to ? ' – ' + _swThaiDate(r.to) : ' ถึงวันนี้'))
+      : 'ทั้งภาคเรียน';
+    meta.textContent = span + ' · มีข้อมูลนักเรียน ' + r.studentsWithData + ' คน';
   }
 
   grid.innerHTML = '';

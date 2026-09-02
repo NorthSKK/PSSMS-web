@@ -12,6 +12,9 @@
     </div>
   </div>
 
+  <!-- แถบความคืบหน้าภาคเรียน — ตัว render สร้าง markup เองทั้งหมด (Scripts_Calendar) -->
+  <div id="swTermProgress" class="mb-3 d-none"></div>
+
   <ul class="nav nav-tabs sw-tabs mb-3">
     <li class="nav-item"><a class="nav-link active" id="swTabDaily" href="javascript:void(0)" onclick="swShowTab('daily')">รายวัน</a></li>
     <li class="nav-item"><a class="nav-link" id="swTabRank" href="javascript:void(0)" onclick="swShowTab('rank')">สะสม</a></li>
@@ -35,10 +38,13 @@
     <div class="ar-bar">
       <span class="ar-bar-title">ย้อนหลัง</span>
       <div class="btn-group btn-group-sm" role="group">
-        <button type="button" class="btn btn-soft" id="swWin7"  onclick="swSetWindow(7)">7 วัน</button>
-        <button type="button" class="btn btn-soft" id="swWin30" onclick="swSetWindow(30)">30 วัน</button>
-        <button type="button" class="btn btn-soft" id="swWin0"  onclick="swSetWindow(0)">ทั้งภาคเรียน</button>
+        <button type="button" class="btn btn-soft" id="swWin7"    onclick="swSetWindow('7')">7 วัน</button>
+        <button type="button" class="btn btn-soft" id="swWin30"   onclick="swSetWindow('30')">30 วัน</button>
+        <button type="button" class="btn btn-soft" id="swWinterm" onclick="swSetWindow('term')">ทั้งภาคเรียน</button>
       </div>
+      <select id="swMonth" class="form-select form-select-sm sw-month" onchange="swSetWindow(this.value)">
+        <option value="">รายเดือน…</option>
+      </select>
       <span class="ar-bar-meta" id="swRankMeta"></span>
     </div>
 
