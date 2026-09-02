@@ -2038,6 +2038,14 @@ var SW_LABEL = {
 };
 // เรียงจากหนักไปเบา — ใช้ทั้งชิปนับและป้ายในแถว
 var SW_ORDER = ['away', 'fled', 'skip', 'late'];
+// คำอธิบายสั้นใต้หัวการ์ด — ชื่ออาการอย่างเดียวตีความผิดได้ง่าย โดยเฉพาะ
+// "ขาดโรงเรียน" กับ "มาแล้วหนี" ที่ต่างกันแค่ว่าเข้าแถวหรือเปล่า
+var SW_DESC = {
+  away: 'ไม่มาโรงเรียนเลยทั้งวัน — ทุกคาบที่เช็คแล้วเป็นขาด และไม่ได้เข้าแถว',
+  fled: 'มาถึงโรงเรียนแล้วแต่ไม่เข้าเรียนสักคาบ — เข้าแถวแล้ว แต่ทุกคาบเป็นขาด',
+  skip: 'มาเรียนบางคาบ หายบางคาบในวันเดียวกัน — ครูกดโดดเอง หรือระบบสรุปจากคาบอื่น',
+  late: 'มีคาบที่ครูกดว่ามาสาย',
+};
 
 var _swData = null;
 var _swFilter = '';
@@ -2418,6 +2426,11 @@ function _swRenderRank() {
     n.textContent = r.lists[k].length ? (r.lists[k].length + ' คน') : '';
     head.appendChild(n);
     card.appendChild(head);
+
+    var desc = document.createElement('div');
+    desc.className = 'sw-card-desc';
+    desc.textContent = SW_DESC[k];
+    card.appendChild(desc);
 
     if (!r.lists[k].length) {
       var none = document.createElement('div');

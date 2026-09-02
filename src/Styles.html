@@ -1659,12 +1659,20 @@ body.dark-mode .pssms-dept-general {
   border-color: var(--p-border); border-bottom-color: var(--p-surface);
 }
 
+/* คำอธิบายใต้หัวการ์ด — ชื่ออาการอย่างเดียวตีความผิดได้ */
+.sw-card-desc {
+  padding: 6px 12px 7px;
+  font-size: .65rem; line-height: 1.5; color: var(--p-text-muted);
+  border-bottom: 1px solid var(--p-border);
+}
+
 .sw-rank-row {
   display: flex; align-items: center; gap: .6rem;
   padding: 7px 12px; cursor: pointer;
   border-top: 1px solid var(--p-border);
 }
-.pssms-card-header + .sw-rank-row { border-top: none; }
+.pssms-card-header + .sw-rank-row,
+.sw-card-desc + .sw-rank-row { border-top: none; }
 .sw-rank-row:hover { background: var(--p-dom); }
 .sw-rank-pos {
   flex: 0 0 20px; text-align: center;
