@@ -216,7 +216,9 @@ async function getStudentAttendanceProfile([studentId, term, year]) {
  * ตัวหาร (`daysWithData`) แสดงเป็นข้อความให้คนอ่านตีความเอง เพราะมันสะท้อน
  * ความขยันเช็คชื่อของครู ไม่ใช่พฤติกรรมของเด็ก เอาไปหารแล้วชี้นิ้วผิดคน
  */
-const RANK_SIZE = 10;
+const RANK_SIZE = 50;         // ส่งไปเยอะกว่าที่โชว์ ปุ่ม "ดูเพิ่มเติม" กางในที่ ไม่ยิงซ้ำ
+const RANK_VISIBLE = 10;      // frontend โชว์เท่านี้ก่อน
+const SUBJECT_TOP = 3;        // วิชาที่หายบ่อยสุดต่อคน
 const MIN_OCCURRENCES = 2;   // ต่ำกว่านี้ยังไม่เป็นรูปแบบ แค่วันแย่ ๆ วันเดียว
 const DEFAULT_RANGE = '30';
 const THAI_MONTH_ABBR = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -254,6 +256,49 @@ function _rangeBounds(range) {
   const from = new Date(Date.UTC(y, m - 1, 1));
   const to   = new Date(Date.UTC(y, m, 0));     // วันสุดท้ายของเดือนนั้น
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
+// วิชาที่ 'หาย' บ่อยสุดของแต่ละคน — query เฉพาะคนที่ติดอันดับ (~40 คน) ไม่ใช่ทั้งโรงเรียน
+// นับเฉพาะวันที่คนนั้นมีอาการนั้นจริง (`ranked` เก็บ Set ของวันไว้ให้)
+const SUBJECT_SYMPTOMS = { skip: ['ขาด', 'โดด'], late: ['สาย'] };
+
+async function _attachSubjects(lists, ranked, term, year, from, to) {
+  const ids = [...ranked.keys()];
+  if (!ids.length) return;
+
+  const { rows } = await query(
+    `SELECT student_id, to_char(date,'YYYY-MM-DD') AS d,
+            subject_code, MAX(subject_name) AS subject_name, status, COUNT(*) AS n
+     FROM attendance
+     WHERE term=$1 AND year=$2 AND student_id = ANY($3)
+       AND status IN ('ขาด','โดด','สาย')
+       AND subject_code NOT LIKE 'CLUB_%'
+       AND ($4::date IS NULL OR date >= $4::date)
+       AND ($5::date IS NULL OR date <= $5::date)
+     GROUP BY student_id, date, subject_code, status`,
+    [term, year, ids, from, to]
+  );
+
+  for (const k of Object.keys(SUBJECT_SYMPTOMS)) {
+    const wanted = SUBJECT_SYMPTOMS[k];
+    const tally = new Map();   // studentId → Map(code → {name, count})
+    for (const r of rows) {
+      if (!wanted.includes(r.status)) continue;
+      const dates = ranked.get(String(r.student_id))?.[k];
+      if (!dates || !dates.has(r.d)) continue;
+      if (!tally.has(r.student_id)) tally.set(r.student_id, new Map());
+      const m = tally.get(r.student_id);
+      const cur = m.get(r.subject_code) || { subjectCode: r.subject_code, subjectName: r.subject_name || r.subject_code, count: 0 };
+      cur.count += Number(r.n);
+      m.set(r.subject_code, cur);
+    }
+    for (const row of lists[k]) {
+      const m = tally.get(row.studentId);
+      row.subjects = m
+        ? [...m.values()].sort((a, b) => b.count - a.count || a.subjectCode.localeCompare(b.subjectCode, 'th')).slice(0, SUBJECT_TOP)
+        : [];
+    }
+  }
 }
 
 async function getStudentWatchRanking([range]) {
@@ -325,6 +370,9 @@ async function getStudentWatchRanking([range]) {
         daysWithData: 0,
         counts: { late: 0, skip: 0, fled: 0, away: 0 },
         last:   { late: '', skip: '', fled: '', away: '' },
+        // วันที่ของแต่ละอาการ — ใช้ตอนนับวิชา ต้องนับเฉพาะวันที่มีอาการนั้นจริง
+        // ไม่งั้นวันที่ขาดโรงเรียนจะไปโป่งใส่ทุกวิชาเท่า ๆ กัน
+        dates:  { late: new Set(), skip: new Set(), fled: new Set(), away: new Set() },
       });
     }
     const p = people.get(id);
@@ -336,24 +384,39 @@ async function getStudentWatchRanking([range]) {
     }, assembly.has(key2) ? assembly.get(key2) : null);
     for (const k of symptoms) {
       p.counts[k]++;
+      p.dates[k].add(r.d);
       if (r.d > p.last[k]) p.last[k] = r.d;   // 'YYYY-MM-DD' เทียบเป็นสตริงได้ตรง ๆ
     }
   }
 
   const lists = {};
+  const totals = {};
+  const ranked = new Map();   // studentId → { symptom: Set(dates) } เฉพาะคนที่ติดอันดับ
   for (const k of ['away', 'fled', 'skip', 'late']) {
-    lists[k] = [...people.values()]
+    const all = [...people.values()]
       .filter(p => p.counts[k] >= MIN_OCCURRENCES)
-      .sort((a, b) => b.counts[k] - a.counts[k] || b.last[k].localeCompare(a.last[k]))
-      .slice(0, RANK_SIZE)
-      .map(p => ({
-        studentId: p.studentId, name: p.name, className: p.className,
-        count: p.counts[k], daysWithData: p.daysWithData, lastDate: p.last[k],
-      }));
+      .sort((a, b) => b.counts[k] - a.counts[k] || b.last[k].localeCompare(a.last[k]));
+    totals[k] = all.length;
+    const top = all.slice(0, RANK_SIZE);
+    for (const p of top) {
+      if (!ranked.has(p.studentId)) ranked.set(p.studentId, {});
+      ranked.get(p.studentId)[k] = p.dates[k];
+    }
+    lists[k] = top.map(p => ({
+      studentId: p.studentId, name: p.name, className: p.className,
+      count: p.counts[k], daysWithData: p.daysWithData, lastDate: p.last[k],
+      subjects: [],
+    }));
   }
+
+  // วิชาที่หายบ่อย — เฉพาะการ์ด 'โดด' กับ 'สาย'
+  // 'ขาดโรงเรียน'/'มาแล้วหนี' คือไม่เข้าทุกวิชาของวันนั้น บอกวิชาไปก็แค่สะท้อนว่า
+  // วิชาไหนมีคาบเยอะสุด = ชี้นิ้วผิดวิชา
+  await _attachSubjects(lists, ranked, term, year, from, to);
 
   const out = {
     term, year, range: win, from, to,
+    totals, visible: RANK_VISIBLE,
     minOccurrences: MIN_OCCURRENCES,
     studentsWithData: people.size,
     lists,

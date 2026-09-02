@@ -115,6 +115,11 @@ const putOn = (sid, date, period, status) => query(
    VALUES($1,$2,$3,'ว30205','ฟิสิกส์','ม.6/1',$4,$5,'ชื่อเก่าในแถวเช็คชื่อ',$6,'teacher1',$7)`,
   [date, TERM, YEAR, period, sid, status, 'rk' + date + period + sid]
 );
+const putSubj = (sid, date, period, code, name, status) => query(
+  `INSERT INTO attendance(date,term,year,subject_code,subject_name,class,period,student_id,student_name,status,teacher_id,session_id)
+   VALUES($1,$2,$3,$4,$5,'ม.6/1',$6,$7,'x',$8,'teacher1',$9)`,
+  [date, TERM, YEAR, code, name, period, sid, status, 'rk' + date + period + code]
+);
 const rank = (range) => {
   cache.del(`student_rank_${TERM}_${YEAR}_${range}`);
   return ok('getStudentWatchRanking', [range], 'admin');
@@ -214,4 +219,50 @@ test('รายการเดือนมาจาก TermData ไม่ใช�
 
 test('ครูเปิดอันดับไม่ได้', async () => {
   assert.match(await denied('getStudentWatchRanking', ['30'], 'teacher1'), /สงวนสิทธิ์/);
+});
+
+test('วิชาที่หายบ่อย มีเฉพาะการ์ดโดดกับสาย', async () => {
+  for (const d of RD) {
+    // 01901 โดด — หายฟิสิกส์ทุกวัน มาคาบคณิต
+    await putOn('01901', d, '1', 'ขาด');
+    await putSubj('01901', d, '2', 'ค21101', 'คณิต', 'มา');
+    // 01902 ขาดโรงเรียน — ไม่เข้าทุกวิชา
+    await putOn('01902', d, '1', 'ขาด');
+    await putSubj('01902', d, '2', 'ค21101', 'คณิต', 'ขาด');
+  }
+  const r = await rank('30');
+
+  const skip = inList(r, 'skip', '01901');
+  assert.ok(skip.subjects.length, 'การ์ดโดดต้องบอกวิชา');
+  assert.equal(skip.subjects[0].subjectCode, 'ว30205');
+  assert.equal(skip.subjects[0].count, RD.length);
+  assert.ok(!skip.subjects.some(x => x.subjectCode === 'ค21101'), 'วิชาที่มาเรียนต้องไม่ติดมา');
+
+  const away = inList(r, 'away', '01902');
+  assert.deepEqual(away.subjects, [], 'ขาดโรงเรียน = ไม่เข้าทุกวิชา บอกวิชาไปก็ชี้นิ้วผิด');
+});
+
+test('นับวิชาเฉพาะวันที่มีอาการนั้นจริง', async () => {
+  // 2 วันขาดทั้งวัน (away) + 2 วันโดดเฉพาะฟิสิกส์
+  for (const d of [RD[0], RD[1]]) {
+    await putOn('01903', d, '1', 'ขาด');
+    await putSubj('01903', d, '2', 'ค21101', 'คณิต', 'ขาด');
+  }
+  for (const d of ['2026-08-27', '2026-08-28']) {
+    await putOn('01903', d, '1', 'ขาด');
+    await putSubj('01903', d, '2', 'ค21101', 'คณิต', 'มา');
+  }
+  const skip = inList(await rank('30'), 'skip', '01903');
+  assert.equal(skip.count, 2, 'มี 2 วันที่เป็นโดด');
+  assert.equal(skip.subjects.length, 1, 'วันที่ขาดทั้งวันต้องไม่โป่งใส่คณิต');
+  assert.equal(skip.subjects[0].subjectCode, 'ว30205');
+  assert.equal(skip.subjects[0].count, 2);
+});
+
+test('ส่งยอดจริงมาด้วย เพื่อให้หน้าจอทำปุ่มดูเพิ่มเติมได้', async () => {
+  for (const d of RD) { await putOn('01901', d, '1', 'มา'); await putOn('01901', d, '2', 'ขาด'); }
+  const r = await rank('30');
+  assert.equal(typeof r.totals.skip, 'number');
+  assert.ok(r.totals.skip >= r.lists.skip.length, 'ยอดจริงต้องไม่น้อยกว่าจำนวนที่ส่งมา');
+  assert.equal(r.visible, 10, 'หน้าจอโชว์ 10 ก่อน แล้วค่อยกาง');
 });

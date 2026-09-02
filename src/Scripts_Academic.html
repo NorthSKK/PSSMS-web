@@ -2356,6 +2356,7 @@ function _swRank(title, items) {
 var _swTab = 'daily';
 var _swWindow = '30';   // '7' | '30' | 'term' | 'YYYY-MM'
 var _swRank = null;
+var _swExpanded = {};   // อาการ → กาง "ดูเพิ่มเติม" อยู่ไหม
 
 function swShowTab(tab) {
   _swTab = tab;
@@ -2379,7 +2380,13 @@ function swSetWindow(range) {
   if (!range) { _swSyncWindowUI(); return; }
   _swWindow = String(range);
   _swRank = null;
+  _swExpanded = {};   // เปลี่ยนช่วง = คนละลิสต์ ต้องหุบกลับ
   _swLoadRank();
+}
+
+function swToggleMore(symptom) {
+  _swExpanded[symptom] = !_swExpanded[symptom];
+  _swRenderRank();
 }
 
 // ไฮไลต์ปุ่ม/ค่า dropdown ให้ตรงกับช่วงที่เลือกอยู่ — เลือกเดือนแล้วปุ่มต้องคลาย
@@ -2458,7 +2465,9 @@ function _swRenderRank() {
     head.appendChild(badge);
     var n = document.createElement('span');
     n.className = 'small text-muted';
-    n.textContent = r.lists[k].length ? (r.lists[k].length + ' คน') : '';
+    // ยอดจริงที่ถึงเกณฑ์ ไม่ใช่ความยาวลิสต์ที่ถูกตัดมาแล้วฝั่ง server
+    var total = (r.totals && r.totals[k] != null) ? r.totals[k] : r.lists[k].length;
+    n.textContent = total ? (total + ' คน') : '';
     head.appendChild(n);
     card.appendChild(head);
 
@@ -2473,7 +2482,27 @@ function _swRenderRank() {
       none.textContent = 'ไม่มีใครถึงเกณฑ์ ' + r.minOccurrences + ' วันขึ้นไป';
       card.appendChild(none);
     } else {
-      r.lists[k].forEach(function(s, i) { card.appendChild(_swRankRow(s, i, k)); });
+      var shown = _swExpanded[k] ? r.lists[k].length : Math.min(r.visible, r.lists[k].length);
+      r.lists[k].slice(0, shown).forEach(function(s, i) { card.appendChild(_swRankRow(s, i, k)); });
+
+      // totals คือจำนวนคนที่ถึงเกณฑ์ทั้งหมด ส่วน lists ถูกตัดที่ 50 ตั้งแต่ฝั่ง server
+      // ปุ่มจึงบอกจำนวนที่กางได้จริง ไม่ใช่ totals ที่กางไม่ครบ
+      var more = r.lists[k].length - shown;
+      var hidden = (r.totals[k] || r.lists[k].length) - r.lists[k].length;
+      if (more > 0 || _swExpanded[k]) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'sw-more';
+        btn.onclick = function() { swToggleMore(k); };
+        btn.textContent = _swExpanded[k] ? 'ย่อกลับ' : ('ดูเพิ่มเติม (อีก ' + more + ' คน)');
+        card.appendChild(btn);
+      }
+      if (_swExpanded[k] && hidden > 0) {
+        var note = document.createElement('div');
+        note.className = 'sw-more-note';
+        note.textContent = 'ยังมีอีก ' + hidden + ' คนที่ถึงเกณฑ์ แต่แสดงได้สูงสุด ' + r.lists[k].length + ' คน';
+        card.appendChild(note);
+      }
     }
     col.appendChild(card);
     grid.appendChild(col);
@@ -2498,6 +2527,21 @@ function _swRankRow(s, i, symptom) {
   sub.className = 'sw-rank-sub';
   sub.textContent = s.className + ' · ล่าสุด ' + _swThaiDate(s.lastDate);
   mid.appendChild(nm); mid.appendChild(sub);
+
+  // วิชาที่หายบ่อย — มีเฉพาะการ์ด โดด/สาย · ขาดโรงเรียนกับมาแล้วหนีคือไม่เข้าทุกวิชา
+  // บอกวิชาไปก็แค่สะท้อนว่าวิชาไหนมีคาบเยอะสุด (server ส่ง subjects ว่างมาให้)
+  if (s.subjects && s.subjects.length) {
+    var subj = document.createElement('div');
+    subj.className = 'sw-rank-subj';
+    s.subjects.forEach(function(x) {
+      var chip = document.createElement('span');
+      chip.className = 'sw-subj';
+      chip.textContent = (x.subjectName || x.subjectCode) + ' ×' + x.count;
+      chip.title = x.subjectCode + ' · หาย ' + x.count + ' คาบ';
+      subj.appendChild(chip);
+    });
+    mid.appendChild(subj);
+  }
 
   var right = document.createElement('div');
   right.className = 'sw-rank-count';

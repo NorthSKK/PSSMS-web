@@ -1684,6 +1684,25 @@ body.dark-mode .pssms-dept-general {
 .sw-rank-mid { flex: 1 1 auto; min-width: 0; }
 .sw-rank-sub { font-size: .65rem; color: var(--p-text-muted); }
 .sw-rank-count { flex: 0 0 auto; text-align: right; white-space: nowrap; }
+
+/* วิชาที่หายบ่อย — ชิปเล็กใต้ชื่อ มีเฉพาะการ์ด โดด/สาย */
+.sw-rank-subj { display: flex; gap: .25rem; flex-wrap: wrap; margin-top: 3px; }
+.sw-subj {
+  font-size: .6rem; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--p-border); color: var(--p-text-muted);
+  background: var(--p-dom); white-space: nowrap;
+}
+
+.sw-more {
+  display: block; width: 100%; padding: 7px 12px;
+  border: none; border-top: 1px solid var(--p-border);
+  background: transparent; color: var(--p-accent);
+  font-size: .7rem; font-weight: 600; cursor: pointer;
+}
+.sw-more:hover { background: var(--p-dom); }
+.sw-more-note {
+  padding: 0 12px 8px; font-size: .62rem; color: var(--p-text-muted); opacity: .8;
+}
 .sw-rank-big {
   display: inline-block; min-width: 24px; padding: 0 6px;
   font-size: .82rem; font-weight: 700; border-radius: 6px; color: #fff;
