@@ -33,10 +33,10 @@
   /* อาการการมาเรียน (หน้าติดตามนักเรียน) — ยึดสีจากปุ่มเช็คชื่อของครูเป็นหลัก
      ครูกดปุ่มสีไหน ฝ่ายปกครองเห็นสีเดียวกัน ไม่ต้องจำสองชุด
      4 เฉดคนละโทน (แดง / ม่วง / เทาเข้ม / เหลือง) ต้องแยกออกแม้มองเร็ว ๆ */
-  --sw-away: var(--p-danger);    /* ขาดโรงเรียน = ปุ่ม "ขาด" */
-  --sw-fled: #7c3aed;            /* มาแล้วหนี — สีที่ไม่อยู่ในชุดสถานะ ให้สะดุดตา */
-  --sw-skip: #334155;            /* โดด = ปุ่ม "โดด" (btn-outline-dark) */
-  --sw-late: var(--p-warning);   /* สาย = ปุ่ม "สาย" */
+  --sw-late: var(--p-warning);   /* สาย        — amber-600  #d97706 */
+  --sw-away: var(--p-danger);    /* ขาดโรงเรียน — red        #dc3545 */
+  --sw-skip: #db2777;            /* โดด        — pink-600   */
+  --sw-fled: #7c3aed;            /* มาแล้วหนี   — violet-600 */
 
   /* Geometry */
   --p-radius:    14px;
@@ -708,8 +708,6 @@ body.dark-mode {
 .dark-mode {
   --bs-form-control-bg: #2d2d2d;
   --bs-form-control-disabled-bg: #1e1e1e;
-  /* #334155 จมไปกับพื้นมืด ต้องยกให้สว่างขึ้น — อีกสามสียังคอนทราสต์พอ */
-  --sw-skip: #64748b;
 }
 
 /* --- Sidebar already dark by default — no override needed --- */
@@ -1189,8 +1187,7 @@ body.dark-mode .pssms-dept-general {
 .mg-leave   { background-color: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
 .mg-absent  { background-color: var(--p-danger); color: #fff; border-color: var(--p-danger); }
 /* โดด — มาโรงเรียนแต่ไม่เข้าคาบ นับเป็นขาดเต็มจำนวน แต่ต้องแยกออกด้วยตา
-   เทาเข้มตัวเดียวกับปุ่ม "โดด" บนหน้าเช็คชื่อและป้ายบนหน้าติดตามนักเรียน —
-   เดิมเป็นแดงเข้มที่นี่แต่เกือบดำบนปุ่ม โดดจึงมีสองสีในระบบเดียวกัน */
+   ใช้ token เดียวกับปุ่ม "โดด" บนหน้าเช็คชื่อและป้ายบนหน้าติดตามนักเรียน */
 .mg-skip    { background-color: var(--sw-skip); color: #fff; border-color: var(--sw-skip); }
 .mg-empty   { color: #cbd5e1; border-style: dashed; border-color: #dbe3ea; font-weight: 400; }
 
@@ -1599,6 +1596,16 @@ body.dark-mode .pssms-dept-general {
   font-size: .62rem; font-weight: 700; padding: 1px 7px;
   border-radius: 999px; color: #fff; white-space: nowrap;
 }
+/* ปุ่ม "โดด" บนหน้าเช็คชื่อ — bootstrap ไม่มีสีนี้ ทำ outline เองให้ใช้ token เดียวกัน
+   ไม่งั้น โดด จะมีสีบนปุ่มอย่างหนึ่ง บนหน้าติดตามอีกอย่างหนึ่ง (เคยเป็นมาแล้ว) */
+.btn-outline-skip { color: var(--sw-skip); border-color: var(--sw-skip); background: transparent; }
+.btn-outline-skip:hover,
+.btn-check:checked + .btn-outline-skip,
+.btn-check:active + .btn-outline-skip {
+  background: var(--sw-skip); border-color: var(--sw-skip); color: #fff;
+}
+.badge.sw-badge-skip { background: var(--sw-skip); }
+
 .sw-tag-away { background: var(--sw-away); }
 .sw-tag-fled { background: var(--sw-fled); }
 .sw-tag-skip { background: var(--sw-skip); }
