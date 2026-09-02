@@ -1489,6 +1489,24 @@ body.dark-mode .pssms-dept-general {
 .tp-sub-name { padding-left: 26px; color: var(--p-text-muted); font-size: .75rem; }
 .tp-sub-class { color: var(--p-text-muted); font-size: .7rem; }
 
+/* ป้ายกำลังพัฒนา — หน้านี้พักไว้ ยังไม่ตัดสินว่าจะติดตามอะไรบ้าง */
+.tp-wip {
+  display: flex; align-items: flex-start; gap: .1rem;
+  padding: 8px 12px; margin-bottom: .6rem;
+  border-radius: var(--p-radius-sm);
+  border: 1px dashed var(--p-border-strong);
+  background: var(--p-dom); color: var(--p-text-muted);
+  font-size: .72rem; line-height: 1.6;
+}
+.tp-wip b { color: var(--p-text); }
+
+/* ป้ายเล็กในเมนู — ใช้ได้กับทุกเมนูที่ยังไม่พร้อมใช้จริง */
+.menu-wip {
+  font-size: .58rem; font-weight: 600; padding: 0 5px;
+  border-radius: 999px; vertical-align: middle;
+  border: 1px solid var(--p-border-strong); color: var(--p-text-muted);
+}
+
 /* คำอธิบายว่าแต่ละคอลัมน์นับอะไร — สามคอลัมน์คนละหน่วย ไม่บอกแล้วอ่านไม่ออก */
 .tp-legend {
   font-size: .7rem; line-height: 1.6; color: var(--p-text-muted);
