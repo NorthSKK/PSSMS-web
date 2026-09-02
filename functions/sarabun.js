@@ -20,37 +20,59 @@ const { schoolToday } = require('../lib/schoolDate');
 const MAX_ATTACH_MB = 10;
 
 /**
- * ชื่อผู้ขอ — Admin ระบุแทนคนอื่นได้ (ธุรการกรอกให้ครู) ครูทั่วไปเป็นตัวเองเสมอ
+ * ผู้รับผิดชอบเอกสาร — คืน `{ name, id }`
+ *   name = ชื่อที่แสดงในทะเบียน · id = users.username ที่เป็นเจ้าของจริง (อาจเป็น null)
+ *
+ * Admin ระบุแทนคนอื่นได้ (ธุรการกรอกให้ครู) ครูทั่วไปเป็นตัวเองเสมอ
+ * ชื่อที่ Admin พิมพ์มา หาชื่อเต็มใน users ให้ด้วย — ตรงเมื่อไหร่แถวนั้นได้เจ้าของทันที
+ * (นี่คือทางแก้แถวเก่าที่ชื่อเป็นชื่อย่อ: Admin แก้ทะเบียนแล้วเลือกชื่อเต็มให้ถูก)
+ * ไม่ตรง = ชื่ออิสระที่ไม่มีใครเป็นเจ้าของ → id = null สงวนให้ Admin แก้
  *
  * อ่านชื่อจาก users.full_name ไม่ใช่ user.name ใน JWT — token ออกตอนล็อกอินและอยู่ได้
  * 90 วัน ครูที่เปลี่ยนชื่อ-สกุลจะได้ชื่อเก่าติดไปกับเอกสารใหม่
  * (หลักเดียวกับระดับชั้นนักเรียนใน functions/mediaCards.js)
  */
 async function resolveRequester(user, given) {
-  if (isAdmin(user) && given) return String(given);
+  if (isAdmin(user) && given) {
+    const name = String(given);
+    const { rows } = await query(
+      `SELECT username FROM users WHERE trim(full_name)=trim($1) LIMIT 1`, [name]
+    );
+    return { name, id: (rows[0] && rows[0].username) || null };
+  }
   const { rows } = await query(
     `SELECT full_name FROM users WHERE username=$1`, [String(user?.id || '')]
   );
-  return String((rows[0] && rows[0].full_name) || user?.name || '');
+  return {
+    name: String((rows[0] && rows[0].full_name) || user?.name || ''),
+    id: String(user?.id || '') || null,
+  };
 }
 
 /**
- * เจ้าของเอกสาร = แถวที่ requester ตรงกับชื่อจริงสดของผู้เรียก — Admin ผ่านเสมอ
+ * เจ้าของเอกสาร = แถวที่ requester_id ตรงกับ username ของผู้เรียก — Admin ผ่านเสมอ
  *
- * ตาราง sarabun ไม่มีคอลัมน์ username ของเจ้าของ — การเทียบด้วยชื่อคือกลไกที่ยอมรับ
- * ของทะเบียนนี้ ข้อจำกัดที่รู้อยู่: ชื่อ-สกุลซ้ำกันสองคน หรือชื่อที่ Admin พิมพ์แทน
- * (สะกดไม่ตรง users.full_name) จะเทียบไม่ตรงได้ — ให้ Admin แก้แทน
+ * **ตัดสินที่ requester_id เท่านั้นเมื่อมีค่า ไม่ดูชื่อเลย** — ครูที่เปลี่ยนชื่อ-สกุล
+ * ต้องยังเป็นเจ้าของเอกสารเก่าของตัวเอง นั่นคือเหตุผลทั้งหมดของคอลัมน์นี้
  *
- * ⚠️ ห้ามเทียบกับค่าจาก payload — requester ต้องมาจากแถวใน DB และชื่อผู้เรียก
- * query สดจาก users (JWT อยู่ได้ 90 วัน ชื่อใน token อาจเก่า)
- * ⚠️ requester ว่าง → Admin เท่านั้น — ค่าว่างเทียบเท่าชื่อว่างแล้วจะกลายเป็นของทุกคน
+ * requester_id ว่าง = แถวเก่าก่อน migration ที่ backfill ด้วยชื่อไม่ตรง (ชื่อย่ออย่าง
+ * `ครูพิสิษฐ์` หรือสองคนในช่องเดียว) → ตกไปใช้กติกาเดิม เทียบ requester กับชื่อจริงสด
+ * เผื่อชื่อบังเอิญตรง · ไม่ตรงหรือว่าง = Admin เท่านั้น (หลักเดียวกับ budgets.created_by)
+ *
+ * ⚠️ ห้ามเทียบกับค่าจาก payload — row ต้องมาจาก DB และชื่อผู้เรียก query สดจาก users
  */
-async function _assertOwnsSarabun(user, requester, msg) {
+async function _assertOwnsSarabun(user, row, msg) {
   if (isAdmin(user)) return;
-  const owner = String(requester || '').trim();
+  const callerId = String(user?.id || '').trim();
+  const ownerId = String((row && row.requester_id) || '').trim();
+  if (ownerId) {
+    if (ownerId !== callerId) throw new Error(msg);
+    return;
+  }
+  const owner = String((row && row.requester) || '').trim();
   if (!owner) throw new Error(msg);
   const { rows } = await query(
-    `SELECT full_name FROM users WHERE username=$1`, [String(user?.id || '')]
+    `SELECT full_name FROM users WHERE username=$1`, [callerId]
   );
   const name = String((rows[0] && rows[0].full_name) || '').trim();
   if (!name || name !== owner) throw new Error(msg);
@@ -60,22 +82,26 @@ async function saveSarabun([data], user) {
   const d = data || {};
   const requester = await resolveRequester(user, d.requester);
   if (d.id) {
-    const existing = await query(`SELECT requester FROM sarabun WHERE id=$1`, [d.id]);
+    const existing = await query(
+      `SELECT requester, requester_id FROM sarabun WHERE id=$1`, [d.id]);
     if (!existing.rows.length) throw new Error('ไม่พบทะเบียนเอกสารนี้');
-    await _assertOwnsSarabun(user, existing.rows[0].requester,
+    // ตรวจกับ "แถวเดิมใน DB" เสมอ ก่อนจะเขียนทับด้วยผู้รับผิดชอบที่เพิ่ง resolve
+    await _assertOwnsSarabun(user, existing.rows[0],
       'แก้ไขได้เฉพาะผู้รับผิดชอบเอกสารนี้');
     await query(
       `UPDATE sarabun SET doc_type=$1,doc_number=$2,subject=$3,requester=$4,
-       target_date=$5,status=$6,file_url=$7,year=$8 WHERE id=$9`,
-      [d.docType||'', d.docNumber||'', d.subject||'', requester,
-       d.targetDate||null, d.status||'รอดำเนินการ', d.fileURL||'', d.year||'', d.id]
+       target_date=$5,status=$6,file_url=$7,year=$8,requester_id=$9 WHERE id=$10`,
+      [d.docType||'', d.docNumber||'', d.subject||'', requester.name,
+       d.targetDate||null, d.status||'รอดำเนินการ', d.fileURL||'', d.year||'',
+       requester.id, d.id]
     );
   } else {
     await query(
-      `INSERT INTO sarabun(doc_type,doc_number,subject,requester,target_date,status,file_url,year)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [d.docType||'', d.docNumber||'', d.subject||'', requester,
-       d.targetDate||null, d.status||'รอดำเนินการ', d.fileURL||'', d.year||'']
+      `INSERT INTO sarabun(doc_type,doc_number,subject,requester,target_date,status,file_url,year,requester_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [d.docType||'', d.docNumber||'', d.subject||'', requester.name,
+       d.targetDate||null, d.status||'รอดำเนินการ', d.fileURL||'', d.year||'',
+       requester.id]
     );
   }
   return { status: 'success', message: 'บันทึกสำเร็จ' };
@@ -108,12 +134,13 @@ async function attachSarabunFile(id, file, user) {
   const docId = parseInt(id, 10);
   if (!Number.isInteger(docId)) throw new Error('ไม่พบทะเบียนเอกสารนี้');
 
-  const { rows } = await query(`SELECT id, file_key, requester FROM sarabun WHERE id=$1`, [docId]);
+  const { rows } = await query(
+    `SELECT id, file_key, requester, requester_id FROM sarabun WHERE id=$1`, [docId]);
   if (!rows.length) throw new Error('ไม่พบทะเบียนเอกสารนี้');
   const oldKey = rows[0].file_key;
 
   // ตรวจสิทธิ์ก่อนเขียนไฟล์เสมอ — เขียนก่อนแล้วค่อยเช็ค = ไฟล์กำพร้าเมื่อโดนปฏิเสธ
-  await _assertOwnsSarabun(user, rows[0].requester, 'แนบไฟล์ได้เฉพาะผู้รับผิดชอบเอกสารนี้');
+  await _assertOwnsSarabun(user, rows[0], 'แนบไฟล์ได้เฉพาะผู้รับผิดชอบเอกสารนี้');
 
   const saved = await storage.put({ buffer: file.buffer, ext: file.detectedExt });
   try {
@@ -195,9 +222,9 @@ async function requestSarabunNumber([payload], user) {
 
     // ใส่ทีเดียวทั้งชุด — 500 แถวคือ 500 round trip ถ้ายิงทีละใบ
     await client.query(
-      `INSERT INTO sarabun(doc_type,doc_number,subject,requester,target_date,status,file_url,year)
-       SELECT $1, n, $2, $3, $4, 'รอดำเนินการ', '', $5 FROM unnest($6::text[]) AS n`,
-      [docType, subject, requester, targetDate, year, numbers]
+      `INSERT INTO sarabun(doc_type,doc_number,subject,requester,target_date,status,file_url,year,requester_id)
+       SELECT $1, n, $2, $3, $4, 'รอดำเนินการ', '', $5, $6 FROM unnest($7::text[]) AS n`,
+      [docType, subject, requester.name, targetDate, year, requester.id, numbers]
     );
     await client.query('COMMIT');
 

@@ -1157,15 +1157,34 @@ allowlist ไหนเลย → ใครที่ล็อกอินได�
   **ไม่ใช่ที่เก็บเอกสารลับ** (เรื่องบุคคล เงินเดือน วินัย ไม่ควรแนบที่นี่)
   ถ้าวันหนึ่งต้องการจริง เพิ่มคอลัมน์ `confidential` + เงื่อนไขเดียวใน query
 - **เขียน (แก้ไขทะเบียน + แนบไฟล์) ได้เฉพาะผู้รับผิดชอบหรือ Admin** — ครูคนอื่น
-  อ่าน/เปิดไฟล์ได้อย่างเดียว ตรวจด้วย `_assertOwnsSarabun()` ใน `functions/sarabun.js`:
-  เทียบ `sarabun.requester` (จากแถวใน DB) กับ `users.full_name` สดของผู้เรียก
-  (ไม่มีคอลัมน์ username ของเจ้าของ — ยอมรับข้อจำกัดชื่อซ้ำ/ชื่อที่ Admin พิมพ์แทน)
-  · **`requester` ว่าง (ข้อมูลเก่า/นำเข้า) = Admin เท่านั้น** ห้ามให้ค่าว่างเทียบเท่า
-  ชื่อว่างแล้วกลายเป็นของทุกคน (หลักเดียวกับ `budgets.created_by` ว่าง)
+  อ่าน/เปิดไฟล์ได้อย่างเดียว ตรวจด้วย `_assertOwnsSarabun(user, row, msg)` ใน
+  `functions/sarabun.js` · **เจ้าของคือ `sarabun.requester_id` (= `users.username`)
+  ไม่ใช่ชื่อที่แสดง** (`db/migrations/2026-09-02-sarabun-requester-id.sql`)
+
+  | สภาพแถว | ใครเขียนได้ |
+  |---|---|
+  | `requester_id` มีค่า | คนที่ `username` ตรงเท่านั้น + Admin — **ไม่ดู `requester` เลย** |
+  | `requester_id` NULL | ตกไปเทียบ `requester` กับ `users.full_name` สดของผู้เรียก |
+  | NULL + ชื่อว่าง/ไม่ตรงใคร | Admin เท่านั้น |
+
+  ⚠️ **มี `requester_id` แล้วห้ามเอาชื่อมาร่วมตัดสิน** — ครูเปลี่ยนชื่อ-สกุลต้องยังเป็น
+  เจ้าของเอกสารเก่าของตัวเอง นั่นคือเหตุผลทั้งหมดของคอลัมน์นี้
+  · `requester` เหลือหน้าที่เดียวคือ**ชื่อที่แสดง**
+  · migration backfill `requester_id` จากชื่อที่ตรง `users.full_name` เป๊ะ — บน production
+  ตรง 117/153 แถว อีก 34 แถวเก็บชื่อย่อ (`ครูพิสิษฐ์`) หรือสองคนในช่องเดียว
+  (`ครูชลวิทย์, ครูศิกษก`) จึงเป็น NULL โดยตั้งใจ
+  · **ทางแก้แถว NULL: Admin แก้ทะเบียนแล้วใส่ชื่อเต็มให้ตรง `users.full_name`** —
+  `resolveRequester` หา `username` ให้แล้วปั๊ม `requester_id` ทันที ไม่มีสคริปต์แก้เป็นชุด
+  (ครูที่แก้แถวเก่าของตัวเองผ่านกติกาสำรองได้ ก็ปั๊ม id ให้แถวนั้นเองระหว่างทาง)
+  · `resolveRequester(user, given)` คืน `{ name, id }` — ครูทั่วไป `id = user.id` จาก JWT
+  · Admin พิมพ์ชื่ออิสระที่ไม่ตรงใคร → `id = NULL` (ไม่มีใครเป็นเจ้าของ สงวนให้ Admin)
+  · ทุก write path ปั๊ม `requester_id`: `requestSarabunNumber` (batch INSERT…unnest)
+  และทั้ง INSERT/UPDATE ของ `saveSarabun`
   · `attachSarabunFile` ตรวจ**ก่อน** `storage.put` เสมอ · `saveSarabun` path UPDATE
-  โหลดแถวเดิมมาตรวจก่อน (id ไม่มีจริง → throw ไม่ใช่เงียบ) path INSERT ไม่เปลี่ยน
-  · `getSarabunHistory` ติดธง `mine` ต่อแถว (query ชื่อผู้เรียกครั้งเดียว) ให้ frontend
-  ใช้ซ่อน/แสดงปุ่มแนบไฟล์-แก้ไข — server เป็นคนบังคับจริงเสมอ
+  โหลดแถวเดิมมาตรวจก่อน (id ไม่มีจริง → throw ไม่ใช่เงียบ) แล้วค่อยเขียนค่าที่ resolve ใหม่
+  · `getSarabunHistory` ติดธง `mine` ต่อแถวด้วยกติกาเดียวกันเป๊ะ (query ชื่อผู้เรียก
+  ครั้งเดียว ใช้เฉพาะสาขาแถวเก่า) ให้ frontend ซ่อน/แสดงปุ่มแนบไฟล์-แก้ไข —
+  server เป็นคนบังคับจริงเสมอ
 
 **ตัวกรองประเภท**: เลือกประเภทในฟอร์มขอเลข (`#docType`) จะตั้ง `#filterSarabunType`
 ฝั่งขวาให้ตรงกันแล้วกรองทันที (`syncSarabunTypeFilter`) — ครูขอเลขประเภทไหนมักอยากดู
@@ -1317,12 +1336,13 @@ Enforcement ก่อน handler ทุก request (ยกเว้น `PUBLIC_F
 | `saveSubstituteAssignment` | — (INSERT) | `assigned_by` มาจาก JWT ไม่ใช่ payload |
 | `updateClub` | `club_advisors` | `verifyTeacherOwnsSubject(user, 'CLUB_'+clubId, ...)` |
 | `saveStudentRemarkDirectly` | `timetable` | `verifyTeacherOwnsSubject()` |
+| `saveSarabun` (UPDATE) / `attachSarabunFile` | `sarabun.requester_id` (= `users.username`) | `_assertOwnsSarabun(user, row, msg)` |
 
 `createClub` ไม่เช็ค (ยังไม่มีเจ้าของ) — ครูคนไหนก็สร้างชุมนุมได้ตามออกแบบ
 
-**`sarabun`** — ไม่มีคอลัมน์ username ของเจ้าของ ใช้ `requester` (ชื่อเต็ม) เทียบกับ
-`users.full_name` สดผ่าน `_assertOwnsSarabun()` — แก้ไข/แนบไฟล์ได้เฉพาะผู้รับผิดชอบ
-หรือ Admin, `requester` ว่างสงวนให้ Admin · อ่าน/เปิดไฟล์แนบได้ทุกคนเหมือนเดิม
+**`sarabun`** — เจ้าของคือ `requester_id` (username) ไม่ใช่ `requester` ซึ่งเป็นแค่ชื่อที่แสดง
+แถวเก่าที่ `requester_id` ว่างตกไปเทียบชื่อกับ `users.full_name` สด ไม่ตรง = Admin เท่านั้น
+(รายละเอียดในหัวข้อ "งานสารบรรณ") · อ่าน/เปิดไฟล์แนบได้ทุกคนเหมือนเดิม
 **`deleteSarabun` ยังเป็น `ADMIN_ONLY`**
 
 **`budgets`** — มี `created_by` แล้ว `saveBudget` เป็น upsert ตาม `project_id` จึงต้อง

@@ -13,8 +13,9 @@ module.exports = async function getSarabunHistory(_args, user) {
   const admin = isAdmin(user);
   const staff = admin || role === 'TEACHER';
 
-  // ชื่อจริงสดสำหรับธง mine (เขียนได้ไหม) — query ครั้งเดียว ไม่ใช่ต่อแถว
-  // Admin ไม่ต้องถาม (mine=true ทุกแถว) · requester ว่าง = ของ Admin เท่านั้น
+  // ธง mine ตัดสินด้วย requester_id เป็นหลัก (กติกาเดียวกับ _assertOwnsSarabun)
+  // ชื่อจริงสดใช้เฉพาะแถวเก่าที่ requester_id ว่าง — query ครั้งเดียว ไม่ใช่ต่อแถว
+  // Admin ไม่ต้องถาม (mine=true ทุกแถว) · ไม่มีทั้ง id และชื่อที่ตรง = ของ Admin เท่านั้น
   let callerName = '';
   if (!admin) {
     const r = await query(
@@ -25,7 +26,7 @@ module.exports = async function getSarabunHistory(_args, user) {
 
   const params = [];
   let sql = `SELECT id, to_char(timestamp, 'YYYY-MM-DD HH24:MI') as timestamp,
-                    doc_type, doc_number, subject, requester,
+                    doc_type, doc_number, subject, requester, requester_id,
                     to_char(target_date, 'YYYY-MM-DD') as target_date,
                     status, file_url, file_key, file_name, file_size, year
              FROM sarabun WHERE (doc_number IS NOT NULL OR doc_type IS NOT NULL)`;
@@ -37,6 +38,13 @@ module.exports = async function getSarabunHistory(_args, user) {
   sql += ' ORDER BY id DESC';
 
   const { rows } = await query(sql, params);
+  const callerId = String(user?.id || '').trim();
+  const canWrite = (r) => {
+    if (admin) return true;
+    const ownerId = String(r.requester_id || '').trim();
+    if (ownerId) return ownerId === callerId;   // ชื่อไม่เกี่ยวเมื่อมี id
+    return !!callerName && String(r.requester || '').trim() === callerName;
+  };
   return rows.map(r => ({
     id:         r.id,
     timestamp:  r.timestamp   || '',
@@ -52,6 +60,6 @@ module.exports = async function getSarabunHistory(_args, user) {
     hasFile:    !!r.file_key,
     year:       r.year        || '',
     // ผู้เรียกเขียนแถวนี้ได้ไหม (แก้ไข/แนบไฟล์) — กติกาเดียวกับ _assertOwnsSarabun
-    mine:       admin || (!!callerName && String(r.requester || '').trim() === callerName),
+    mine:       canWrite(r),
   }));
 };

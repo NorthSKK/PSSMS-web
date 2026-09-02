@@ -408,7 +408,8 @@ CREATE TABLE IF NOT EXISTS sarabun (
   doc_type    TEXT,
   doc_number  TEXT,
   subject     TEXT,
-  requester   TEXT,
+  requester   TEXT,                  -- ชื่อที่แสดงเท่านั้น ไม่ใช่ตัวตัดสินสิทธิ์
+  requester_id TEXT,                 -- users.username ของเจ้าของ — ตัวตัดสินสิทธิ์เขียน
   target_date DATE,
   status      TEXT DEFAULT 'รอดำเนินการ',
   file_url    TEXT,                  -- legacy: ไม่ได้ใช้แล้ว (uploadSarabunFile เคยเป็น stub)

@@ -19,11 +19,12 @@ const STUDENT = token({ id: '02001', role: 'Student' });
 
 // default requester = teacher1 — เทสแนบไฟล์ส่วนใหญ่อัปโหลดด้วย token teacher1
 // และตอนนี้แนบได้เฉพาะเจ้าของ (ผู้รับผิดชอบ) หรือ Admin
-async function makeDoc(subject = 'ทดสอบสารบรรณ', requester = 'ครูสมชาย ใจดี') {
+// requesterId = null โดย default → เทสเดิมทั้งชุดวิ่งผ่าน "กติกาสำรองด้วยชื่อ" (แถวเก่า)
+async function makeDoc(subject = 'ทดสอบสารบรรณ', requester = 'ครูสมชาย ใจดี', requesterId = null) {
   const { rows } = await query(
-    `INSERT INTO sarabun(doc_type, doc_number, subject, requester, target_date, status, year)
-     VALUES('บันทึกข้อความ','ศธ 999/2569',$1,$2,'2026-08-28','รอดำเนินการ','2569')
-     RETURNING id`, [subject, requester]
+    `INSERT INTO sarabun(doc_type, doc_number, subject, requester, target_date, status, year, requester_id)
+     VALUES('บันทึกข้อความ','ศธ 999/2569',$1,$2,'2026-08-28','รอดำเนินการ','2569',$3)
+     RETURNING id`, [subject, requester, requesterId]
   );
   return rows[0].id;
 }
@@ -279,6 +280,109 @@ test('getSarabunHistory ติดธง mine ตามเจ้าของ — 
   }
 
   await query(`DELETE FROM sarabun WHERE id = ANY($1)`, [[mineId, otherId, blankId]]);
+});
+
+// ---------------------------------------------------------------------------
+// เจ้าของผูกกับ username (requester_id) ไม่ใช่ชื่อที่แสดง
+//
+// บน production มี 34/153 แถวที่ requester เป็นชื่อย่อ (`ครูพิสิษฐ์`) หรือใส่สองคน
+// ในช่องเดียว — เทียบด้วยชื่อแล้วครูเจ้าของแนบไฟล์เอกสารตัวเองไม่ได้
+
+test('requester_id เป็นตัวตัดสิน: เจ้าของแนบ/แก้ได้ ครูคนอื่นไม่ได้ Admin ได้', async () => {
+  const id = await makeDoc('ผูกด้วย username', 'ครูสมชาย ใจดี', 'teacher1');
+
+  const rejected = await upload({ docId: id, token: TOKENS.teacher2 });
+  assert.equal(rejected.status, 400);
+  assert.match(rejected.body.__error, /แนบไฟล์ได้เฉพาะผู้รับผิดชอบ/);
+
+  assert.equal((await upload({ docId: id, token: TOKENS.teacher1 })).status, 200);
+  assert.equal((await upload({ docId: id, token: TOKENS.admin })).status, 200);
+
+  const payload = [{ id, docType: 'บันทึกข้อความ', subject: 'แก้แล้ว', year: '2569' }];
+  const err = await denied('saveSarabun', payload, 'teacher2');
+  assert.match(err, /แก้ไขได้เฉพาะผู้รับผิดชอบ/);
+  await ok('saveSarabun', payload, 'teacher1');
+
+  await ok('deleteSarabun', [id], 'admin');
+});
+
+test('ชื่อในทะเบียนไม่ตรงกับใครเลย แต่ requester_id เป็นของครู — ครูยังเป็นเจ้าของ', async () => {
+  // ครูเปลี่ยนชื่อ-สกุล หรือแถวเก่าเก็บชื่อย่อไว้ — ชื่อต้องไม่ถูกนำมาพิจารณาเลย
+  const id = await makeDoc('ชื่อเก่าค้าง', 'ครูสมชาย', 'teacher1');
+
+  assert.equal((await upload({ docId: id, token: TOKENS.teacher1 })).status, 200);
+  await ok('saveSarabun',
+    [{ id, docType: 'บันทึกข้อความ', subject: 'แก้ได้', year: '2569' }], 'teacher1');
+
+  const mine = await ok('getSarabunHistory', [], 'teacher1');
+  assert.equal(mine.find(r => r.id === id).mine, true);
+
+  await ok('deleteSarabun', [id], 'admin');
+});
+
+test('แถวเก่า requester_id ว่าง — ชื่อตรงยังใช้ได้ ชื่อย่อที่ไม่ตรงใครเป็นของ Admin', async () => {
+  const legacy = await makeDoc('แถวเก่าชื่อตรง', 'ครูสมชาย ใจดี', null);
+  assert.equal((await upload({ docId: legacy, token: TOKENS.teacher1 })).status, 200,
+    'ชื่อตรง users.full_name ต้องยังผ่านกติกาสำรอง');
+  await ok('deleteSarabun', [legacy], 'admin');
+
+  const short = await makeDoc('แถวเก่าชื่อย่อ', 'ครูพิสิษฐ์', null);
+  const res = await upload({ docId: short, token: TOKENS.teacher1 });
+  assert.equal(res.status, 400, 'ชื่อย่อไม่ตรงใคร = ครูแตะไม่ได้');
+  await denied('saveSarabun',
+    [{ id: short, docType: 'บันทึกข้อความ', subject: 'x', year: '2569' }], 'teacher1');
+
+  const asT1 = await ok('getSarabunHistory', [], 'teacher1');
+  assert.equal(asT1.find(r => r.id === short).mine, false);
+
+  assert.equal((await upload({ docId: short, token: TOKENS.admin })).status, 200);
+  await ok('deleteSarabun', [short], 'admin');
+});
+
+test('requestSarabunNumber ปั๊ม requester_id ให้ผู้ขอ', async () => {
+  const res = await ok('requestSarabunNumber',
+    [{ docType: 'ทดสอบเจ้าของ', subject: 'ขอเลข', year: '2569' }], 'teacher1');
+
+  const { rows } = await query(
+    `SELECT id, requester, requester_id FROM sarabun WHERE doc_type='ทดสอบเจ้าของ'`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].requester_id, 'teacher1');
+  assert.equal(rows[0].requester, 'ครูสมชาย ใจดี');
+  assert.match(res.docNumber, /^\d+\/2569$/);
+
+  const mine = await ok('getSarabunHistory', [], 'teacher1');
+  assert.equal(mine.find(r => r.id === rows[0].id).mine, true);
+
+  await query(`DELETE FROM sarabun WHERE doc_type='ทดสอบเจ้าของ'`);
+});
+
+test('Admin ระบุชื่อเต็มที่มีใน users → แถวนั้นได้เจ้าของติดไปเลย', async () => {
+  // นี่คือทางแก้แถวเก่า 34 แถวบน production: Admin แก้ทะเบียนแล้วเลือกชื่อเต็มให้ถูก
+  const id = await makeDoc('รอ Admin ระบุเจ้าของ', 'ครูสมชาย', null);
+  await ok('saveSarabun', [{
+    id, docType: 'บันทึกข้อความ', subject: 'ระบุเจ้าของแล้ว',
+    requester: 'ครูสมชาย ใจดี', year: '2569',
+  }], 'admin');
+
+  const { rows } = await query(`SELECT requester_id FROM sarabun WHERE id=$1`, [id]);
+  assert.equal(rows[0].requester_id, 'teacher1');
+  assert.equal((await upload({ docId: id, token: TOKENS.teacher1 })).status, 200,
+    'ครูต้องแนบไฟล์เอกสารของตัวเองได้หลัง Admin ระบุเจ้าของ');
+
+  await ok('deleteSarabun', [id], 'admin');
+});
+
+test('Admin พิมพ์ชื่ออิสระที่ไม่มีใน users → ไม่มีใครเป็นเจ้าของ', async () => {
+  await query(`DELETE FROM sarabun WHERE doc_number='ศธ 996/2569'`);
+  await ok('saveSarabun', [{
+    docType: 'บันทึกข้อความ', docNumber: 'ศธ 996/2569', subject: 'ชื่ออิสระ',
+    requester: 'ครูไม่มีในระบบ', year: '2569',
+  }], 'admin');
+
+  const { rows } = await query(
+    `SELECT id, requester_id FROM sarabun WHERE doc_number='ศธ 996/2569'`);
+  assert.equal(rows[0].requester_id, null);
+  await query(`DELETE FROM sarabun WHERE id=$1`, [rows[0].id]);
 });
 
 test('ลบทะเบียนเป็นของ Admin ครูลบไม่ได้', async () => {
