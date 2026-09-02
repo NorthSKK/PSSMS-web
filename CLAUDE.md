@@ -1486,8 +1486,17 @@ test/
 
 เทสต์ล็อกไว้ที่ `test/school_date.test.js` — รันผ่านทุก TZ (`TZ=UTC npm test` ต้องเขียว)
 
-ยังเหลือที่ใช้ `toISOString()` โดยถูกต้อง: การ format ค่า `DATE` ที่มาจาก Postgres
-(เป็น UTC midnight อยู่แล้ว) และการวนวันใน `lib/sessionCalendar.js` ที่ยึด UTC ทั้งลูป
+ที่เหลือใช้ `toISOString()` / `getDay()` **โดยถูกต้อง** ตรวจแล้วทั้งหมด — อย่าไปแก้:
+
+| ที่ | ทำไมถูก |
+|---|---|
+| `functions/attendanceReport.js` | `d` มาจากคอลัมน์ `DATE` ของ Postgres = UTC midnight อยู่แล้ว |
+| `functions/getLeaveBundle.js` | format ค่า `DATE` จาก DB เหมือนกัน |
+| `functions/leave.js` (ลูปสร้างคาบสอนแทน) | `getDay()` กับ `toISOString()` อยู่ในลูปเดียว ตกลงกันได้ทั้ง UTC และ +07 |
+| `lib/sessionCalendar.js` | ยึด UTC ทั้งลูปตั้งแต่ต้นจนจบ |
+
+`functions/missing.js` `getAvailableSubstitutes` ใช้ `new Date(dateStr).getDay()` ซึ่ง
+บังเอิญตรงทั้งบน UTC และ +07 (พังเฉพาะ TZ ฝั่งลบ) — ฟังก์ชันนี้เป็น legacy ที่รอรื้ออยู่แล้ว
 
 ---
 

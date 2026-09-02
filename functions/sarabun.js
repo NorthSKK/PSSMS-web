@@ -11,6 +11,7 @@
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
 const storage = require('../lib/storage');
+const { schoolToday } = require('../lib/schoolDate');
 
 // 10MB — หนังสือราชการสแกนไม่กี่หน้า หรือรูปถ่ายจากมือถือ ไม่ใช่หนังสือทั้งเล่ม
 const MAX_ATTACH_MB = 10;
@@ -127,7 +128,9 @@ const MAX_BATCH = 500;   // ตรงกับ max ของช่องกร�
 async function requestSarabunNumber([payload], user) {
   const d = payload || {};
   const docType = d.docType || '';
-  const year = d.year || String(new Date().getFullYear() + 543);
+  // ปี พ.ศ. ต้องคิดตามเวลาไทย — getFullYear() ใช้ TZ ของ process (UTC บน Railway)
+  // ช่วง 1 ม.ค. 00:00-07:00 จะได้ปีเก่า แล้วเลขทะเบียนหนังสือราชการผิดปีทั้งชุด
+  const year = d.year || String(Number(schoolToday().slice(0, 4)) + 543);
 
   // เผื่อ client เก่าหรือค่าเพี้ยน — ปัดเข้าช่วงที่รับได้เสมอ ไม่ปล่อยให้สร้างหมื่นแถว
   let amount = parseInt(d.amount, 10);
