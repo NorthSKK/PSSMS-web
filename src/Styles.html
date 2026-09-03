@@ -1732,4 +1732,79 @@ body.dark-mode .pssms-dept-general {
   opacity: .8; margin-top: 2px;
 }
 
+/* ==========================================================
+   หน้าตรวจก่อนนำเข้า — imp-*
+   ล้อ ar-* : ห้ามใช้ table-warning / table-danger / alert-* ของ bootstrap
+   ที่ hardcode สีโหมดสว่างทั้งพื้นทั้งตัวอักษร แล้วอ่านไม่ออกใน dark mode
+   (alert-secondary ไม่มี override ใน .dark-mode เลย = เทาบนเทา มองไม่เห็น)
+   ========================================================== */
+
+/* กล่องอธิบายเหนือตาราง — โทนเดียวกับ ar-* ใช้ token ล้วน ไม่มีสี hardcode */
+.imp-note {
+  border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;
+  font-size: .8rem; line-height: 1.5;
+  border: 1px solid var(--p-border);
+  background: var(--p-sec); color: var(--p-text);
+}
+.imp-note.imp-note-error {
+  background: rgba(220,53,69,.11);
+  border-color: color-mix(in srgb, var(--p-border) 60%, var(--p-danger));
+}
+.imp-note.imp-note-warn {
+  background: rgba(217,119,6,.10);
+  border-color: color-mix(in srgb, var(--p-border) 60%, var(--p-warning));
+}
+.imp-note.imp-note-info {
+  background: var(--p-accent-soft);
+  border-color: color-mix(in srgb, var(--p-border) 60%, var(--p-accent));
+}
+
+/* เม็ดสรุปหัวตาราง — สีคงที่เพราะต้องอ่านออกเท่ากันทั้งสองโหมด (ล้อ .ar-pill) */
+.imp-chip {
+  display: inline-block; border-radius: 999px; padding: 2px 12px;
+  font-size: .78rem; font-weight: 600; color: #fff;
+}
+.imp-chip-ok    { background: var(--p-accent); }
+.imp-chip-warn  { background: var(--p-warning); }
+.imp-chip-error { background: var(--p-danger); }
+.imp-chip-none  { background: var(--p-text-muted); opacity: .55; }
+
+/* ⚠️ ตารางนี้ **ไม่ใส่ class `table` ของ bootstrap** แบบเดียวกับ .ar-table —
+   `.dark-mode .table td:not([class*="col-highlight"])` (บรรทัด ~770) เป็น
+   `background-color: transparent !important` ล้างพื้นทุก cell ทิ้งในโหมดมืด
+   ใส่ `table` เมื่อไหร่ สีเตือนรายแถวจะหายทั้งหมดโดยไม่มีอะไรฟ้อง
+   จึงต้องเขียนโครงตารางเองทั้งหมดที่นี่ */
+.imp-table { width: 100%; border-collapse: collapse; }
+.imp-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--p-sec); color: var(--p-text);
+  font-size: .72rem; font-weight: 700; text-align: left;
+  padding: 6px 10px; white-space: nowrap;
+  box-shadow: inset 0 -1px 0 var(--p-border-strong, var(--p-border));
+}
+.imp-table tbody td {
+  padding: 6px 10px; color: var(--p-text);
+  border-bottom: 1px solid var(--p-border);
+  vertical-align: middle;
+}
+.imp-table tbody tr:hover td { background: var(--p-accent-soft); }
+
+/* ย้อมทั้งแถวด้วย color-mix ทับ surface — บรรทัดแรกเป็น fallback ของเบราว์เซอร์ที่ไม่มี color-mix */
+.imp-table tbody tr.imp-row-warn td {
+  background: #fdf4e6;
+  background: color-mix(in srgb, var(--p-surface) 90%, var(--p-warning));
+}
+.imp-table tbody tr.imp-row-error td {
+  background: #fdecee;
+  background: color-mix(in srgb, var(--p-surface) 89%, var(--p-danger));
+}
+.imp-table tbody tr.imp-row-warn  td:first-child { box-shadow: inset 3px 0 0 var(--p-warning); }
+.imp-table tbody tr.imp-row-error td:first-child { box-shadow: inset 3px 0 0 var(--p-danger); }
+.imp-table tbody td { font-size: .82rem; }
+.imp-table .imp-why { font-size: .75rem; color: var(--p-text); }
+
+/* hover ต้องประกาศซ้ำ **หลัง** rule ย้อมสี ไม่งั้นแถวที่ย้อมแล้วจะ hover ไม่เห็นผล */
+.imp-table tbody tr.imp-row-warn:hover td,
+.imp-table tbody tr.imp-row-error:hover td { background: var(--p-accent-soft); }
+
 </style>

@@ -4,7 +4,9 @@
 // ==========================================
 
 let calendarInstance = null;
-let _calImportBase64 = null;
+// เก็บ "แถวที่ parse แล้ว" ไม่ใช่ base64 — backend รับ array ของแถวเท่านั้น
+// เดิมส่ง base64 ไป แล้ว Array.isArray ล้ม ปุ่มขึ้นสำเร็จโดยไม่มีอะไรเข้า DB
+let _calImportRows = null;
 
 function _calIsAdmin() {
     const u = getSessionUser();
@@ -265,7 +267,7 @@ window.openImportCalendarModal = function() {
     document.getElementById('calImportFile').value = '';
     document.getElementById('calImportPreview').classList.add('d-none');
     document.getElementById('btnConfirmImport').disabled = true;
-    _calImportBase64 = null;
+    _calImportRows = null;
     new bootstrap.Modal(document.getElementById('calImportModal')).show();
 };
 
@@ -276,7 +278,7 @@ window.previewCalendarCSV = function(input) {
     const reader = new FileReader();
     reader.onload = function(e) {
         const text = e.target.result;
-        _calImportBase64 = btoa(unescape(encodeURIComponent(text)));
+        _calImportRows = [];
 
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
         const tbody = document.getElementById('calPreviewBody');
@@ -301,6 +303,7 @@ window.previewCalendarCSV = function(input) {
             tr.innerHTML = `<td class="text-nowrap">${dateStr}</td><td>${title}</td><td class="text-muted">${desc}</td>` +
                 `<td><span class="badge rounded-pill" style="background:${color};font-size:0.65rem">${color}</span></td>`;
             tbody.appendChild(tr);
+            _calImportRows.push({ title: title, start: dateStr, end: dateStr, color: color, description: desc });
             count++;
         }
 
@@ -428,7 +431,7 @@ window.downloadCalendarTemplate = function() {
 };
 
 window.confirmCalendarImport = function() {
-    if (!_calImportBase64) return;
+    if (!_calImportRows || !_calImportRows.length) return;
 
     const btn = document.getElementById('btnConfirmImport');
     const oldHTML = btn.innerHTML;
@@ -445,6 +448,6 @@ window.confirmCalendarImport = function() {
             btn.disabled = false;
             showToast(res.message, 'danger');
         }
-    }).importCalendarCSV(_calImportBase64);
+    }).importCalendarCSV(_calImportRows);
 };
 </script>

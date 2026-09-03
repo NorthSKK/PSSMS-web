@@ -546,6 +546,11 @@ renderTermProgressBar('myTermProgress', cfg);   // มี systemConfig จาก
 
 ## 11. Deploy (Railway)
 
+> **เปิดโรงเรียนใหม่** ทำตาม [`docs/setup-new-school.md`](docs/setup-new-school.md)
+> ซึ่งรวบขั้นตอนในหัวข้อนี้กับ R2 · licence · โดเมน ไว้เป็นลำดับเดียว
+> ส่วนที่ส่งให้โรงเรียนคือ [`docs/school-onboarding.md`](docs/school-onboarding.md)
+
+
 **push ขึ้น `main` = deploy production ทันที** — Railway auto-deploy จาก GitHub
 https://pw.pssms.app · ครูใช้จริง ไม่มี staging
 

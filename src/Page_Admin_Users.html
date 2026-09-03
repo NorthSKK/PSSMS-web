@@ -8,14 +8,24 @@
       <button class="btn btn-soft btn-sm" onclick="openPromotionModal()" style="color: var(--p-danger);">
         <i class="fas fa-level-up-alt me-1"></i>เลื่อนชั้นประจำปี
       </button>
-      <label class="btn btn-soft btn-sm mb-0">
-        <i class="fas fa-file-csv me-1"></i>นำเข้านักเรียน
-        <input type="file" accept=".csv" class="d-none" onchange="handleFileUpload(this, 'student')">
-      </label>
-      <label class="btn btn-soft btn-sm mb-0">
-        <i class="fas fa-file-csv me-1"></i>นำเข้าครู
-        <input type="file" accept=".csv" class="d-none" onchange="handleFileUpload(this, 'teacher')">
-      </label>
+      <div class="btn-group">
+        <label class="btn btn-soft btn-sm mb-0">
+          <i class="fas fa-file-import me-1"></i>นำเข้านักเรียน
+          <input type="file" accept=".xlsx,.xls,.csv" class="d-none" onchange="handleFileUpload(this, 'student')">
+        </label>
+        <button class="btn btn-soft btn-sm" onclick="downloadImportTemplate('student')" title="ดาวน์โหลดแม่แบบนักเรียน">
+          <i class="fas fa-download"></i>
+        </button>
+      </div>
+      <div class="btn-group">
+        <label class="btn btn-soft btn-sm mb-0">
+          <i class="fas fa-file-import me-1"></i>นำเข้าครู
+          <input type="file" accept=".xlsx,.xls,.csv" class="d-none" onchange="handleFileUpload(this, 'teacher')">
+        </label>
+        <button class="btn btn-soft btn-sm" onclick="downloadImportTemplate('teacher')" title="ดาวน์โหลดแม่แบบครู">
+          <i class="fas fa-download"></i>
+        </button>
+      </div>
       <button class="btn btn-accent btn-sm" onclick="openModal('add')">
         <i class="fas fa-plus me-1"></i>เพิ่มผู้ใช้
       </button>

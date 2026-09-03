@@ -6,9 +6,12 @@ module.exports = async function getSystemConfig() {
   if (cached) return cached;
 
   const { rows } = await query('SELECT key, subkey, value1, value2 FROM system_settings');
+  // ⚠️ schoolName ว่างเป็นค่าเริ่มต้นโดยตั้งใจ — ห้ามใส่ชื่อโรงเรียนใดเป็น default
+  // 1 โรงเรียน = 1 DB ค่า default จึงเป็นชื่อโรงเรียนอื่นเสมอสำหรับทุกคนที่ไม่ใช่เจ้าของชื่อนั้น
+  // ชื่อว่างทำให้เห็นว่ายังไม่ได้ตั้ง ส่วนชื่อผิดกลมกลืนจนไม่มีใครสังเกต (เคยหลุดถึง ปพ.5)
   const config = {
     term: '1', year: '2568',
-    schoolName: 'โรงเรียนภูพระบาทวิทยา',
+    schoolName: '',
     schoolLogo: '', termStart: '', termEnd: '',
   };
 

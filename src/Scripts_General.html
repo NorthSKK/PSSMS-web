@@ -72,9 +72,10 @@ window.toggleSarabunFields = function() {
         document.getElementById('divTargetDate').style.display = 'block';
         document.getElementById('divDocTime').style.display = 'none';
         
-        // แอบเติมค่าเริ่มต้นให้ถ้ายังว่างอยู่
+        // แอบเติมค่าเริ่มต้นให้ถ้ายังว่างอยู่ — ชื่อโรงเรียนมาจากค่าที่ตั้งไว้ ไม่ hardcode
         if(document.getElementById('docTo').value === '') {
-            document.getElementById('docTo').value = "ผู้อำนวยการโรงเรียนภูพระบาทวิทยา";
+            var _school = localStorage.getItem('pssms_school_name') || '';
+            document.getElementById('docTo').value = 'ผู้อำนวยการ' + (_school || 'โรงเรียน');
         }
 
         btnRequestNumber.style.display = 'block';
@@ -1329,7 +1330,7 @@ function _renderSubAdminTable() {
 // สร้าง HTML แยกใน iframe overlay แบบเดียวกับ tcPrintMembers — ไม่ต้องสู้กับ layout ของ SPA
 // แยกฟังก์ชัน build ออกมาเพื่อเทสได้โดยไม่ต้องเปิด print dialog
 function _subBuildPrintHtml(rows) {
-  var school = localStorage.getItem('pssms_school_name') || 'โรงเรียนภูพระบาทวิทยา';
+  var school = localStorage.getItem('pssms_school_name') || '';
   var sorted = _subSortRows(rows);
   var from = document.getElementById('subFilterFrom');
   var to   = document.getElementById('subFilterTo');

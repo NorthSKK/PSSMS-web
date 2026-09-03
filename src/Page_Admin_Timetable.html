@@ -6,10 +6,15 @@
     </div>
     <div class="pssms-actions">
       <button class="btn btn-soft btn-sm" onclick="initAdminTimetable()"><i class="fas fa-sync me-1"></i>รีเฟรช</button>
-      <label class="btn btn-accent btn-sm mb-0">
-        <i class="fas fa-file-csv me-1"></i>นำเข้า CSV
-        <input type="file" accept=".csv" class="d-none" onchange="handleTimetableUpload(this)">
-      </label>
+      <div class="btn-group">
+        <label class="btn btn-accent btn-sm mb-0">
+          <i class="fas fa-file-import me-1"></i>นำเข้าตารางสอน
+          <input type="file" accept=".xlsx,.xls,.csv" class="d-none" onchange="handleTimetableUpload(this)">
+        </label>
+        <button class="btn btn-soft btn-sm" onclick="downloadImportTemplate('timetable')" title="ดาวน์โหลดแม่แบบตารางสอน">
+          <i class="fas fa-download"></i>
+        </button>
+      </div>
     </div>
   </div>
 

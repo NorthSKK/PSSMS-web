@@ -68,7 +68,7 @@ async function deleteCalendarEvent([eventId]) {
 }
 
 async function importCalendarCSV([rows]) {
-  if (!Array.isArray(rows) || rows.length === 0) return { status: 'success', message: 'นำเข้า 0 รายการ', imported: 0 };
+  require('../lib/importSpec').assertRows(rows);
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   let count = 0;

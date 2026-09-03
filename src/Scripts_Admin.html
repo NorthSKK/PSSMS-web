@@ -19,6 +19,59 @@ function initAdminDashboard() {
   // เรียกแยกจาก bundle โดยตั้งใจ — กระดานคำนวณทั้งโรงเรียน ไม่ควรถ่วงการเปิดแดชบอร์ด
   // ฝั่ง server แคชไว้ 10 นาที หน้าเต็มกับการ์ดนี้จึงใช้ผลการคำนวณชุดเดียวกัน
   _loadAdminProgressSummary();
+  _loadSetupChecklist();
+}
+
+// ==========================================
+// การ์ดตั้งค่าเริ่มต้น — ขึ้นเฉพาะตอนยังทำไม่ครบ แล้วหายเองถาวร
+// ไม่บล็อกอะไร เป็นแค่ตัวบอกทางให้โรงเรียนใหม่ที่ login มาแล้วเจอหน้าเปล่า
+// ==========================================
+function _loadSetupChecklist() {
+  var wrap = document.getElementById('adminSetupChecklist');
+  if (!wrap) return;
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.items) { wrap.classList.add('d-none'); return; }
+      if (d.done >= d.total) { wrap.classList.add('d-none'); wrap.innerHTML = ''; return; }
+      _renderSetupChecklist(wrap, d);
+    })
+    .withFailureHandler(function() { wrap.classList.add('d-none'); })
+    .getSetupChecklist();
+}
+
+function _renderSetupChecklist(wrap, d) {
+  var pct = Math.round((d.done / d.total) * 100);
+  var rows = d.items.map(function(it) {
+    var count = (it.count !== undefined && it.count > 0) ? ' <span class="text-muted">(' + it.count + ')</span>' : '';
+    var icon = it.done
+      ? '<i class="fas fa-check-circle" style="color:var(--p-accent);"></i>'
+      : '<i class="far fa-circle text-muted"></i>';
+    // ข้อที่ทำแล้วทำจาง ให้ข้อที่ยังเหลือเด่นขึ้นมาเอง
+    var body = it.done
+      ? '<span class="text-muted text-decoration-line-through">' + _escH(it.label) + '</span>' + count
+      : '<b>' + _escH(it.label) + '</b>' + count +
+        '<div class="small text-muted">' + _escH(it.hint) + '</div>';
+    var go = it.done ? '' :
+      '<button class="btn btn-soft btn-sm flex-shrink-0" onclick="loadPage(\'' + it.page + '\')">' +
+      'ไปตั้งค่า <i class="fas fa-arrow-right ms-1"></i></button>';
+    return '<li class="list-group-item d-flex align-items-center gap-2 px-0 bg-transparent border-0 py-1">' +
+      '<span class="flex-shrink-0">' + icon + '</span>' +
+      '<span class="flex-grow-1">' + body + '</span>' + go + '</li>';
+  }).join('');
+
+  wrap.innerHTML =
+    '<div class="pssms-card p-3 mb-3">' +
+      '<div class="d-flex align-items-center justify-content-between mb-2">' +
+        '<div><b><i class="fas fa-list-check me-2" style="color:var(--p-accent);"></i>ตั้งค่าเริ่มต้นของโรงเรียน</b>' +
+          '<div class="small text-muted">ทำครบแล้วการ์ดนี้จะหายไปเอง · ข้ามไปทำอย่างอื่นก่อนได้</div></div>' +
+        '<span class="badge rounded-pill" style="background:var(--p-accent);">' + d.done + ' / ' + d.total + '</span>' +
+      '</div>' +
+      '<div class="progress mb-2" style="height:6px;">' +
+        '<div class="progress-bar" role="progressbar" style="width:' + pct + '%;background:var(--p-accent);"></div>' +
+      '</div>' +
+      '<ul class="list-group list-group-flush mb-0">' + rows + '</ul>' +
+    '</div>';
+  wrap.classList.remove('d-none');
 }
 
 function _loadAdminProgressSummary() {
@@ -660,20 +713,384 @@ function _filterTableImpl() {
 }
 window.filterTable = (typeof debounce === 'function') ? debounce(_filterTableImpl, 180) : _filterTableImpl;
 
-function handleFileUpload(input, type) {
-  const file = input.files[0];
-  if (!file) return;
-  Swal.fire({ title: `นำเข้าข้อมูล${type === 'student' ? 'นักเรียน' : 'ครู'}?`, icon: 'question', showCancelButton: true, confirmButtonText: 'นำเข้า', cancelButtonText: 'ยกเลิก' }).then(r => {
-    if (!r.isConfirmed) { input.value = ''; return; }
-    document.getElementById('uploadStatus').classList.remove('d-none');
-    const reader = new FileReader();
-    reader.onload = e => {
-      const content = e.target.result.split(',')[1];
-      const func = type === 'student' ? 'importStudentCSV' : 'importTeacherCSV';
-      google.script.run.withSuccessHandler(res => { document.getElementById('uploadStatus').classList.add('d-none'); showAlert(res.message); input.value = ''; loadUserData(true); })[func](content);
-    };
-    reader.readAsDataURL(file);
+// ==========================================
+// 📥 อ่านไฟล์นำเข้า — spec คอลัมน์มาจาก lib/importSpec.js ผ่าน getImportSpec
+// ห้ามเขียนรายชื่อคอลัมน์ซ้ำที่นี่ ไฟล์ src/*.html ไม่มี module system
+// ก๊อปมาเมื่อไหร่ก็ drift ออกจากตัวตรวจฝั่ง server แบบเงียบ ๆ
+// ==========================================
+var _importSpec = null;
+
+function _loadImportSpec() {
+  return new Promise(function(resolve, reject) {
+    if (_importSpec) return resolve(_importSpec);
+    google.script.run
+      .withSuccessHandler(function(s) { _importSpec = s; resolve(s); })
+      .withFailureHandler(reject)
+      .getImportSpec();
   });
+}
+
+// SheetJS โหลดเฉพาะตอนจะใช้ — ~900KB ไม่ควรถ่วงทุกหน้าเพื่อฟีเจอร์ที่ใช้ปีละครั้ง
+// pin เวอร์ชันไว้ (CDN อื่นในโปรเจกต์บางตัวยังไม่ pin — อย่าทำตาม)
+var _XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+var _xlsxLoading = null;
+
+function _loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (_xlsxLoading) return _xlsxLoading;
+  _xlsxLoading = new Promise(function(resolve, reject) {
+    var s = document.createElement('script');
+    s.src = _XLSX_URL;
+    s.onload = function() { resolve(window.XLSX); };
+    s.onerror = function() { _xlsxLoading = null; reject(new Error('โหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ — ตรวจอินเทอร์เน็ต')); };
+    document.head.appendChild(s);
+  });
+  return _xlsxLoading;
+}
+
+/**
+ * ถอดไบต์ CSV เป็นข้อความ — Excel ภาษาไทยบันทึก CSV เป็น windows-874 (TIS-620)
+ * ไม่ใช่ UTF-8 อ่านด้วย UTF-8 ตรง ๆ จะได้ภาษาต่างดาวทั้งไฟล์
+ * ลอง UTF-8 แบบเข้มก่อน (fatal:true) ล้มเมื่อไหร่แปลว่าไม่ใช่ UTF-8 ค่อยตกไป 874
+ */
+function _decodeCsv(buf) {
+  var bytes = new Uint8Array(buf);
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(bytes.subarray(3));
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (e) {
+    return new TextDecoder('windows-874').decode(bytes);
+  }
+}
+
+// แยกบรรทัด CSV โดยเคารพ quote (ชื่อโรงเรียน/ชื่อวิชามี comma ได้)
+function _csvCells(line) {
+  var out = [], cur = '', q = false;
+  for (var i = 0; i < line.length; i++) {
+    var ch = line[i];
+    if (ch === '"') {
+      if (q && line[i + 1] === '"') { cur += '"'; i++; }
+      else q = !q;
+    } else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map(function(c) { return c.trim(); });
+}
+
+// หัวตารางที่โรงเรียนกรอก → key ที่ backend ใช้ (ไทยเป็นหลัก รับ alias อังกฤษด้วย)
+function _headerKey(cols, header) {
+  var h = String(header || '').trim().toLowerCase().replace(/\s+/g, '');
+  for (var i = 0; i < cols.length; i++) {
+    var c = cols[i];
+    if (String(c.label).trim().toLowerCase().replace(/\s+/g, '') === h) return c.key;
+    for (var j = 0; j < (c.aliases || []).length; j++) {
+      if (String(c.aliases[j]).toLowerCase() === h) return c.key;
+    }
+  }
+  return '';
+}
+
+// ตาราง 2 มิติ (แถวแรก = หัวตาราง) → { rows, unknownHeaders, missingRequired }
+// `raw` บอกว่า cell ไหนเข้ามาเป็น "ตัวเลข" จาก Excel — ใช้จับ 0 นำหน้าที่โดนกิน
+function _gridToRows(grid, kind) {
+  var spec = _importSpec.specs[kind];
+  if (!grid.length) return { rows: [], unknownHeaders: [], missingRequired: [] };
+
+  var headers = grid[0].map(function(h) { return String(h == null ? '' : h).trim(); });
+  var keys = headers.map(function(h) { return _headerKey(spec.columns, h); });
+  var unknownHeaders = headers.filter(function(h, i) { return h && !keys[i]; });
+
+  var have = {};
+  keys.forEach(function(k) { if (k) have[k] = true; });
+  var missingRequired = spec.columns
+    .filter(function(c) { return c.required && !have[c.key]; })
+    .map(function(c) { return c.label; });
+
+  var rows = [];
+  for (var i = 1; i < grid.length; i++) {
+    var cells = grid[i] || [];
+    var any = false;
+    for (var j = 0; j < cells.length; j++) {
+      if (cells[j] !== undefined && cells[j] !== null && String(cells[j]).trim() !== '') { any = true; break; }
+    }
+    if (!any) continue;
+    var row = {}, numeric = {};
+    keys.forEach(function(k, idx) {
+      if (!k) return;
+      var v = cells[idx];
+      if (typeof v === 'number') numeric[k] = true;
+      row[k] = v === undefined || v === null ? '' : String(v).trim();
+    });
+    row.__excelRow = i + 1;
+    row.__numeric = numeric;
+    rows.push(row);
+  }
+  return { rows: rows, unknownHeaders: unknownHeaders, missingRequired: missingRequired };
+}
+
+/** อ่านไฟล์ที่ผู้ใช้เลือก → grid แล้วส่งต่อให้ _gridToRows */
+function _readImportFile(file, kind) {
+  var isXlsx = /\.xlsx?$/i.test(file.name);
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onerror = function() { reject(new Error('อ่านไฟล์ไม่สำเร็จ')); };
+    reader.onload = function(e) {
+      try {
+        if (!isXlsx) {
+          var text = _decodeCsv(e.target.result);
+          var grid = text.split(/\r?\n/).map(_csvCells);
+          return resolve(_gridToRows(grid, kind));
+        }
+        _loadXLSX().then(function(XLSX) {
+          var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          // raw:true = เก็บชนิด number ไว้ เพื่อรู้ว่า Excel กิน 0 นำหน้าไปหรือยัง
+          var grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+          resolve(_gridToRows(grid, kind));
+        }).catch(reject);
+      } catch (err) { reject(err); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * ตรวจแถวด้วยกติกาที่มาจาก spec (required/pattern/oneOf/unique/normalize)
+ * เป็นกติกาชุดเดียวกับ `prepareRows()` ฝั่ง server — server ยังเป็นคนบังคับจริงเสมอ
+ * ที่นี่มีไว้ให้คนเห็นปัญหาก่อนกด ไม่ใช่แทนการตรวจฝั่ง server
+ */
+function _validateImportRows(rows, kind) {
+  var spec = _importSpec.specs[kind];
+  var errors = [], warnings = [], seen = {};
+
+  // ความยาวมากสุดของคอลัมน์รหัส ใช้เดาว่าแถวไหนน่าจะโดนตัด 0 นำหน้า
+  var maxLen = {};
+  spec.columns.forEach(function(c) {
+    if (!c.keepLeadingZero) return;
+    maxLen[c.key] = rows.reduce(function(m, r) { return Math.max(m, String(r[c.key] || '').length); }, 0);
+  });
+
+  rows.forEach(function(r) {
+    var at = r.__excelRow;
+    spec.columns.forEach(function(c) {
+      var v = String(r[c.key] || '').trim();
+
+      if (c.required && !v) { errors.push({ row: at, message: 'ไม่ได้กรอก "' + c.label + '"' }); return; }
+      if (!v) return;
+
+      if (c.normalize === 'day') {
+        var d = _normalizeDayClient(v);
+        if (!d) { errors.push({ row: at, message: c.label + ' "' + v + '" อ่านไม่ออก — ใช้ชื่อวันไทยเต็ม เช่น จันทร์' }); return; }
+        r[c.key] = v = d;
+      }
+      if (c.pattern && !new RegExp(c.pattern).test(v)) {
+        errors.push({ row: at, message: c.label + ' "' + v + '" รูปแบบไม่ถูกต้อง' }); return;
+      }
+      if (c.oneOf && c.oneOf.indexOf(v) === -1) {
+        errors.push({ row: at, message: c.label + ' "' + v + '" ต้องเป็นหนึ่งใน: ' + c.oneOf.join(', ') }); return;
+      }
+      if (c.unique) {
+        if (seen[c.key + '|' + v]) errors.push({ row: at, message: c.label + ' "' + v + '" ซ้ำกับแถว ' + seen[c.key + '|' + v] });
+        else seen[c.key + '|' + v] = at;
+      }
+      if (c.keepLeadingZero) {
+        // Excel แปลง '01903' เป็นเลข 1903 ให้เอง — ระบบไม่เดาแทน แค่ชี้ให้คนตัดสิน
+        if (r.__numeric && r.__numeric[c.key]) {
+          warnings.push({ row: at, message: c.label + ' "' + v + '" ถูกอ่านเป็นตัวเลข — 0 นำหน้าอาจหายไปแล้ว' });
+        } else if (/^\d+$/.test(v) && v.length < maxLen[c.key] && v[0] !== '0') {
+          warnings.push({ row: at, message: c.label + ' "' + v + '" สั้นกว่ารหัสอื่นในไฟล์ — อาจถูกตัด 0 นำหน้า' });
+        }
+      }
+    });
+  });
+  return { errors: errors, warnings: warnings };
+}
+
+function _normalizeDayClient(v) {
+  var raw = String(v || '').trim().replace(/^วัน/, '').replace(/\.+$/, '').trim();
+  if (!raw) return '';
+  if (_importSpec.dayNames.indexOf(raw) !== -1) return raw;
+  return _importSpec.dayAliases[raw] || '';
+}
+
+// ==========================================
+// 👀 หน้าตรวจก่อนนำเข้า — ใช้ร่วมทั้งสามไฟล์
+// สร้าง DOM เองแล้วแปะที่ body ไม่ฝังไว้ในไฟล์หน้า เพราะสองหน้าใช้ตัวเดียวกัน
+// และ SPA สลับหน้าแล้ว markup ในหน้าเดิมหายไปพร้อมกัน
+// ==========================================
+var _impModal = null;
+
+function _impEnsureModal() {
+  if (document.getElementById('importPreviewModal')) return;
+  var el = document.createElement('div');
+  el.innerHTML =
+    '<div class="modal fade" id="importPreviewModal" tabindex="-1">' +
+      '<div class="modal-dialog modal-xl modal-dialog-scrollable">' +
+        '<div class="modal-content">' +
+          '<div class="modal-header">' +
+            '<h5 class="modal-title"><i class="fas fa-clipboard-check me-2"></i><span id="impTitle"></span></h5>' +
+            '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+          '</div>' +
+          '<div class="modal-body">' +
+            '<div id="impSummary" class="d-flex flex-wrap gap-2 mb-3"></div>' +
+            '<div id="impNotes"></div>' +
+            '<div class="table-responsive" style="max-height:52vh;">' +
+              '<table class="imp-table"><thead id="impHead"></thead><tbody id="impBody"></tbody></table>' +
+            '</div>' +
+          '</div>' +
+          '<div class="modal-footer">' +
+            '<button type="button" class="btn btn-soft btn-sm" data-bs-dismiss="modal">ยกเลิก</button>' +
+            '<button type="button" class="btn btn-accent btn-sm" id="impConfirm"></button>' +
+          '</div>' +
+        '</div></div></div>';
+  document.body.appendChild(el.firstChild);
+}
+
+// สีคงที่จาก token ไม่ส่งสีเป็นสตริงเข้ามา — เพิ่ม/แก้สีทำที่ CSS ที่เดียว
+function _impChip(text, kind) {
+  return '<span class="imp-chip imp-chip-' + kind + '">' + text + '</span>';
+}
+
+/**
+ * เปิดหน้าตรวจ — cfg: { kind, title, rows, unknownHeaders, errors, warnings,
+ *                       confirmText, noteHtml, onConfirm }
+ * มีข้อผิดพลาด = ปุ่มยืนยันถูกปิด ต้องกลับไปแก้ไฟล์ (ADR 0003 · ไฟล์ผิดไม่เขียนบางส่วน)
+ */
+function _impOpen(cfg) {
+  _impEnsureModal();
+  var spec = _importSpec.specs[cfg.kind];
+  var byRow = {};
+  function mark(list, level) {
+    list.forEach(function(e) {
+      if (!byRow[e.row]) byRow[e.row] = { level: '', msgs: [] };
+      if (level === 'error') byRow[e.row].level = 'error';
+      else if (!byRow[e.row].level) byRow[e.row].level = 'warn';
+      byRow[e.row].msgs.push(e.message);
+    });
+  }
+  mark(cfg.errors, 'error');
+  mark(cfg.warnings, 'warn');
+
+  var badRows = Object.keys(byRow).filter(function(k) { return byRow[k].level === 'error'; }).length;
+  document.getElementById('impTitle').textContent = 'ตรวจข้อมูลก่อนนำเข้า — ' + cfg.title;
+  document.getElementById('impSummary').innerHTML =
+    _impChip('นำเข้าได้ ' + (cfg.rows.length - badRows), 'ok') +
+    _impChip('เตือน ' + cfg.warnings.length, cfg.warnings.length ? 'warn' : 'none') +
+    _impChip('ผิด ' + cfg.errors.length, cfg.errors.length ? 'error' : 'none');
+
+  var notes = '';
+  if (cfg.errors.length) {
+    notes += '<div class="imp-note imp-note-error">' +
+      '<b>แก้ไฟล์แล้วอัปใหม่</b> — ไฟล์ที่มีข้อผิดพลาดจะไม่ถูกนำเข้าบางส่วน ระบบเขียนทั้งไฟล์หรือไม่เขียนเลย</div>';
+  }
+  if (cfg.warnings.length) {
+    notes += '<div class="imp-note imp-note-warn">' +
+      'แถวที่ขึ้นสีเหลืองนำเข้าได้ แต่ควรดูก่อนว่าถูกจริง</div>';
+  }
+  if (cfg.unknownHeaders.length) {
+    notes += '<div class="imp-note">คอลัมน์ที่ระบบไม่รู้จัก (จะถูกข้าม): ' +
+      cfg.unknownHeaders.map(_escH).join(', ') + '</div>';
+  }
+  if (cfg.noteHtml) notes += '<div class="imp-note imp-note-info">' + cfg.noteHtml + '</div>';
+  document.getElementById('impNotes').innerHTML = notes;
+
+  document.getElementById('impHead').innerHTML = '<tr><th style="width:56px;">แถว</th>' +
+    spec.columns.map(function(c) { return '<th>' + _escH(c.label) + '</th>'; }).join('') +
+    '<th>หมายเหตุ</th></tr>';
+
+  document.getElementById('impBody').innerHTML = cfg.rows.map(function(r) {
+    var info = byRow[r.__excelRow];
+    var cls = info ? (info.level === 'error' ? 'imp-row-error' : 'imp-row-warn') : '';
+    return '<tr class="' + cls + '"><td class="text-muted small">' + r.__excelRow + '</td>' +
+      spec.columns.map(function(c) { return '<td>' + _escH(r[c.key] || '') + '</td>'; }).join('') +
+      '<td class="imp-why">' + (info ? _escH(info.msgs.join(' · ')) : '') + '</td></tr>';
+  }).join('');
+
+  var btn = document.getElementById('impConfirm');
+  btn.textContent = cfg.errors.length ? 'แก้ไฟล์ก่อน' : cfg.confirmText;
+  btn.disabled = cfg.errors.length > 0;
+  btn.onclick = function() {
+    _impModal.hide();
+    cfg.onConfirm();
+  };
+
+  _impModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('importPreviewModal'));
+  _impModal.show();
+}
+
+function handleFileUpload(input, type) {
+  var file = input.files[0];
+  if (!file) return;
+  var kind = type === 'student' ? 'student' : 'teacher';
+  var reset = function() { input.value = ''; };
+
+  _loadImportSpec()
+    .then(function() { return _readImportFile(file, kind); })
+    .then(function(parsed) {
+      if (parsed.missingRequired.length) {
+        reset();
+        return showAlert('❌ ไฟล์ขาดคอลัมน์ที่ต้องมี: ' + parsed.missingRequired.join(', '));
+      }
+      if (!parsed.rows.length) { reset(); return showAlert('⚠️ ไม่พบแถวข้อมูลใต้หัวตาราง'); }
+
+      var v = _validateImportRows(parsed.rows, kind);
+      _impOpen({
+        kind: kind,
+        title: _importSpec.specs[kind].title,
+        rows: parsed.rows,
+        unknownHeaders: parsed.unknownHeaders,
+        errors: v.errors,
+        warnings: v.warnings,
+        noteHtml: 'คนที่มีอยู่แล้วจะถูกทับด้วยข้อมูลใหม่ · <b>ไม่มีใครถูกลบ</b> — ลบคนต้องทำในหน้านี้ทีละคน',
+        confirmText: 'นำเข้า ' + parsed.rows.length + ' รายการ',
+        onConfirm: function() {
+          document.getElementById('uploadStatus').classList.remove('d-none');
+          var func = type === 'student' ? 'importStudentCSV' : 'importTeacherCSV';
+          google.script.run
+            .withSuccessHandler(function(res) {
+              document.getElementById('uploadStatus').classList.add('d-none');
+              showAlert(res.message); reset(); loadUserData(true);
+            })
+            .withFailureHandler(function(err) {
+              document.getElementById('uploadStatus').classList.add('d-none');
+              showAlert('❌ ' + err.message); reset();
+            })[func](parsed.rows);
+        },
+      });
+    })
+    .catch(function(err) { reset(); showAlert('❌ ' + err.message); });
+}
+
+/** สร้างไฟล์แม่แบบสดจาก spec — หัวตารางจึงตรงกับตัวตรวจเสมอ ไม่มีทาง drift */
+function downloadImportTemplate(kind) {
+  _loadImportSpec()
+    .then(function() { return _loadXLSX(); })
+    .then(function(XLSX) {
+      var spec = _importSpec.specs[kind];
+      var cols = spec.columns;
+      var aoa = [
+        cols.map(function(c) { return c.label; }),
+        cols.map(function(c) { return c.example === undefined ? '' : c.example; }),
+      ];
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      // คอลัมน์รหัสต้องเป็น Text ตั้งแต่ในแม่แบบ ไม่งั้น Excel กิน 0 นำหน้าตอนครูพิมพ์
+      cols.forEach(function(c, i) {
+        if (!c.keepLeadingZero) return;
+        for (var r = 0; r < aoa.length; r++) {
+          var ref = XLSX.utils.encode_cell({ c: i, r: r });
+          if (ws[ref]) { ws[ref].t = 's'; ws[ref].z = '@'; }
+        }
+      });
+      ws['!cols'] = cols.map(function(c) { return { wch: Math.max(12, c.label.length + 4) }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, spec.title);
+      XLSX.writeFile(wb, 'แม่แบบนำเข้า-' + spec.title + '.xlsx');
+      if (typeof showToast === 'function') showToast('ดาวน์โหลดแม่แบบ' + spec.title + 'แล้ว', 'success');
+    })
+    .catch(function(err) { showAlert('❌ สร้างแม่แบบไม่สำเร็จ: ' + err.message); });
 }
 
 // ==========================================
@@ -722,58 +1139,74 @@ function _ttoComputeConflicts() {
 // ==========================================
 // 📥 ระบบนำเข้าตารางสอนผ่าน CSV (แก้บัค SweetAlert2 ใช้งานได้ 100%)
 // ==========================================
+// นำเข้าตารางสอน = **ล้างทั้งเทอมแล้วใส่ใหม่** ไม่ใช่ต่อท้าย (ADR 0003)
+// เดิมมีปุ่ม "นำเข้าต่อท้ายข้อมูลเดิม" ซึ่งเป็นทางเดียวที่ทำให้เกิดแถวซ้ำจนต้องมี
+// เครื่องมือกำจัดแยก — และ flag นั้นก็ไม่เคยถึง backend อยู่ดี
 function handleTimetableUpload(inputElement) {
-  const file = inputElement.files[0];
+  var file = inputElement.files[0];
   if (!file) return;
+  var reset = function() { inputElement.value = ''; };
 
-  // 1. ถามยืนยันด้วย SweetAlert2
-  Swal.fire({
-    title: '⚠️ นำเข้าตารางสอน (CSV)',
-    text: 'ต้องการล้างตารางสอนเก่าของเทอมนี้ก่อนนำเข้าหรือไม่?',
-    icon: 'warning',
-    showDenyButton: true,
-    showCancelButton: true,
-    confirmButtonText: 'ล้างของเก่า + นำเข้าใหม่',
-    denyButtonText: 'นำเข้าต่อท้ายข้อมูลเดิม',
-    cancelButtonText: 'ยกเลิก'
-  }).then(r => {
-    if (r.isDismissed) return;
-    const clearOldData = r.isConfirmed;
+  _loadImportSpec()
+    .then(function() { return _readImportFile(file, 'timetable'); })
+    .then(function(parsed) {
+      if (parsed.missingRequired.length) {
+        reset();
+        return showAlert('❌ ไฟล์ขาดคอลัมน์ที่ต้องมี: ' + parsed.missingRequired.join(', '));
+      }
+      if (!parsed.rows.length) { reset(); return showAlert('⚠️ ไม่พบแถวข้อมูลใต้หัวตาราง'); }
 
-    // 2. เปลี่ยนปุ่มเป็นสถานะกำลังโหลด
-    const labelBtn = inputElement.parentElement;
-    const originalHTML = labelBtn.innerHTML;
-    labelBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังประมวลผล...';
-    labelBtn.style.pointerEvents = 'none';
+      // ต้องบอกจำนวนจริงทั้งสองข้าง คนถึงจะเห็นสิ่งที่กำลังจะหายไปก่อนกด (ADR 0003)
+      // ⚠️ ห้ามนับจาก _ttoAllRows — มีค่าเฉพาะตอนแท็บภาพรวมโหลดแล้ว เปิดหน้ามากด
+      // นำเข้าเลยจะขึ้น "ลบ 0 แถว" ทั้งที่กำลังจะลบทั้งเทอม ถามจำนวนจริงเสมอ
+      var term = window._hrActiveTerm || (getSessionUser() || {}).currentTerm || '';
+      var year = window._hrActiveYear || (getSessionUser() || {}).currentYear || '';
+      return new Promise(function(resolve) {
+        google.script.run
+          .withSuccessHandler(function(rows) { resolve(Array.isArray(rows) ? rows.length : null); })
+          .withFailureHandler(function() { resolve(null); })
+          .getFilteredTimetables('', term, year);
+      }).then(function(existing) { return { parsed: parsed, term: term, year: year, existing: existing }; });
+    })
+    .then(function(ctx) {
+      if (!ctx) return;   // ตกมาจากทางที่ showAlert ไปแล้ว
+      var parsed = ctx.parsed;
+      var losing = ctx.existing === null
+        ? '<b>ตารางสอนเดิมของเทอมนี้จะถูกลบทั้งหมด</b>'
+        : '<b>จะลบตารางสอนเทอม ' + ctx.term + '/' + ctx.year + ' ที่มีอยู่ ' + ctx.existing + ' แถว</b>';
 
-    // 3. แปลงไฟล์และส่งไปหลังบ้าน
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const base64Data = e.target.result.split(',')[1] || e.target.result;
-
-      google.script.run
-        .withSuccessHandler(res => {
-          labelBtn.innerHTML = originalHTML;
-          labelBtn.style.pointerEvents = 'auto';
-          inputElement.value = '';
-          if (res.status === 'success') {
-            showAlert(res.message);
-            if (typeof viewTimetable === 'function') viewTimetable();
-          } else {
-            showAlert('❌ เกิดข้อผิดพลาด: ' + res.message);
-          }
-        })
-        .withFailureHandler(err => {
-          labelBtn.innerHTML = originalHTML;
-          labelBtn.style.pointerEvents = 'auto';
-          inputElement.value = '';
-          showAlert('❌ Error ระบบหลังบ้าน: ' + err.message);
-        })
-        .importTimetableCSV(base64Data, clearOldData);
-    };
-
-    reader.readAsDataURL(file);
-  });
+      var v = _validateImportRows(parsed.rows, 'timetable');
+      _impOpen({
+        kind: 'timetable',
+        title: 'ตารางสอน',
+        rows: parsed.rows,
+        unknownHeaders: parsed.unknownHeaders,
+        errors: v.errors,
+        warnings: v.warnings,
+        noteHtml: losing + ' แล้วใส่ใหม่ ' + parsed.rows.length + ' แถวจากไฟล์',
+        confirmText: 'ลบของเดิมแล้วนำเข้า ' + parsed.rows.length + ' แถว',
+        onConfirm: function() {
+          var labelBtn = inputElement.parentElement;
+          var originalHTML = labelBtn.innerHTML;
+          labelBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> กำลังประมวลผล...';
+          labelBtn.style.pointerEvents = 'none';
+          var restore = function() {
+            labelBtn.innerHTML = originalHTML;
+            labelBtn.style.pointerEvents = 'auto';
+            reset();
+          };
+          google.script.run
+            .withSuccessHandler(function(res) {
+              restore();
+              showAlert(res.message);
+              if (typeof viewTimetable === 'function') viewTimetable();
+            })
+            .withFailureHandler(function(err) { restore(); showAlert('❌ ' + err.message); })
+            .importTimetableCSV(parsed.rows);
+        },
+      });
+    })
+    .catch(function(err) { reset(); showAlert('❌ ' + err.message); });
 }
 
 function initAdminTimetable() {
@@ -820,6 +1253,13 @@ function initAdminTimetable() {
           if (hrTab && !hrTab.classList.contains('d-none') && _ttoHomeroomData.length > 0) {
             _ttoRenderHomeroomTable();
           }
+          // ห้องจากข้อมูลนักเรียนมาสมทบทีหลัง แล้วสร้างรายการใหม่ — ไม่ให้ถ่วงตารางที่กำลังจะขึ้น
+          _ttoLoadStudentClasses(function() {
+            _ttoBuildClassList();
+            if (_ttoHomeroomData.length > 0 && document.getElementById('ttoHomeroomBody')) {
+              _ttoRenderHomeroomTable();
+            }
+          });
         })
         .withFailureHandler(function(err) {
           if (wrap) wrap.innerHTML = '<div class="text-center text-danger p-5">โหลดไม่สำเร็จ: ' + err.message + '</div>';
@@ -1040,7 +1480,9 @@ function initPrintSettings() {
         
         google.script.run.withSuccessHandler(res => {
             if(res.status === 'success') {
-                document.getElementById('cfg_school_name').value = res.sys.school_name || 'โรงเรียนภูพระบาทวิทยา';
+                // ห้ามเติมชื่อโรงเรียนใดล่วงหน้า — ช่องนี้กดบันทึกแล้วเข้า DB จริง
+                // เดิมเติม 'โรงเรียนภูพระบาทวิทยา' ให้ แอดมินโรงเรียนอื่นกดบันทึกก็ได้ชื่อผิดไปเลย
+                document.getElementById('cfg_school_name').value = res.sys.school_name || '';
                 
                 // รายชื่อที่จะดึงมาใส่ Dropdown
                 const selectIds = [
@@ -2091,8 +2533,12 @@ function initHomeroomPage() {
             .withSuccessHandler(function(rows) {
               if (!document.getElementById('ttoHomeroomBody')) return;
               _ttoAllRows = rows || [];
-              _ttoBuildClassList();
-              ttoLoadHomeroom();
+              // ห้องมาจากสองแหล่ง — ตารางสอน + ที่นักเรียนสังกัดอยู่จริง
+              _ttoLoadStudentClasses(function() {
+                if (!document.getElementById('ttoHomeroomBody')) return;
+                _ttoBuildClassList();
+                ttoLoadHomeroom();
+              });
             })
             .withFailureHandler(function() {
               if (document.getElementById('ttoHomeroomBody')) ttoLoadHomeroom();
@@ -2110,16 +2556,39 @@ function initHomeroomPage() {
     .getSystemConfig();
 }
 
+// ห้องเรียนที่มีนักเรียนอยู่จริง — เติมเข้ามาเพราะรายชื่อห้องจาก _ttoAllRows มาจาก
+// **ตารางสอน** อย่างเดียว โรงเรียนใหม่ที่นำเข้านักเรียนแล้วแต่ยังไม่มีตารางสอน
+// จะไม่มีห้องให้เลือกตอนตั้งครูที่ปรึกษาเลย ทั้งที่ลำดับตั้งค่าให้ทำ HR หลังนักเรียน
+var _ttoStudentClasses = [];
+
+function _ttoLoadStudentClasses(done) {
+  var year = window._hrActiveYear || (getSessionUser() || {}).currentYear || '';
+  google.script.run
+    .withSuccessHandler(function(s) {
+      _ttoStudentClasses = (s && s.byClass) ? Object.keys(s.byClass) : [];
+      if (done) done();
+    })
+    .withFailureHandler(function() { if (done) done(); })
+    .getStudentSummaryStats(year);
+}
+
 function _ttoBuildClassList() {
   var seen = {};
   _ttoClassList = [];
-  _ttoAllRows.forEach(function(r) {
-    var lv = String(r.data[2]).trim(), rm = String(r.data[3]).trim();
+  var push = function(lv, rm) {
+    lv = String(lv || '').trim(); rm = String(rm || '').trim();
     if (!lv || !rm) return;
     var key = lv + '/' + rm;
     if (seen[key]) return;
     seen[key] = true;
     _ttoClassList.push({ level: lv, room: rm });
+  };
+  _ttoAllRows.forEach(function(r) { push(r.data[2], r.data[3]); });
+  // 'ม.1/2' → level 'ม.1' + room '2' · แยกที่ '/' ตัวสุดท้ายเผื่อชื่อชั้นมี '/' ปนมา
+  _ttoStudentClasses.forEach(function(cls) {
+    var s = String(cls || '').trim();
+    var at = s.lastIndexOf('/');
+    if (at > 0) push(s.slice(0, at), s.slice(at + 1));
   });
   _ttoClassList.sort(function(a, b) {
     return (a.level + '/' + a.room).localeCompare(b.level + '/' + b.room, 'th', { numeric: true });

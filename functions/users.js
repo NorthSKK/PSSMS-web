@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
+const { assertRows, prepareRows, assertNoErrors } = require('../lib/importSpec');
 
 function invalidateUsers() {
   cache.del('all_users');
@@ -64,28 +65,35 @@ async function deleteUser([username]) {
   return { status: 'success', message: 'ลบสำเร็จ' };
 }
 
-async function importStudentCSV([rows, year]) {
-  if (!Array.isArray(rows) || rows.length === 0) return { status: 'success', message: 'นำเข้า 0 รายการ', imported: 0 };
+// ปีการศึกษามาจากค่า active ในระบบเท่านั้น ไม่ใช่คอลัมน์ในไฟล์ — พิมพ์ปีผิดในช่อง
+// Excel ช่องเดียวคือนักเรียนทั้งรุ่นไปโผล่ผิดปี โดยที่หน้าจอไม่มีอะไรบอก
+async function importStudentCSV([rows]) {
+  assertRows(rows);
+  const prepared = prepareRows('student', rows);
+  assertNoErrors(prepared.errors);
+
+  const { year } = await require('./getSystemConfig')();
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   let count = 0;
   try {
     await client.query('BEGIN');
-    for (const r of rows) {
-      if (!r.username) continue;
+    for (const r of prepared.rows) {
+      // ระดับ + ห้อง กรอกแยกกันในไฟล์ แต่ users.department เก็บห้องเรียนรวบเป็น 'ม.1/2'
+      const className = `${r.level}/${r.room}`;
       await client.query(
         `INSERT INTO users(username, password, full_name, role, department, email, year, status)
          VALUES($1,$2,$3,'Student',$4,$5,$6,$7)
          ON CONFLICT (username) DO UPDATE SET
            full_name=$3, department=$4, email=$5, year=$6, status=$7`,
         [
-          String(r.username).trim(),
-          String(r.password || r.username).trim(),
-          String(r.fullName || r.full_name || '').trim(),
-          String(r.department || r.className || '').trim(),
-          String(r.email || '').trim(),
-          String(r.year || year || '').trim(),
-          String(r.status || 'ปกติ'),
+          r.username,
+          r.username,   // รหัสผ่านเริ่มต้น = รหัสนักเรียน ไฟล์จึงไม่ต้องมีรหัสผ่านติดไปด้วย
+          r.fullName,
+          className,
+          r.email,
+          String(year || ''),
+          'ปกติ',
         ]
       );
       count++;
@@ -102,27 +110,29 @@ async function importStudentCSV([rows, year]) {
 }
 
 async function importTeacherCSV([rows]) {
-  if (!Array.isArray(rows) || rows.length === 0) return { status: 'success', message: 'นำเข้า 0 รายการ', imported: 0 };
+  assertRows(rows);
+  const prepared = prepareRows('teacher', rows);
+  assertNoErrors(prepared.errors);
+
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   let count = 0;
   try {
     await client.query('BEGIN');
-    for (const r of rows) {
-      if (!r.username) continue;
+    for (const r of prepared.rows) {
       await client.query(
         `INSERT INTO users(username, password, full_name, role, department, email, status)
          VALUES($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (username) DO UPDATE SET
            full_name=$3, role=$4, department=$5, email=$6, status=$7`,
         [
-          String(r.username).trim(),
-          String(r.password || r.username).trim(),
-          String(r.fullName || r.full_name || '').trim(),
-          String(r.role || 'Teacher'),
-          String(r.department || r.dept || '').trim(),
-          String(r.email || '').trim(),
-          String(r.status || 'ปกติ'),
+          r.username,
+          r.username,   // รหัสผ่านเริ่มต้น = ชื่อผู้ใช้
+          r.fullName,
+          r.role || 'Teacher',
+          r.department,
+          r.email,
+          'ปกติ',
         ]
       );
       count++;

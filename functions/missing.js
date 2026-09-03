@@ -499,7 +499,8 @@ async function getPrintConfigData([term, year]) {
 
   // sys data from print_config table
   let sys = {
-    school_name: sysConfig.schoolName || 'โรงเรียนภูพระบาทวิทยา',
+    school_name: sysConfig.schoolName || '',
+    school_address: '',
     principal_name: '', measure_head: '', academic_head: '',
   };
   try {

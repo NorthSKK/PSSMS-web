@@ -143,7 +143,7 @@
 
     <div class="bg-white border-b border-gray-200 px-4 py-3 no-print print:hidden">
       <div class="max-w-7xl mx-auto flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-700 font-medium">
-        <span>🏫 <?= data.sys.school_name || 'โรงเรียนภูพระบาทวิทยา' ?></span> 
+        <span>🏫 <?= data.sys.school_name || '' ?></span>
         <span class="text-navy font-bold">📚 <?= data.subName ?> (<?= data.subCode ?>)</span> 
         <span>👨‍🏫 <?= data.user.name ?></span> 
         <span>👥 <?= data.className ?></span> 
@@ -174,8 +174,8 @@
               class="h-20 print:h-24 mx-auto mb-4 object-contain">
             <h2 class="text-xl font-bold text-navy print:text-black print:text-xl">แบบบันทึกผลการพัฒนาคุณภาพผู้เรียน</h2>
             <p class="text-sm text-gray-600 mt-1 print:text-black print:text-sm">ตามหลักสูตรแกนกลางการศึกษาขั้นพื้นฐาน พุทธศักราช 2551</p>
-            <p class="text-lg font-bold text-gray-800 mt-3 print:text-black print:text-lg"><?= data.sys.school_name || 'โรงเรียนภูพระบาทวิทยา' ?></p>
-            <p class="text-sm text-gray-600 print:text-black print:text-sm">อำเภอบ้านผือ จังหวัดอุดรธานี</p>
+            <p class="text-lg font-bold text-gray-800 mt-3 print:text-black print:text-lg"><?= data.sys.school_name || '' ?></p>
+            <p class="text-sm text-gray-600 print:text-black print:text-sm"><?= data.sys.school_address || '' ?></p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-12 gap-6 print:grid-cols-12 print:gap-8">
@@ -418,7 +418,7 @@
     </main>
     
     <footer class="text-center text-xs text-gray-400 py-4 no-print print:hidden border-t bg-white">
-      ระบบงานวิชาการ PSSMS — โรงเรียนภูพระบาทวิทยา
+      ระบบงานวิชาการ PSSMS
     </footer>
   </div>
 

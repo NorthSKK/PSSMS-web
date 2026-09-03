@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
+const { assertRows, prepareRows, assertNoErrors } = require('../lib/importSpec');
 
 // Data array format: [subject_code, subject_name, level, room, location, teacher_id, day, period, term, year]
 function rowToArray(r) {
@@ -68,37 +69,54 @@ async function deleteTimetableRow([rowIndex]) {
   return { status: 'success', message: 'ลบสำเร็จ' };
 }
 
+/**
+ * นำเข้าตารางสอน — **ล้างตารางสอนของเทอม/ปีที่ active ทั้งหมดแล้วใส่ใหม่**
+ * เหตุผลที่ไม่ใช่ upsert อยู่ใน `docs/adr/0003-import-people-upsert-timetable-replace.md`
+ *
+ * เทอม/ปีมาจากค่า active ในระบบเท่านั้น ไม่ใช่คอลัมน์ในไฟล์ — ขอบเขต DELETE
+ * ห้ามมาจากช่องใน Excel พิมพ์ปีผิดตัวเดียวคือลบตารางสอนของปีที่ใช้งานอยู่ทิ้ง
+ */
 async function importTimetableCSV([rows]) {
-  if (!Array.isArray(rows) || rows.length === 0) return { status: 'success', message: 'ไม่มีข้อมูล', imported: 0 };
+  assertRows(rows);
+  const prepared = prepareRows('timetable', rows);
+  const errors = prepared.errors;
+
+  const { term, year } = await require('./getSystemConfig')();
+
+  // ครูต้องมีตัวตนก่อน — ของเดิม `continue` ทิ้งแถวเงียบ ๆ ครูทั้งคนหายจากตารางสอน
+  // โดยที่ยอด "นำเข้า N รายการ" ยังขึ้นเป็นสีเขียว
+  const teacherIds = [...new Set(prepared.rows.map((r) => r.teacherId).filter(Boolean))];
+  const known = new Set();
+  if (teacherIds.length) {
+    const { rows: found } = await query(
+      `SELECT username FROM users WHERE username = ANY($1)`, [teacherIds]
+    );
+    for (const u of found) known.add(u.username);
+  }
+  prepared.rows.forEach((r, i) => {
+    if (r.teacherId && !known.has(r.teacherId)) {
+      errors.push({ row: i + 2, message: `ไม่พบครูชื่อผู้ใช้ "${r.teacherId}" ในระบบ — นำเข้าครูก่อน` });
+    }
+  });
+
+  assertNoErrors(errors);
+
   const { pool } = require('../lib/db');
   const client = await pool.connect();
-  let count = 0;
+  let removed = 0;
   try {
     await client.query('BEGIN');
-    for (const r of rows) {
-      if (!r.teacher_id && !r.teacherId) continue;
-      const teacherId = String(r.teacherId || r.teacher_id).trim();
-      const check = await client.query(
-        `SELECT 1 FROM users WHERE username=$1`, [teacherId]
-      );
-      if (check.rowCount === 0) continue;
+    const del = await client.query(
+      `DELETE FROM timetable WHERE term=$1 AND year=$2`, [String(term), String(year)]
+    );
+    removed = del.rowCount;
+    for (const r of prepared.rows) {
       await client.query(
         `INSERT INTO timetable(subject_code,subject_name,level,room,location,teacher_id,day,period,term,year)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [
-          String(r.subjectCode || r.subject_code || '').trim(),
-          String(r.subjectName || r.subject_name || '').trim(),
-          String(r.level || '').trim(),
-          String(r.room || '').trim(),
-          String(r.location || '').trim(),
-          teacherId,
-          String(r.day || '').trim(),
-          String(r.period || '').trim(),
-          String(r.term || '').trim(),
-          String(r.year || '').trim(),
-        ]
+        [r.subjectCode, r.subjectName, r.level, r.room, r.location,
+         r.teacherId, r.day, r.period, String(term), String(year)]
       );
-      count++;
     }
     await client.query('COMMIT');
   } catch (e) {
@@ -107,7 +125,12 @@ async function importTimetableCSV([rows]) {
   } finally {
     client.release();
   }
-  return { status: 'success', message: `นำเข้า ${count} รายการ`, imported: count };
+  return {
+    status: 'success',
+    imported: prepared.rows.length,
+    removed,
+    message: `นำเข้าตารางสอนเทอม ${term}/${year} สำเร็จ — ลบของเดิม ${removed} แถว ใส่ใหม่ ${prepared.rows.length} แถว`,
+  };
 }
 
 async function swapTimetableTeacher([rowId1, rowId2]) {
