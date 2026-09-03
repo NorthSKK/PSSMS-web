@@ -130,18 +130,21 @@ async function main() {
   console.log('   ·', await demoContent.fillMediaTrash());
 
   // ทะเบียนสารบรรณให้มีหลายประเภท — โชว์ตัวกรองประเภทได้
+  // เจ้าของเป็น username ใน requester_id ส่วน requester เป็นชื่อที่แสดง — ต้องมีทั้งคู่
+  // เหมือนข้อมูลจริง ไม่งั้นเดโมไม่เคยเดินผ่านเส้นทางสิทธิ์ที่ครูเจอจริงเลย
   await query(`DELETE FROM sarabun`);
   const DOCS = [
-    ['บันทึกข้อความ', 'ศธ 118/2569', 'ขออนุญาตนำนักเรียนไปแข่งขันทักษะวิชาการ', TEACHER_NAMES.teacher1, '2026-08-24'],
-    ['บันทึกข้อความ', 'ศธ 117/2569', 'ขอใช้ห้องประชุมเพื่อจัดอบรมครู', TEACHER_NAMES.teacher3, '2026-08-21'],
-    ['ทะเบียนคำสั่ง', 'คำสั่ง 42/2569', 'แต่งตั้งคณะกรรมการดำเนินงานกีฬาสี', TEACHER_NAMES.admin, '2026-08-19'],
-    ['ทะเบียนหนังสือส่ง', 'ศธ 04231/210', 'รายงานผลการดำเนินงานประจำเดือนสิงหาคม', TEACHER_NAMES.admin, '2026-08-18'],
-    ['ทะเบียนเกียรติบัตร', 'กบ 55/2569', 'เกียรติบัตรนักเรียนแข่งขันคณิตศาสตร์', TEACHER_NAMES.teacher4, '2026-08-15'],
+    ['บันทึกข้อความ', 'ศธ 118/2569', 'ขออนุญาตนำนักเรียนไปแข่งขันทักษะวิชาการ', 'teacher1', '2026-08-24'],
+    ['บันทึกข้อความ', 'ศธ 117/2569', 'ขอใช้ห้องประชุมเพื่อจัดอบรมครู', 'teacher3', '2026-08-21'],
+    ['ทะเบียนคำสั่ง', 'คำสั่ง 42/2569', 'แต่งตั้งคณะกรรมการดำเนินงานกีฬาสี', 'admin', '2026-08-19'],
+    ['ทะเบียนหนังสือส่ง', 'ศธ 04231/210', 'รายงานผลการดำเนินงานประจำเดือนสิงหาคม', 'admin', '2026-08-18'],
+    ['ทะเบียนเกียรติบัตร', 'กบ 55/2569', 'เกียรติบัตรนักเรียนแข่งขันคณิตศาสตร์', 'teacher4', '2026-08-15'],
   ];
-  for (const [type, num, subject, requester, date] of DOCS) {
+  for (const [type, num, subject, username, date] of DOCS) {
     await query(
-      `INSERT INTO sarabun(doc_type,doc_number,subject,requester,target_date,status,year)
-       VALUES($1,$2,$3,$4,$5,'รอดำเนินการ',$6)`, [type, num, subject, requester, date, YEAR]
+      `INSERT INTO sarabun(doc_type,doc_number,subject,requester,requester_id,target_date,status,year)
+       VALUES($1,$2,$3,$4,$5,$6,'รอดำเนินการ',$7)`,
+      [type, num, subject, TEACHER_NAMES[username], username, date, YEAR]
     );
   }
 
