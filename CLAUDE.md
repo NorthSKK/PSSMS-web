@@ -342,7 +342,7 @@ web/
 | `score_history` | id, timestamp, teacher_id, student_id, subject_code, indicator_id, **old_score TEXT, new_score TEXT**, term, year | audit log, scores เป็น TEXT |
 | `qualitative_assess` | student_id, subject_code, term, year, **char1-4, char_total, char_grade, read1-4, read_total, read_grade, comp** | PK `(student_id, subject_code, term, year)` |
 | `grade_summary` | student_id, subject_code, total_score, grade, remedial_status, attendance_percent, term, year | ใช้สำหรับ grade-based risk card (0, ร, มส.) |
-| `print_config` | header config สำหรับพิมพ์ ปพ.5 |
+| `print_config` | header config สำหรับพิมพ์ ปพ.5 — `sys_data` (jsonb) เก็บ `school_name` `school_address` `principal_name` `head_*` · ⚠️ **`school_address` ไม่มีช่องกรอกใน UI** ต้องเติมลง DB ตอนส่งมอบ ไม่งั้นบรรทัดที่อยู่บนเอกสารราชการว่างเงียบ ๆ (ดู `docs/setup-new-school.md` ข้อ 7) |
 
 ### Clubs
 | Table | Cols | PK |
