@@ -10,10 +10,12 @@
       </div>
       <div id="adminSettingsCollapse" class="collapse show bg-light rounded-bottom">
         <div class="card-body p-4">
-          <div class="row g-3">
-            <div class="col-xl-4">
+          <!-- สองคอลัมน์ต้องสูงเท่ากัน: col เป็น flex column แล้วให้กล่องข้างในยืดเอง
+               ห้ามใส่ max-height + overflow ที่กล่องขวา — มันตัดกลางแถวจนป้ายโผล่แต่ช่องหาย -->
+          <div class="row g-3 align-items-stretch">
+            <div class="col-xl-4 d-flex flex-column">
               <div class="fw-bold mb-2 text-primary"><i class="fas fa-signature me-1"></i> 1. ผู้ลงนามหลัก</div>
-              <form id="formSignatory" class="bg-white p-3 rounded shadow-sm border h-100">
+              <form id="formSignatory" class="bg-white p-3 rounded shadow-sm border flex-grow-1">
                 <label class="small text-muted fw-bold mb-1">ชื่อโรงเรียน</label>
                 <input type="text" class="form-control form-control-sm mb-3" id="cfg_school_name" placeholder="ชื่อโรงเรียน">
                 <label class="small text-muted fw-bold mb-1">ที่ตั้งโรงเรียน</label>
@@ -21,12 +23,12 @@
                 <label class="small text-muted fw-bold mb-1">ผู้อำนวยการโรงเรียน</label>
                 <select class="form-select form-select-sm mb-3 head-dept-select" id="cfg_principal_name"></select>
                 <label class="small text-muted fw-bold mb-1">หัวหน้างานวัดและประเมินผล</label>
-                <select class="form-select form-select-sm head-dept-select" id="cfg_measure_head"></select>
+                <select class="form-select form-select-sm head-dept-select mb-0" id="cfg_measure_head"></select>
               </form>
             </div>
-            <div class="col-xl-8">
+            <div class="col-xl-8 d-flex flex-column">
               <div class="fw-bold mb-2 text-info"><i class="fas fa-users-cog me-1"></i> 2. หัวหน้ากลุ่มสาระการเรียนรู้</div>
-              <div class="bg-white p-3 rounded shadow-sm border" style="max-height: 250px; overflow-y: auto;">
+              <div class="bg-white p-3 rounded shadow-sm border flex-grow-1">
                 <div class="row g-2">
                   <div class="col-6"><label class="small text-muted mb-1">ภาษาไทย</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_thai"></select></div>
                   <div class="col-6"><label class="small text-muted mb-1">คณิตศาสตร์</label><select class="form-select form-select-sm head-dept-select" id="cfg_head_math"></select></div>
