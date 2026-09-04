@@ -342,7 +342,7 @@ web/
 | `score_history` | id, timestamp, teacher_id, student_id, subject_code, indicator_id, **old_score TEXT, new_score TEXT**, term, year | audit log, scores เป็น TEXT |
 | `qualitative_assess` | student_id, subject_code, term, year, **char1-4, char_total, char_grade, read1-4, read_total, read_grade, comp** | PK `(student_id, subject_code, term, year)` |
 | `grade_summary` | student_id, subject_code, total_score, grade, remedial_status, attendance_percent, term, year | ใช้สำหรับ grade-based risk card (0, ร, มส.) |
-| `print_config` | header config สำหรับพิมพ์ ปพ.5 — `sys_data` (jsonb) เก็บ `school_name` `school_address` `principal_name` `head_*` · ⚠️ **`school_address` ไม่มีช่องกรอกใน UI** ต้องเติมลง DB ตอนส่งมอบ ไม่งั้นบรรทัดที่อยู่บนเอกสารราชการว่างเงียบ ๆ (ดู `docs/setup-new-school.md` ข้อ 7) |
+| `print_config` | header config สำหรับพิมพ์ ปพ.5 — `sys_data` (jsonb) เก็บ `school_name` `school_address` `principal_name` `measure_head` `head_*` กรอกจากการ์ด "ส่วนจัดการของผู้ดูแลระบบ" บนหน้า `Page_Score_Entry` · ⚠️ **`savePrintConfigData` เขียน `sys_data` ทับทั้งก้อน ไม่ได้ merge** ฟิลด์ที่ฟอร์มไม่ส่งมาหายทันทีที่กดบันทึก เพิ่มฟิลด์ใหม่ต้องแตะ 3 ที่: markup, ตัวโหลด, `sysObj` ตอน save (เทส `test/print_config.test.js`) |
 
 ### Clubs
 | Table | Cols | PK |
@@ -1698,6 +1698,7 @@ test/
 ├── import.test.js       นำเข้าครู/นักเรียน/ตารางสอน + ห้าม hardcode ชื่อโรงเรียน
 ├── import_client.test.js  parser ฝั่งหน้าเว็บ + เทียบว่าตัดสินตรงกับ server
 ├── setup_checklist.test.js  รายการตั้งค่าเริ่มต้นของโรงเรียนใหม่
+├── print_config.test.js  หัวกระดาษ ปพ.5 — ฟิลด์หายเมื่อฟอร์มไม่ส่งมา
 ├── substitute_timetable.test.js  คาบสอนแทนในตารางวันนี้ + สิทธิ์เช็คชื่อของครูสอนแทน
 ├── substituteAuto.test.js  preview/apply จัดสอนแทนอัตโนมัติ
 ├── license.test.js      สถานะ licence + READONLY_ALLOWED (พิมพ์ ปพ.5 ต้องได้เสมอ)

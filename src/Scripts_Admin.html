@@ -1483,6 +1483,8 @@ function initPrintSettings() {
                 // ห้ามเติมชื่อโรงเรียนใดล่วงหน้า — ช่องนี้กดบันทึกแล้วเข้า DB จริง
                 // เดิมเติม 'โรงเรียนภูพระบาทวิทยา' ให้ แอดมินโรงเรียนอื่นกดบันทึกก็ได้ชื่อผิดไปเลย
                 document.getElementById('cfg_school_name').value = res.sys.school_name || '';
+                var _addrEl = document.getElementById('cfg_school_address');
+                if (_addrEl) _addrEl.value = res.sys.school_address || '';
                 
                 // รายชื่อที่จะดึงมาใส่ Dropdown
                 const selectIds = [
@@ -1522,6 +1524,9 @@ function saveAllPrintConfig() {
     // เก็บข้อมูลลง Object ทั้งหมด
     const sysObj = {
         school_name: document.getElementById('cfg_school_name').value.trim(),
+        // ⚠️ ต้องส่งมาด้วยเสมอ — savePrintConfigData เขียน sys_data ทับทั้งก้อน ไม่ได้ merge
+        // ตกหล่นเมื่อไหร่ ที่อยู่บนหัว ปพ.5 หายทันทีที่แอดมินกดบันทึกหน้านี้
+        school_address: (document.getElementById('cfg_school_address')?.value || '').trim(),
         principal_name: document.getElementById('cfg_principal_name').value,
         measure_head: document.getElementById('cfg_measure_head').value,
         head_thai: document.getElementById('cfg_head_thai').value,
