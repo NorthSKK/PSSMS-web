@@ -166,6 +166,20 @@ async function main() {
     await query(`DELETE FROM ${t}`).catch(e => console.warn(`  ข้าม ${t}: ${e.message}`));
   }
 
+  // ⚠️ **ตั้งเทอมที่ใช้งานกับช่วงวันของเทอมนั้นเสมอ** ถึงจะไม่ได้ล้าง system_settings ก็ตาม
+  // เดิมพึ่งค่าที่ก๊อปมาจาก prod ตอนตั้งเครื่องครั้งแรกอย่างเดียว ใครเผลอแก้แถวนี้
+  // (เทสตัวหนึ่งเคยเขียนทับด้วยปี พ.ศ.) เทสของ progress_board กับ student_watch
+  // จะพังยกไฟล์ แล้ว reseed ก็ไม่ช่วย เพราะไม่มีใครเขียนค่าที่ถูกกลับมา
+  // ⚠️ วันที่เป็น **ค.ศ.** แม้ปีการศึกษาจะเป็น พ.ศ. — ใส่ 2569-05-11 แล้วช่วงเทอม
+  // กลายเป็นอนาคตไกล ทุกอย่างที่นับ "คาบที่ควรสอน" จะได้ศูนย์โดยไม่มี error
+  await query(
+    `INSERT INTO system_settings(key,subkey,value1,value2) VALUES('Active','Term',$1,$2)
+     ON CONFLICT(key,subkey) DO UPDATE SET value1=$1, value2=$2`, [TERM, YEAR]);
+  await query(
+    `INSERT INTO system_settings(key,subkey,value1,value2) VALUES('TermData',$1,$2,$3)
+     ON CONFLICT(key,subkey) DO UPDATE SET value1=$2, value2=$3`,
+    [`${TERM}_${YEAR}`, '2026-05-11', '2026-10-10']);
+
   // users ต้องมาก่อน timetable — timetable_teacher_id_fkey อ้าง users.username
   for (const t of TEACHERS) {
     await query(

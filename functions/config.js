@@ -1,8 +1,22 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 
-async function saveSystemConfig([configData]) {
-  const c = configData || {};
+/**
+ * ⚠️ **หน้าเว็บส่งมาเป็น 4 ตัวเรียงกัน ไม่ใช่ก้อนเดียว**
+ * `saveSystemConfig(term, year, startDate, endDate)` (`src/Scripts_Admin.html`)
+ *
+ * เดิมประกาศเป็น `[configData]` ตัวเดียว — `configData` จึงรับค่า `term` ซึ่งเป็น
+ * **สตริง** ไป แล้ว `c.term` เป็น `undefined` ทุกครั้ง ทุก `if` ตกหมด
+ * **ไม่มี query ไหนได้ทำงานเลย** แต่ยังคืน `{status:'success'}` ตามเดิม
+ * ครูเห็น "บันทึกการตั้งค่าสำเร็จ" แล้วหน้าโหลดค่าเก่ากลับมาให้ดู
+ * เหมือนตั้งค่าติดแค่ครั้งแรกครั้งเดียวแล้วเปลี่ยนไม่ได้อีกเลย
+ *
+ * รับทั้งสองรูปเพราะรูปก้อนเดียวรองรับ `schoolName`/`schoolLogo` ที่ตัวเรียงไม่มี
+ */
+async function saveSystemConfig(args) {
+  const [a, b, start, end] = Array.isArray(args) ? args : [];
+  const c = (a && typeof a === 'object') ? a
+    : { term: a, year: b, termStart: start, termEnd: end };
 
   if (c.term && c.year) {
     await query(
