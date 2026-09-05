@@ -14,7 +14,13 @@ const TODAY = (() => {
 })();
 const SUB_PERIOD = '2';
 
-test('ตารางวันนี้ของครูสอนแทน มีคาบสอนแทนรวมอยู่ด้วย', async () => {
+// ⚠️ `db/seed-dev.js` วาง "day 0" ด้วย `weekdayOffset()` ซึ่ง**ข้ามเสาร์-อาทิตย์**
+// (ตารางสอนมีแค่จันทร์-ศุกร์ คาบสอนแทนวันหยุดจึงไม่มีความหมาย)
+// เทสที่พึ่ง "คาบสอนแทนของวันนี้" จึงรันได้เฉพาะวันทำการ — ไม่ใช่เทสเปราะ
+// แต่เป็นข้อเท็จจริงของข้อมูล เคยพังทุกเสาร์-อาทิตย์โดยไม่มีใครรู้ว่าเพราะอะไร
+const WEEKEND = [0, 6].includes(new Date().getDay()) && 'วันหยุด — seed ไม่วางคาบสอนแทน';
+
+test('ตารางวันนี้ของครูสอนแทน มีคาบสอนแทนรวมอยู่ด้วย', { skip: WEEKEND }, async () => {
   const rows = await ok('getTeacherTimetableWithStatus', ['teacher2'], 'teacher2');
   const sub = rows.find(r => r[8]);
   assert.ok(sub, 'คาบสอนแทนไม่ขึ้นในตารางวันนี้');
@@ -42,7 +48,7 @@ const batch = (date, period) => M6_STUDENTS.map(id => ({
   period, studentId: id, studentName: `นักเรียน ${id}`, status: 'มา',
 }));
 
-test('ครูสอนแทนเช็คชื่อคาบที่ถูกจัดให้ได้', async () => {
+test('ครูสอนแทนเช็คชื่อคาบที่ถูกจัดให้ได้', { skip: WEEKEND }, async () => {
   const res = await ok('saveAttendanceBatch', [batch(TODAY, SUB_PERIOD)], 'teacher2');
   assert.equal(res.status, 'success');
 });
