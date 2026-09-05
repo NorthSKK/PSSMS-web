@@ -43,6 +43,10 @@ if (require.main === module) {
     .then(() => require('./db/bootstrapAdmin').run().catch(err => {
       console.error('[admin]', err.message);
     }))
+    // รีเซ็ตรหัส admin ตามคำสั่งจากผู้ขาย (ตั้ง RESET_ADMIN_PASSWORD แล้ว redeploy)
+    .then(() => require('./db/resetAdmin').run().catch(err => {
+      console.error('[admin]', err.message);
+    }))
     .then(() => require('./functions/mediaCards').purgeExpiredCards().catch(err => {
       // กวาดไม่สำเร็จไม่ใช่เหตุให้แอปไม่ขึ้น — รอบหน้าค่อยกวาดใหม่
       console.error('[purge]', err.message);
