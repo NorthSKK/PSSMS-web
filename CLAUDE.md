@@ -1009,7 +1009,11 @@ function section(fn) {
 - `pssms.app` = **เว็บขาย** repo แยก `pssms-site` (Cloudflare Workers + static assets + D1)
   แยก repo โดยตั้งใจ: repo นี้ push `main` = deploy production ทันที การแก้คำโฆษณา
   ไม่ควร restart ระบบที่ครูกำลังเช็คชื่ออยู่ และเว็บขายต้องไม่ล่มพร้อมแอป
-- `<โรงเรียน>.pssms.app` = แอปของแต่ละโรงเรียน (ยังไม่ได้ชี้ — ตอนนี้ยังใช้ URL ของ Railway)
+- `<โรงเรียน>.pssms.app` = แอปของแต่ละโรงเรียน · ชี้แล้วผ่าน Cloudflare DNS → Railway
+  (`pw.pssms.app` ภูพระบาทวิทยา · `demo.pssms.app` เดโม) วิธีชี้อยู่ที่ `docs/setup-new-school.md` ข้อ 4
+  โรงเรียนที่ยังไม่ได้ชี้ใช้ URL ของ Railway ไปก่อนได้ — ระบบทำงานเหมือนกันทุกอย่าง
+  ⚠️ ทะเบียนลูกค้าใน `pssms-site` ตรวจสถานะโดยยิงที่ `<ชื่อย่อ>.pssms.app`
+  ชื่อย่อจึงต้องตรงกับ subdomain เสมอ
 - ภาพหน้าจอบนเว็บขายถ่ายจาก `db/seed-demo.js` **ห้ามถ่ายจาก production**
 
 ### ติดตามนักเรียนรายวัน — `Page_Student_Watch`
