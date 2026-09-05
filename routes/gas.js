@@ -37,7 +37,7 @@ const ADMIN_ONLY = new Set([
   'addCurriculumItem', 'updateCurriculumItem', 'deleteCurriculumItem',
   'setupCalendarDatabase', 'setupClubDatabase', 'setupCurriculumDatabase',
   'promoteStudentsToNextYear', 'deleteClub', 'adminAddMember', 'adminRemoveMember',
-  'getAllUsers',
+  'getAllUsers', 'getLicenseInfo',
   'deleteSavingsTransaction', 'importSavingsCSV',
   // ครูสร้าง/แก้สารบรรณได้ แต่ลบเป็นของ Admin — sarabun ไม่มีคอลัมน์เจ้าของให้ตรวจสิทธิ์รายแถว
   'deleteSarabun',
@@ -99,7 +99,7 @@ const READONLY_ALLOWED = new Set([
     'getStudentsByClub', 'getSubjectConfig', 'getSystemConfig',
     'getTeacherAtRiskDashboard', 'getTeacherDashboardBundle', 'getTeacherListForClubDropdown',
     'getTeacherListForDropdown', 'getTeacherProgressBoard', 'getTeacherRiskDashboard',
-    'getImportSpec', 'getSetupChecklist',
+    'getImportSpec', 'getSetupChecklist', 'getLicenseInfo',
     'getTeacherSubjects',
     'getTeacherTimetable', 'getTeacherTimetableByDate', 'getTeacherTimetableWithStatus',
     'getTeachersForTimetable', 'getTodayAttendanceHistory', 'getTodayMorningSummary',
@@ -136,6 +136,7 @@ const handlers = {
   getSystemConfig:                 require('../functions/getSystemConfig'),
   getDemoAccounts:                 require('../functions/getDemoAccounts'),
   getLicenseStatus:                require('../functions/getLicenseStatus'),
+  getLicenseInfo:                  require('../functions/getLicenseInfo'),
   getAvailableTerms:               async () => {
     const { query } = require('../lib/db');
     const { rows } = await query(

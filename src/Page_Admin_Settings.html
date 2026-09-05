@@ -17,6 +17,15 @@
           <div class="small text-muted" id="currentRangeDisplay">กำลังโหลด...</div>
         </div>
 
+        <!-- วันหมดอายุการใช้งาน — อ่านอย่างเดียว ตั้งค่าโดยผู้ขาย
+             ซ่อนตัวเองเมื่อไม่มีวันหมดอายุ (โรงเรียนที่ไม่จำกัด) -->
+        <div id="licenseInfoWrap" class="p-3 rounded-3 mb-3 d-none"
+             style="background: var(--p-bg); border: 1px solid var(--p-border);">
+          <div class="small text-muted mb-1" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;">อายุการใช้งานระบบ</div>
+          <div class="fw-bold" id="licenseUntilDisplay">กำลังโหลด...</div>
+          <div class="small text-muted mt-1" id="licenseNoteDisplay"></div>
+        </div>
+
         <form id="systemConfigForm">
           <div class="row g-3">
             <div class="col-md-6">

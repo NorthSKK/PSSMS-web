@@ -261,7 +261,51 @@ function formatDateForInput(dateStr) {
   } catch(e) { return ""; }
 }
 
+/**
+ * อายุการใช้งานระบบบนหน้าตั้งค่า — อ่านอย่างเดียว ผู้ขายเป็นคนตั้ง
+ * ⚠️ ไม่มีวันหมดอายุ (state 'none') = ซ่อนทั้งกล่อง ไม่ใช่ขึ้นว่า "ไม่จำกัด"
+ * โรงเรียนที่จ่ายรายปีเห็นคำว่าไม่จำกัดแล้วจะเข้าใจผิดทันทีถ้าวันหนึ่งมีการตั้งค่า
+ */
+function loadLicenseInfo() {
+  var wrap = document.getElementById('licenseInfoWrap');
+  if (!wrap) return;
+  google.script.run.withSuccessHandler(function (info) {
+    if (!info || info.state === 'none' || !info.until) { wrap.classList.add('d-none'); return; }
+    wrap.classList.remove('d-none');
+
+    var d = document.getElementById('licenseUntilDisplay');
+    var n = document.getElementById('licenseNoteDisplay');
+    d.textContent = 'ใช้งานได้ถึง ' + thaiDateLabel(info.until);
+
+    var left = info.daysLeft;
+    if (info.state === 'locked') {
+      d.style.color = 'var(--p-danger)';
+      n.textContent = 'หมดอายุแล้ว ขณะนี้เป็นโหมดอ่านอย่างเดียว — พิมพ์ ปพ.5 และ export ยังใช้ได้';
+    } else if (info.state === 'grace') {
+      d.style.color = 'var(--p-danger)';
+      n.textContent = 'เลยกำหนดแล้ว ยังบันทึกข้อมูลได้อีก ' + (info.graceDays + left) + ' วัน';
+    } else if (info.state === 'warn') {
+      d.style.color = 'var(--p-warning)';
+      n.textContent = 'เหลืออีก ' + left + ' วัน — ติดต่อผู้ดูแลระบบเพื่อต่ออายุ';
+    } else {
+      d.style.color = 'var(--p-accent)';
+      n.textContent = 'เหลืออีก ' + left + ' วัน';
+    }
+  }).withFailureHandler(function () {
+    wrap.classList.add('d-none');   // อ่านไม่ได้ก็ไม่ต้องเดา
+  }).getLicenseInfo();
+}
+
+/** 'YYYY-MM-DD' → '31 ต.ค. 2569' (พ.ศ.) */
+function thaiDateLabel(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  if (!m) return String(iso || '');
+  var months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return Number(m[3]) + ' ' + months[Number(m[2]) - 1] + ' ' + (Number(m[1]) + 543);
+}
+
 function loadCurrentConfig() {
+  loadLicenseInfo();
   showLoader(true);
   
   safeRun(3).withSuccessHandler(function(config) {

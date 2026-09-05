@@ -47,6 +47,10 @@ if (require.main === module) {
     .then(() => require('./db/resetAdmin').run().catch(err => {
       console.error('[admin]', err.message);
     }))
+    // วันหมดอายุที่ผู้ขายตั้งมาให้ (ตั้ง LICENSE_UNTIL แล้ว redeploy)
+    .then(() => require('./db/applyLicense').run().catch(err => {
+      console.error('[license]', err.message);
+    }))
     .then(() => require('./functions/mediaCards').purgeExpiredCards().catch(err => {
       // กวาดไม่สำเร็จไม่ใช่เหตุให้แอปไม่ขึ้น — รอบหน้าค่อยกวาดใหม่
       console.error('[purge]', err.message);
