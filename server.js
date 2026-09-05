@@ -56,7 +56,20 @@ if (require.main === module) {
       });
     })
     .catch(err => {
-      console.error('[boot] migration ล้มเหลว ไม่เปิดเซิร์ฟเวอร์:', err.message);
+      // ⚠️ `err.message` ว่างได้จริง — ต่อ Postgres ไม่ติดแล้วชื่อโฮสต์มีทั้ง IPv6 และ IPv4
+      // Node จะโยน AggregateError ที่ message เป็นสตริงว่าง ทำให้ log บอกแค่ว่า
+      // "migration ล้มเหลว" เฉย ๆ แล้วไล่ต่อไม่ได้เลยว่าเพราะอะไร (เจอตอนตั้งโรงเรียนใหม่
+      // แล้ว DATABASE_URL ว่าง) — ต้องกาง `.errors` ออกมาเอง
+      const detail = err.message
+        || (Array.isArray(err.errors) && err.errors.map(e => e.message).filter(Boolean).join(' · '))
+        || err.code || String(err);
+      let target = '(ไม่ได้ตั้ง DATABASE_URL)';
+      if (process.env.DATABASE_URL) {
+        // host อย่างเดียว ไม่เอา user/password ติดไปใน log
+        try { target = new URL(process.env.DATABASE_URL).host; }
+        catch { target = '(DATABASE_URL อ่านไม่ออก)'; }
+      }
+      console.error(`[boot] migration ล้มเหลว ไม่เปิดเซิร์ฟเวอร์: ${detail} · ปลายทาง ${target}`);
       process.exit(1);
     });
 }
