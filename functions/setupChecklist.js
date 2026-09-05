@@ -17,8 +17,27 @@
 
 const { query } = require('../lib/db');
 const getSystemConfig = require('./getSystemConfig');
+const adminIssued = require('../db/adminIssued');
 
 const DEFAULT_ADMIN_PASSWORD = '1234';
+
+/**
+ * รหัส admin ยังเป็นใบที่ได้มาตอนติดตั้งอยู่ไหม
+ *
+ * มีสองที่มา: `'1234'` ของโรงเรียนยุคแรก กับรหัสสุ่มที่ระบบหลังบ้านออกให้
+ * ซึ่งจดลายนิ้วมือไว้ตอน boot (`db/adminIssued.js`) · เทียบใน node ไม่ใช่ใน SQL
+ * เพราะ pgcrypto ไม่ได้เปิดทุก deployment
+ *
+ * ⚠️ คืนแค่ true/false ห้ามให้รหัสหรือลายนิ้วมือหลุดออกไปกับผลลัพธ์
+ */
+async function stillUsingIssuedPassword() {
+  const { rows } = await query("SELECT password FROM users WHERE username = 'admin'");
+  if (!rows.length) return false;            // ลบบัญชี admin ทิ้งแล้วใช้บัญชีอื่น = ไม่ต้องเตือน
+  const current = String(rows[0].password || '');
+  if (current === DEFAULT_ADMIN_PASSWORD) return true;
+  const issued = await adminIssued.read();
+  return !!issued && adminIssued.fingerprint(current) === issued;
+}
 
 async function getSetupChecklist() {
   const cfg = await getSystemConfig();
@@ -30,14 +49,20 @@ async function getSetupChecklist() {
       (SELECT count(*)::int FROM timetable WHERE term=$1 AND year=$2 AND subject_code<>'HR') AS lessons,
       (SELECT count(DISTINCT teacher_id)::int FROM timetable
          WHERE term=$1 AND year=$2 AND subject_code='HR')                                 AS homeroom,
-      (SELECT count(*)::int FROM users
-         WHERE username='admin' AND password=$3)                                          AS weakadmin,
+      -- หัวกระดาษ ปพ.5 ของเทอมที่ใช้อยู่ — ต้องมีที่ตั้งและชื่อ ผอ. ถึงจะพิมพ์ส่งเขตได้
+      -- ⚠️ ไม่ดู school_name เพราะ getPrintConfigData เติมให้จาก schoolName อยู่แล้ว
+      --    ข้อนี้จะติ๊กเองทันทีที่ตั้งชื่อโรงเรียน ทั้งที่หัวกระดาษยังว่างครึ่งใบ
+      (SELECT count(*)::int FROM print_config
+         WHERE term=$1 AND year=$2
+           AND coalesce(sys_data->>'school_address','')<>''
+           AND coalesce(sys_data->>'principal_name','')<>'')                               AS pp5head,
       -- ต้องนับแถวเอง ห้ามดูจาก cfg.term/cfg.year (ดูคอมเมนต์เหนือข้อ term ข้างล่าง)
       (SELECT count(*)::int FROM system_settings
          WHERE key='Active' AND subkey='Term'
            AND coalesce(value1,'')<>'' AND coalesce(value2,'')<>'')                        AS activeterm
-  `, [String(cfg.term), String(cfg.year), DEFAULT_ADMIN_PASSWORD]);
+  `, [String(cfg.term), String(cfg.year)]);
   const c = counts[0];
+  const issuedPassword = await stillUsingIssuedPassword();
 
   const items = [
     { key: 'schoolName', label: 'ตั้งชื่อโรงเรียน', page: 'Page_Admin_Settings',
@@ -80,9 +105,13 @@ async function getSetupChecklist() {
       done: c.homeroom > 0, count: c.homeroom,
       hint: 'ขาดข้อนี้ จะไม่มีโฮมรูมและกิจกรรมหน้าเสาธง' },
 
+    { key: 'pp5Header', label: 'กรอกหัวกระดาษ ปพ.5', page: 'Page_Score_Entry',
+      done: c.pp5head > 0,
+      hint: 'ที่ตั้งโรงเรียนและชื่อ ผอ. — ขึ้นบนเอกสารที่พิมพ์ส่งเขตจริง' },
+
     { key: 'adminPassword', label: 'เปลี่ยนรหัสผ่านผู้ดูแลระบบ', page: 'Page_Admin_Users',
-      done: c.weakadmin === 0,
-      hint: 'บัญชี admin ยังใช้รหัสผ่านเริ่มต้นอยู่ ใครก็เดาได้' },
+      done: !issuedPassword,
+      hint: 'ยังเป็นรหัสที่ได้มาตอนติดตั้ง ซึ่งเดินผ่านมือคนอื่นมาแล้ว' },
   ];
 
   return {

@@ -14,6 +14,7 @@
  */
 
 const { query } = require('../lib/db');
+const adminIssued = require('./adminIssued');
 
 async function run() {
   const { rows } = await query('SELECT count(*)::int AS n FROM users');
@@ -32,6 +33,7 @@ async function run() {
      ON CONFLICT (username) DO NOTHING`,
     [password],
   );
+  await adminIssued.record(password);
   console.log('[admin] สร้างบัญชี admin ใบแรกให้แล้ว — เปลี่ยนรหัสผ่านก่อนส่งมอบ');
   return 'admin';
 }

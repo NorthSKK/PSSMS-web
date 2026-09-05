@@ -10,6 +10,7 @@ const assert = require('node:assert');
 const { ok, denied, stop } = require('./helpers/api');
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
+const adminIssued = require('../db/adminIssued');
 
 after(stop);
 
@@ -43,6 +44,7 @@ test('หน้าปลายทางทุกข้อต้องมีอ�
     students:      "handleFileUpload(this, 'student')",
     timetable:     'handleTimetableUpload(this)',
     homeroom:      'ttoAddHomeroomRow()',
+    pp5Header:     'cfg_principal_name',
     adminPassword: "openModal('add')",
   };
 
@@ -143,6 +145,24 @@ test('บัญชี admin ที่ยังใช้รหัสเริ่�
     assert.strictEqual(item(await fresh(), 'adminPassword').done, true);
   } finally {
     await query(`UPDATE users SET password='1234' WHERE username='admin'`);
+  }
+});
+
+test('รหัสสุ่มที่ผู้ขายออกให้ก็ยังนับว่ายังไม่เปลี่ยน', async () => {
+  // โรงเรียนใหม่ไม่มีรหัส '1234' อีกแล้ว — bootstrapAdmin บังคับให้ตั้งรหัสเอง
+  // ถ้าข้อนี้ดูแค่ '1234' มันจะติ๊ก ✓ ตั้งแต่วินาทีแรกทั้งที่ยังใช้รหัสที่เราส่งไปทางไลน์
+  const issued = 'สุ่มมาจากระบบหลังบ้าน';
+  await query(`UPDATE users SET password=$1 WHERE username='admin'`, [issued]);
+  await adminIssued.record(issued);
+  try {
+    assert.strictEqual(item(await fresh(), 'adminPassword').done, false);
+
+    await query(`UPDATE users SET password='ที่โรงเรียนตั้งเอง' WHERE username='admin'`);
+    assert.strictEqual(item(await fresh(), 'adminPassword').done, true);
+  } finally {
+    await query(`UPDATE users SET password='1234' WHERE username='admin'`);
+    await query('DELETE FROM system_settings WHERE key=$1 AND subkey=$2',
+      [adminIssued.KEY, adminIssued.SUBKEY]);
   }
 });
 

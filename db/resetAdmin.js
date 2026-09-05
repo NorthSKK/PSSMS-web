@@ -15,6 +15,7 @@
 
 const crypto = require('crypto');
 const { query } = require('../lib/db');
+const adminIssued = require('./adminIssued');
 
 const KEY = 'adminReset';
 const SUBKEY = 'applied';
@@ -49,6 +50,8 @@ async function run() {
      ON CONFLICT (key, subkey) DO UPDATE SET value1 = EXCLUDED.value1`,
     [KEY, SUBKEY, mark],
   );
+  // รหัสใบนี้ผู้ขายเป็นคนออก — การ์ดตั้งค่าเริ่มต้นต้องกลับมาเตือนให้เปลี่ยนอีกครั้ง
+  await adminIssued.record(password);
 
   console.log('[admin] รีเซ็ตรหัสผ่าน admin ตามคำสั่งจากผู้ขายแล้ว');
   return 'admin';
