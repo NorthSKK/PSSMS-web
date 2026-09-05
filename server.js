@@ -38,6 +38,11 @@ if (require.main === module) {
   // migration ต้องจบก่อนเปิดรับ request — แอปที่ขึ้นมาพร้อมตารางผิดรูปแย่กว่าแอปที่ไม่ขึ้น
   // (เทสต์ require ไฟล์นี้แล้ว listen เอง จึงไม่ผ่านทางนี้ ไม่โดน migrate)
   require('./db/migrate').runMigrations()
+    // โรงเรียนใหม่ต้องมีคนล็อกอินเข้าไปตั้งค่าได้ — ทำก่อนอย่างอื่นทั้งหมด
+    // ล้มก็ไม่ปิดเซิร์ฟเวอร์ เว็บที่ขึ้นแล้วล็อกอินไม่ได้ยังดีกว่าเว็บที่ไม่ขึ้น
+    .then(() => require('./db/bootstrapAdmin').run().catch(err => {
+      console.error('[admin]', err.message);
+    }))
     .then(() => require('./functions/mediaCards').purgeExpiredCards().catch(err => {
       // กวาดไม่สำเร็จไม่ใช่เหตุให้แอปไม่ขึ้น — รอบหน้าค่อยกวาดใหม่
       console.error('[purge]', err.message);
