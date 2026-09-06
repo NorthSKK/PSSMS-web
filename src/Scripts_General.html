@@ -2299,7 +2299,7 @@ function openMediaReader(card) {
       if (!files.length) { showAlert('การ์ดนี้ยังไม่มีไฟล์'); return; }
 
       // urls: cache ตั๋วต่อรอบการเปิดอ่าน — ตั๋วอยู่ได้ 1 ชม. สลับกลับมาไฟล์เดิมจึงไม่ต้องขอใหม่
-      _mediaState.reader = { card: card, files: files, index: 0, urls: {} };
+      _mediaState.reader = { card: card, files: files, index: 0, urls: {}, cleanups: [] };
       if (res.url && res.fileId != null) _mediaState.reader.urls[res.fileId] = res.url;
       _mediaPreconnect(res.url);
 
@@ -2383,22 +2383,33 @@ function _mediaReaderShow(i) {
   try { localStorage.setItem('mediaLastFile_' + r.card.id, String(f.id)); } catch (e) { /* โหมดส่วนตัว */ }
 
   var stage = document.getElementById('mrStage');
+
+  // ยกเลิกงานวาดของไฟล์ก่อนหน้าเสมอ ไม่งั้น canvas ของใบเก่ายังวาดต่ออยู่เบื้องหลัง
+  r.cleanups.forEach(function(fn) { try { fn(); } catch (e) {} });
+  r.cleanups = [];
+  _mediaSetZoomVisible(false);
+
   var render = function(url) {
     if (_mediaState.reader !== r || r.index !== i) return;   // กดสลับเร็วกว่าตั๋วมาถึง
-    stage.innerHTML = '';
-    var el;
-    if (f.ext === 'pdf') {
-      el = document.createElement('iframe');
-      el.title = f.label;
-    } else {
-      el = document.createElement('img');
-      el.alt = f.label;
-    }
-    el.src = url;
-    stage.appendChild(el);
-    // ทางหนีตอน iOS Safari เรนเดอร์ PDF ใน iframe ไม่ไหว — ห้ามเอาปุ่มนี้ออก
+    // ทางหนีตอนทุกอย่างล้มเหลว — ห้ามเอาปุ่มนี้ออก
     document.getElementById('mrOpenTab').href = url;
     _mediaPrefetchNeighbours(r, i);
+
+    if (f.ext !== 'pdf') {
+      stage.innerHTML = '';
+      var img = document.createElement('img');
+      img.alt = f.label;
+      img.src = url;
+      stage.appendChild(img);
+      return;
+    }
+
+    var token = _mediaRenderToken(r, i);
+    _mediaRenderPdf(stage, url, token).catch(function(err) {
+      if (!token.alive()) return;
+      token.dispose();
+      _mediaPdfFallback(stage, url, f, err);
+    });
   };
 
   // มีตั๋วอยู่แล้ว = เริ่มโหลดไฟล์ทันที ไม่ต้องรอ round-trip
@@ -2430,6 +2441,36 @@ function _mediaReaderShow(i) {
 }
 
 /**
+ * pdf.js ใช้ไม่ได้ — ตกไป `<iframe>` แบบเดิม
+ *
+ * เกิดได้ 2 แบบ: bucket ของโรงเรียนยังไม่ได้ตั้ง CORS (pdf.js fetch ข้าม origin ไม่ผ่าน)
+ * หรือโหลด lib จาก CDN ไม่สำเร็จ · ทั้งสองแบบ iframe ยังพอใช้ได้บนเครื่องที่ไม่ใช่ iOS
+ * **แต่บน iOS iframe เลื่อนไม่ได้** จึงต้องดันปุ่มเปิดแท็บใหม่ขึ้นมาให้เห็นชัด ไม่ใช่ซ่อนไว้ในหัว
+ */
+function _mediaPdfFallback(stage, url, f, err) {
+  stage.innerHTML = '';
+
+  var note = document.createElement('div');
+  note.className = 'small px-3 py-2';
+  note.style.cssText = 'background:#fffbeb;color:#92400e;border-bottom:1px solid #fde68a;';
+  note.textContent = 'แสดงด้วยตัวอ่านของเบราว์เซอร์ (' + (err && err.message ? err.message : 'ไม่ทราบสาเหตุ')
+    + ') — ถ้าเลื่อนดูหน้าถัดไปไม่ได้ ให้กด "เปิดแท็บใหม่"';
+  var open = document.createElement('a');
+  open.className = 'btn btn-sm btn-outline-secondary ms-2';
+  open.target = '_blank';
+  open.rel = 'noopener';
+  open.href = url;
+  open.textContent = 'เปิดแท็บใหม่';
+  note.appendChild(open);
+  stage.appendChild(note);
+
+  var frame = document.createElement('iframe');
+  frame.title = f.label;
+  frame.src = url;
+  stage.appendChild(frame);
+}
+
+/**
  * ขอตั๋วของไฟล์ที่อยู่ติดกันไว้เงียบ ๆ ระหว่างคนกำลังอ่านใบปัจจุบัน
  * กด "ถัดไป" แล้วไฟล์เริ่มโหลดทันที ไม่ต้องรอ round-trip ก่อน
  * ล้มก็ไม่ต้องบอกใคร — ตอนกดจริงจะขอใหม่เองอยู่แล้ว
@@ -2446,6 +2487,142 @@ function _mediaPrefetchNeighbours(r, i) {
   });
 }
 
+/**
+ * ตัวเรนเดอร์ PDF ด้วย pdf.js
+ *
+ * ⚠️ เหตุผลที่ต้องมี: **iOS Safari เรนเดอร์ PDF ใน `<iframe>` ได้แค่หน้าแรกและเลื่อนไม่ได้**
+ * เป็นพฤติกรรมของ WebKit เอง แก้ด้วย CSS ไม่ได้ · ตัวอ่านจึงใช้ไม่ได้เลยบน iPad
+ * ซึ่งเป็นเครื่องที่ครูใช้สอนหน้าห้องจริง
+ *
+ * pdf.js `fetch` ไฟล์ข้าม origin จึง **ต้องตั้ง CORS บน bucket ของโรงเรียน**
+ * (ดู docs/setup-new-school.md) · ตั้งไม่ครบ = ตกไปใช้ `<iframe>` แบบเดิมพร้อมข้อความบอก
+ * ไม่ใช่จอว่างเปล่า
+ *
+ * โหลด lib ตอนเปิด PDF ใบแรกเท่านั้น ไม่ใช่ตอนเข้าเมนู — คนที่เข้ามาดูการ์ดลิงก์
+ * ไม่ควรต้องโหลด ~1MB ทิ้ง
+ */
+var PDFJS_VERSION = '3.11.174';
+var PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/';
+var _pdfjsLoading = null;
+
+function _loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (_pdfjsLoading) return _pdfjsLoading;
+  _pdfjsLoading = new Promise(function(resolve, reject) {
+    var sc = document.createElement('script');
+    sc.src = PDFJS_BASE + 'pdf.min.js';
+    sc.onload = function() {
+      if (!window.pdfjsLib) { reject(new Error('pdf.js โหลดแล้วแต่ไม่พบตัว library')); return; }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js';
+      resolve(window.pdfjsLib);
+    };
+    sc.onerror = function() { reject(new Error('โหลด pdf.js ไม่สำเร็จ')); };
+    document.head.appendChild(sc);
+  });
+  // ล้มแล้วให้ลองใหม่ได้ ไม่ค้าง promise ที่ reject ไว้ตลอดอายุหน้า
+  _pdfjsLoading.catch(function() { _pdfjsLoading = null; });
+  return _pdfjsLoading;
+}
+
+/**
+ * วาดทั้งเอกสารแบบเลื่อนต่อเนื่อง — วาดเฉพาะหน้าที่เลื่อนมาถึงเท่านั้น
+ * สื่อสแกนทั้งเล่ม 200 หน้า ถ้าวาดรวดเดียวหมดคือค้างไปหลายวินาทีและกิน memory จนแท็บตาย
+ */
+function _mediaRenderPdf(stage, url, token) {
+  return _loadPdfJs().then(function(pdfjsLib) {
+    return pdfjsLib.getDocument({ url: url, withCredentials: false }).promise;
+  }).then(function(doc) {
+    if (!token.alive()) return;
+
+    var box = document.createElement('div');
+    box.className = 'mr-pdf';
+    stage.innerHTML = '';
+    stage.appendChild(box);
+
+    var scale = 1;                       // ตัวคูณจากขนาดพอดีความกว้าง
+    var pages = [];
+    var drawn = {};
+
+    var fitWidth = function(page) {
+      var raw = page.getViewport({ scale: 1 });
+      var avail = Math.max(200, box.clientWidth - 16);
+      return (avail / raw.width) * scale;
+    };
+
+    var draw = function(idx) {
+      if (drawn[idx] || !token.alive()) return;
+      drawn[idx] = true;
+      doc.getPage(idx + 1).then(function(page) {
+        if (!token.alive()) return;
+        var viewport = page.getViewport({ scale: fitWidth(page) });
+        var canvas = pages[idx];
+        // devicePixelRatio — ไม่คูณแล้วตัวหนังสือบนจอ retina เบลอจนสแกนอ่านไม่ออก
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = Math.floor(viewport.width) + 'px';
+        canvas.style.height = Math.floor(viewport.height) + 'px';
+        canvas.removeAttribute('data-pending');
+        page.render({
+          canvasContext: canvas.getContext('2d'),
+          viewport: viewport,
+          transform: dpr === 1 ? null : [dpr, 0, 0, dpr, 0, 0]
+        });
+      }).catch(function() { drawn[idx] = false; });
+    };
+
+    // จองที่ให้ครบทุกหน้าก่อน scrollbar จะได้ยาวถูกต้องตั้งแต่แรก
+    return doc.getPage(1).then(function(first) {
+      if (!token.alive()) return;
+      var vp = first.getViewport({ scale: fitWidth(first) });
+      for (var i = 0; i < doc.numPages; i++) {
+        var c = document.createElement('canvas');
+        c.className = 'mr-page';
+        c.dataset.pending = '1';
+        c.style.width = Math.floor(vp.width) + 'px';
+        c.style.height = Math.floor(vp.height) + 'px';
+        box.appendChild(c);
+        pages.push(c);
+      }
+
+      var io = new IntersectionObserver(function(entries) {
+        entries.forEach(function(e) {
+          if (e.isIntersecting) draw(pages.indexOf(e.target));
+        });
+      }, { root: box, rootMargin: '400px 0px' });   // วาดล่วงหน้าก่อนถึงตา
+      pages.forEach(function(c) { io.observe(c); });
+      token.cleanup(function() { io.disconnect(); doc.destroy && doc.destroy(); });
+
+      // ปุ่มย่อ/ขยาย — วาดใหม่ทั้งหมดที่มาตราส่วนใหม่
+      _mediaState.reader.rezoom = function(mult) {
+        scale = Math.min(4, Math.max(0.5, scale * mult));
+        drawn = {};
+        pages.forEach(function(c) { c.dataset.pending = '1'; });
+        pages.forEach(function(c, i) {
+          var r = c.getBoundingClientRect();
+          if (r.bottom > -400 && r.top < window.innerHeight + 400) draw(i);
+        });
+      };
+      _mediaSetZoomVisible(true);
+    });
+  });
+}
+
+/** ยกเลิกงานวาดของไฟล์ก่อนหน้าเมื่อคนกดสลับเร็วกว่าไฟล์จะโหลดเสร็จ */
+function _mediaRenderToken(r, i) {
+  var cleanups = [];
+  return {
+    alive: function() { return _mediaState.reader === r && r.index === i; },
+    cleanup: function(fn) { cleanups.push(fn); r.cleanups.push(fn); },
+    dispose: function() { cleanups.forEach(function(fn) { try { fn(); } catch (e) {} }); }
+  };
+}
+
+function _mediaSetZoomVisible(on) {
+  var box = document.getElementById('mrZoom');
+  if (box) box.classList.toggle('d-none', !on);
+}
+
 function _mediaReaderStep(delta) {
   if (!_mediaState.reader) return;
   _mediaReaderShow(_mediaState.reader.index + delta);
@@ -2460,6 +2637,14 @@ function _mediaBindReader() {
   document.getElementById('mrToggleToc').onclick = function() {
     document.getElementById('mrBody').classList.toggle('mr-open');
   };
+  var zoom = function(mult) {
+    return function() {
+      var r = _mediaState.reader;
+      if (r && r.rezoom) r.rezoom(mult);
+    };
+  };
+  document.getElementById('mrZoomIn').onclick = zoom(1.25);
+  document.getElementById('mrZoomOut').onclick = zoom(0.8);
 
   // ลูกศรซ้าย/ขวา — ครูสอนหน้าห้องกดรีโมกดผ่านได้ · ผูกตอนเปิด ถอดตอนปิด
   // ไม่งั้นลูกศรของทั้งระบบจะโดนดักไว้ตลอดหลังเคยเปิดตัวอ่านครั้งหนึ่ง
@@ -2471,8 +2656,12 @@ function _mediaBindReader() {
   modal.addEventListener('hidden.bs.modal', function() {
     document.removeEventListener('keydown', onKey);
     // ปล่อย iframe ทิ้ง ไม่งั้นเบราว์เซอร์ยังโหลด/เล่นไฟล์อยู่เบื้องหลังหลังปิดหน้าต่างไปแล้ว
+    if (_mediaState.reader) {
+      _mediaState.reader.cleanups.forEach(function(fn) { try { fn(); } catch (e) {} });
+    }
     document.getElementById('mrStage').innerHTML = '';
     document.getElementById('mrBody').classList.remove('mr-open');
+    _mediaSetZoomVisible(false);
     _mediaState.reader = null;
   });
 }

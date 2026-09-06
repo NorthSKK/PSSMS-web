@@ -54,7 +54,26 @@
 3. ใส่ค่าเป็น Railway variables: `STORAGE_DRIVER=s3` + `S3_ENDPOINT` `S3_BUCKET`
    `S3_ACCESS_KEY_ID` `S3_SECRET_ACCESS_KEY` `S3_REGION=auto`
    (รูปแบบค่าดู `.env.example` และหัวไฟล์ `lib/storage/s3.js`)
-4. ตั้ง `MEDIA_QUOTA_GB` ให้ตรงกับขนาดที่ตั้งใจให้โรงเรียนนี้ใช้ (ไม่ตั้ง = 15)
+
+4. **R2 → bucket นั้น → Settings → CORS Policy** → วางค่านี้ (แก้โดเมนให้ตรงโรงเรียน):
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://<ชื่อย่อ>.pssms.app"],
+    "AllowedMethods": ["GET"],
+    "AllowedHeaders": ["range"],
+    "ExposeHeaders": ["content-range", "content-length", "accept-ranges"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+   ⚠️ **ข้อนี้ลืมไม่ได้** — ตัวอ่านสื่อใช้ pdf.js ซึ่ง `fetch` ไฟล์ข้าม origin
+   ไม่ตั้ง CORS = ตกไปใช้ตัวอ่านของเบราว์เซอร์ ซึ่ง **บน iPad เลื่อนดูหน้าถัดไปไม่ได้**
+   `AllowedHeaders: range` กับ `ExposeHeaders` จำเป็นเพราะ pdf.js ขอไฟล์ทีละช่วง
+   ไม่ได้ดึงทั้งก้อน · โรงเรียนที่ยังไม่ตั้งจะเห็นแถบเหลืองในตัวอ่าน ไม่ใช่จอว่าง
+5. ตั้ง `MEDIA_QUOTA_GB` ให้ตรงกับขนาดที่ตั้งใจให้โรงเรียนนี้ใช้ (ไม่ตั้ง = 15)
    ครูอัปจนเต็มโควตาจะได้ข้อความให้ไปลบของเก่า **ไม่ใช่รู้ตัวตอนบิลมา**
 
 **ตั้งไม่ครบ = ปิดฟีเจอร์อัปโหลดเฉย ๆ ไม่ใช่พัง** — การ์ดสื่อการสอนแบบลิงก์

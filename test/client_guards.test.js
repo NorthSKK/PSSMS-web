@@ -143,3 +143,43 @@ test('ต้องกวาด cache ของรุ่นก่อนทิ้�
   assert.ok(/_pgCachePurgeOld/.test(core), 'ต้องมีตัวกวาดคีย์ของรุ่นเก่า');
   assert.ok(/sessionStorage\.key\(/.test(core), 'ตัวกวาดต้องไล่คีย์ที่มีอยู่จริง');
 });
+
+// ── ตัวอ่าน PDF ต้องมีทางถอยเสมอ ───────────────────────────────────
+//
+// pdf.js เป็นทางหลักเพราะ iOS Safari เรนเดอร์ PDF ใน <iframe> ได้แค่หน้าแรกและเลื่อนไม่ได้
+// แต่ pdf.js เองก็ล้มได้ (bucket ยังไม่ตั้ง CORS / โหลด CDN ไม่ผ่าน) — ล้มแล้วต้องเห็นอะไรสักอย่าง
+// ไม่ใช่จอว่างเปล่าที่ไม่มีใครรู้ว่าเกิดอะไรขึ้น
+test('ตัวอ่าน PDF ต้องมี fallback และปุ่มเปิดแท็บใหม่', () => {
+  const js = read('Scripts_General.html');
+  const page = read('Page_Teaching_Media.html');
+
+  assert.ok(/_mediaRenderPdf\(/.test(js), 'ต้องมีตัวเรนเดอร์ pdf.js');
+  assert.ok(/_mediaRenderPdf\([\s\S]{0,400}?\.catch\(/.test(js),
+    'เรียก _mediaRenderPdf แล้วต้องมี .catch — ล้มเงียบคือจอว่าง');
+  assert.ok(/_mediaPdfFallback\(/.test(js), 'ต้องมี fallback เป็น iframe');
+  assert.ok(/id="mrOpenTab"/.test(page), 'ปุ่มเปิดแท็บใหม่คือทางหนีสุดท้าย ห้ามลบ');
+  assert.ok(/mrOpenTab'\)\.href = /.test(js), 'ปุ่มแท็บใหม่ต้องถูกตั้ง href ทุกครั้งที่เปิดไฟล์');
+});
+
+// ── งานวาดต้องถูกยกเลิกเมื่อสลับไฟล์หรือปิดหน้าต่าง ──────────────────
+// ไม่ยกเลิก = canvas ของไฟล์เก่ายังวาดต่อเบื้องหลัง กิน CPU และแย่งจอไฟล์ใหม่
+test('ตัวอ่านต้องยกเลิกงานวาดค้างเมื่อสลับไฟล์และตอนปิด', () => {
+  const js = read('Scripts_General.html');
+  assert.ok(/_mediaRenderToken\(/.test(js), 'ต้องมี token กันงานวาดของไฟล์เก่า');
+  assert.ok(/alive:\s*function/.test(js), 'token ต้องบอกได้ว่ายังควรวาดอยู่ไหม');
+  // ทั้งตอนสลับไฟล์ และตอน hidden.bs.modal ต้องเรียก cleanups
+  const cleanupCalls = js.match(/cleanups\.forEach\(/g) || [];
+  assert.ok(cleanupCalls.length >= 2,
+    `ต้องล้าง cleanups ทั้งตอนสลับไฟล์และตอนปิด modal (เจอ ${cleanupCalls.length} จุด)`);
+});
+
+// ── pdf.js ต้องโหลดแบบ lazy ────────────────────────────────────────
+// คนที่เข้ามาดูการ์ดแบบลิงก์อย่างเดียวไม่ควรต้องโหลด lib ~1MB ทิ้ง
+test('pdf.js ต้องไม่ถูกโหลดตอนเข้าหน้า', () => {
+  const js = read('Scripts_General.html');
+  const index = fs.readFileSync(path.join(SRC, '../public/index.html'), 'utf8');
+  assert.ok(!/pdf(js)?[.-]?min\.js/.test(index), 'index.html ต้องไม่โหลด pdf.js ล่วงหน้า');
+  assert.ok(/_loadPdfJs\(/.test(js), 'ต้องโหลดผ่าน _loadPdfJs ตอนใช้จริง');
+  assert.ok(/GlobalWorkerOptions\.workerSrc/.test(js),
+    'ไม่ตั้ง workerSrc แล้ว pdf.js จะวาดไม่ออกบน build ที่แยก worker');
+});

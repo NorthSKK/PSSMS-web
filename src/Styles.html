@@ -198,6 +198,24 @@ select.form-select {
 .mr-stage img { object-fit: contain; background: #111; }
 .mr-item { border: 0; border-bottom: 1px solid var(--p-border); border-radius: 0; text-align: left; }
 .mr-item.active { background: var(--p-accent-soft); color: var(--p-accent); font-weight: 600; }
+
+/* ── ตัวเรนเดอร์ PDF (pdf.js) ────────────────────────────────────────
+   ทำไมไม่ใช้ <iframe> เป็นทางหลัก: **iOS Safari เรนเดอร์ PDF ใน iframe ได้แค่หน้าแรก
+   และเลื่อนไม่ได้** ซึ่งทำให้ตัวอ่านใช้ไม่ได้เลยบน iPad ที่ครูใช้สอนจริง
+   canvas เลื่อนได้ทุกเครื่องเหมือนกันหมด · iframe เหลือเป็น fallback ตอน pdf.js
+   โหลดไฟล์ไม่ได้ (เช่น bucket ยังไม่ได้ตั้ง CORS) */
+.mr-pdf {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: auto;
+  /* โมเมนตัมตอนปัดบน iOS — ไม่ใส่แล้วเลื่อนแล้วหยุดทันทีเหมือนของเสีย */
+  -webkit-overflow-scrolling: touch;
+  background: var(--p-bg, #f1f3f5); padding: 8px 0; text-align: center;
+}
+.mr-page {
+  display: block; margin: 0 auto 10px; max-width: 100%;
+  box-shadow: 0 1px 6px rgba(0,0,0,.18); background: #fff;
+}
+/* กันหน้าที่ยังไม่ถูกวาดยุบเป็นศูนย์ — ไม่งั้น scrollbar กระตุกตอนเลื่อนเร็ว */
+.mr-page[data-pending="1"] { background: #fff; }
 @media (max-width: 767.98px) {
   .mr-sidebar {
     position: absolute; inset: 0 auto 0 0; z-index: 5; width: 82%; max-width: 320px;

@@ -633,6 +633,25 @@ S3_REGION=auto
 
 `<account_id>` อยู่ที่หน้า R2 Overview มุมขวา
 
+3.5 **R2 → bucket นั้น → Settings → CORS Policy** → วางค่านี้ (แก้โดเมนให้ตรงโรงเรียน):
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://<ชื่อย่อ>.pssms.app"],
+    "AllowedMethods": ["GET"],
+    "AllowedHeaders": ["range"],
+    "ExposeHeaders": ["content-range", "content-length", "accept-ranges"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+   ⚠️ **ข้อนี้ลืมไม่ได้** — ตัวอ่านสื่อใช้ pdf.js ซึ่ง `fetch` ไฟล์ข้าม origin
+   ไม่ตั้ง CORS = ตกไปใช้ตัวอ่านของเบราว์เซอร์ ซึ่ง **บน iPad เลื่อนดูหน้าถัดไปไม่ได้**
+   `AllowedHeaders: range` กับ `ExposeHeaders` จำเป็นเพราะ pdf.js ขอไฟล์ทีละช่วง
+   ไม่ได้ดึงทั้งก้อน · โรงเรียนที่ยังไม่ตั้งจะเห็นแถบเหลืองในตัวอ่าน ไม่ใช่จอว่าง
+
 4. Redeploy → ล็อกอินเป็น Admin → หน้าสื่อการสอน แถบสถานะต้องขึ้น
    `ที่เก็บไฟล์: ปกติ (s3) · N ไฟล์ · ใช้ไป X MB จากโควตา 15 GB`
    ถ้าขึ้นแดงให้ดูข้อความต่อท้าย บอกว่าติดตรงไหน
