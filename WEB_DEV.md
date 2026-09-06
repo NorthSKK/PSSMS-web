@@ -494,6 +494,15 @@ if (pageName === 'Page_MyPage') initMyPage();
 
 > `innerHTML` ไม่ execute `<script>` — ต้องเรียก init แบบ explicit
 
+> ⚠️ **HTML ของหน้าถูก cache ไว้ใน `sessionStorage` 30 นาที ส่วน JS เสิร์ฟแบบ `no-store`**
+> แก้ id หรือโครงในหน้าแล้ว deploy = แท็บที่เปิดค้างอยู่จะได้ **JS ใหม่คู่กับ HTML เก่า**
+> ชั่วคราว · `routes/assets.js` ใส่ `window.__PSSMS_BUILD` (= commit sha) นำหน้า JS ทุกไฟล์
+> แล้ว `_pgKey()` เอาไปผสมใน cache key รุ่นใหม่จึงล้างของเก่าเอง — **อย่าต่อคีย์
+> `pssms_pg_...` เองเด็ดขาด ใช้ `_pgKey(name)` เสมอ** (`test/client_guards.test.js` คุมไว้)
+>
+> เคยพังจริง: เปลี่ยน id ในฟอร์มการ์ดสื่อ → `getElementById` คืน `null` → TypeError
+> ตัดก่อนถึงบรรทัดเปิด modal → **ปุ่มกดแล้วไม่มีอะไรเกิดขึ้น ไม่มี error ให้ผู้ใช้เห็น**
+
 ### Step 3 — เพิ่ม JS
 
 ใน `../src/Scripts_General.html` หรือไฟล์ที่เหมาะสม:
@@ -579,7 +588,7 @@ until curl -s https://pw.pssms.app/api/assets/script/Scripts_General \
 ⚠️ `.env.prod` มีแค่ `DATABASE_URL` ที่ตรงกับ production — **`JWT_SECRET` ไม่ตรง**
 กับที่ตั้งไว้บน Railway จึงใช้ mint token ยิง API production ไม่ได้
 
-### ที่เก็บไฟล์สื่อการสอน (อัปโหลด PDF)
+### ที่เก็บไฟล์สื่อการสอน (การ์ดชุดไฟล์: PDF / รูป)
 
 เลือก driver ด้วย `STORAGE_DRIVER` — `lib/storage/`
 
@@ -595,7 +604,11 @@ until curl -s https://pw.pssms.app/api/assets/script/Scripts_General \
 ตอนที่อยากให้เร็วที่สุด และ blob 25MB จองการเชื่อมต่อจาก pool ที่มีแค่ 20 ตัว
 
 **ไม่ตั้งค่าให้ครบ = ปิดฟีเจอร์อัปโหลด** (ฟอร์มปิดตัวเลือก, endpoint ตอบ 503,
-Admin เห็นแถบ "อัปโหลด PDF: ปิดอยู่") — การ์ดแบบลิงก์ใช้ได้ตามปกติเสมอ
+Admin เห็นแถบ "อัปโหลด: ปิดอยู่") — การ์ดแบบลิงก์ใช้ได้ตามปกติเสมอ
+
+**โควตาพื้นที่ต่อโรงเรียน**: `MEDIA_QUOTA_GB` (ไม่ตั้ง = 15) · เกินแล้วครูจะได้ **507**
+พร้อมข้อความให้ไปลบของเก่า ไม่ใช่ 400 เพราะเป็นสิ่งที่ครูแก้เองได้
+ตั้งให้ตรงกับขนาดที่ตั้งใจให้โรงเรียนนั้นใช้จริง ไม่งั้นรู้ตัวว่าเต็มตอนบิลมา
 
 #### ตั้งค่า R2 ให้โรงเรียนใหม่
 
@@ -621,27 +634,45 @@ S3_REGION=auto
 `<account_id>` อยู่ที่หน้า R2 Overview มุมขวา
 
 4. Redeploy → ล็อกอินเป็น Admin → หน้าสื่อการสอน แถบสถานะต้องขึ้น
-   `ที่เก็บไฟล์: ปกติ (s3)` ถ้าขึ้นแดงให้ดูข้อความต่อท้าย บอกว่าติดตรงไหน
+   `ที่เก็บไฟล์: ปกติ (s3) · N ไฟล์ · ใช้ไป X MB จากโควตา 15 GB`
+   ถ้าขึ้นแดงให้ดูข้อความต่อท้าย บอกว่าติดตรงไหน
 
 #### ใช้กับอะไรบ้าง
 
-| จุด | ชนิดไฟล์ | ขนาด |
-|---|---|---|
-| การ์ดสื่อการสอน (`POST /api/media/upload`) | PDF | 25MB |
-| ไฟล์แนบสารบรรณ (`POST /api/media/sarabun/:id`) | PDF / JPEG / PNG / DOCX | 10MB |
+| จุด | ชนิดไฟล์ | ขนาด | เพดานอื่น |
+|---|---|---|---|
+| การ์ดสื่อการสอน (`POST /api/media/upload/:cardId`) | PDF / JPEG / PNG | 25MB ต่อไฟล์ | 50 ไฟล์/การ์ด · โควตาโรงเรียน |
+| ไฟล์แนบสารบรรณ (`POST /api/media/sarabun/:id`) | PDF / JPEG / PNG / DOCX | 10MB | — |
 
 ชนิดไฟล์ตัดสินจาก magic bytes ใน `lib/storage/types.js` — เพิ่มชนิดใหม่แก้ที่ไฟล์เดียว
+**การ์ดสื่อไม่รับ docx** ทั้งที่ `types.js` รองรับ เพราะเสิร์ฟเป็น attachment (บังคับดาวน์โหลด)
+เปิดอ่านในหน้าเดิมไม่ได้ ใส่เข้าไปก็เป็นหลุมในสารบัญ
+
+โควตาต่อคน: **นับเป็นไบต์ 500MB/ชม.** ไม่ใช่จำนวนครั้ง — เดิมนับ 20 ครั้ง/ชม.
+ซึ่งทำให้อัปหนังสือ 30 บทไม่ได้เลย
 
 #### กลไกที่ควรรู้
 
-- **เปิดไฟล์**: `getMediaFileTicket` ตรวจ `visible_levels` แล้วคืน URL อายุสั้น —
-  driver `s3` คืน presigned URL (5 นาที) ให้เบราว์เซอร์โหลดจาก R2 ตรง **Railway ไม่แตะไฟล์เลย**
-  driver `disk` คืนตั๋ว JWT ชี้ `GET /api/media/file/:id?t=...` ซึ่ง **mount เฉพาะ driver disk**
-- **อัปโหลด**: ผ่าน backend เสมอ (ทั้งสอง driver) เพื่อคงการตรวจ magic bytes `%PDF-`
-  ขนาด 25MB และ rate limit — upload เป็น write path เกิดนาน ๆ ครั้ง ไม่คุ้มที่จะเลี่ยง
+- **1 การ์ด = หลายไฟล์** แถวไฟล์อยู่ตาราง `media_files` ไม่ใช่บน `media_cards`
+  หน้ารวมได้แค่ `fileCount`/`totalSize` · สารบัญขอทีหลังด้วย `getMediaCardFiles`
+- **เปิดไฟล์**: `getMediaFileTicket(fileId)` ตรวจ `visible_levels` **ของการ์ดแม่**
+  แล้วคืน URL อายุสั้น — driver `s3` คืน presigned URL ให้เบราว์เซอร์โหลดจาก R2 ตรง
+  **Railway ไม่แตะไฟล์เลย** · driver `disk` คืนตั๋ว JWT ชี้
+  `GET /api/media/file/media/:fileId?t=...` ซึ่ง **mount เฉพาะ driver disk**
+  ⚠️ id คือ `media_files.id` ไม่ใช่ card id และ SQL ต้อง join กลับหาการ์ดเพื่อเช็ค `deleted_at`
+- **อายุตั๋วของสื่อการสอนคือ 1 ชม.** ไม่ใช่ 5 นาทีเหมือนสารบรรณ (`ttlSeconds` ที่ `getFileUrl`)
+  เพราะ PDF viewer ของเบราว์เซอร์ขอไฟล์ใหญ่แบบ **Range request ทยอยตอนเลื่อน** —
+  ตั๋วตายระหว่างอ่าน = PDF ค้างกลางเล่มโดยไม่มีข้อความบอก
+- **อัปโหลด**: ผ่าน backend เสมอ (ทั้งสอง driver) เพื่อคงการตรวจ magic bytes
+  ขนาด และโควตา — upload เป็น write path เกิดนาน ๆ ครั้ง ไม่คุ้มที่จะเลี่ยง
+  ⚠️ **ยิงทีละไฟล์ ไม่ใช่ก้อนเดียวหลายไฟล์** — multer ใช้ `memoryStorage()` ไฟล์อยู่ใน RAM
+  ทั้งก้อน 30 ไฟล์ × 25MB = 750MB เข้า memory ครั้งเดียว Railway ตาย
 - **ถังขยะ 30 วัน อยู่ที่ DB ไม่ใช่ที่ storage**: ลบการ์ด = ไม่แตะไฟล์, กู้คืน = ล้าง `deleted_at`
-  พ้น 30 วัน `purgeExpiredCards()` ลบ object ก่อนแล้วค่อยลบแถว (ลบแถวก่อน = ไฟล์กำพร้า)
+  พ้น 30 วัน `purgeExpiredCards()` ลบ object **ทุกใบ** ก่อนแล้วค่อยลบแถวการ์ด
+  (ลบแถวก่อน = ไฟล์กำพร้า · `ON DELETE CASCADE` เป็นตาข่ายกันแถวกำพร้า ไม่ใช่ตัวลบไฟล์)
   เรียกตอน boot ต่อจาก migration ไม่ต้องมี cron
+- ⚠️ **ลบไฟล์เดี่ยว = ลบจริงทันที ไม่มีถังขยะระดับไฟล์** — ถังขยะมีที่เดียวคือ
+  `media_cards.deleted_at` · สถานะ 2 ที่เคยพังมาแล้ว
 - **เปลี่ยนผู้ให้บริการ** (B2 / MinIO / S3 จริง) = แก้ `S3_ENDPOINT` กับ key ไม่ต้องแตะโค้ด
 
 ### Environment Variables ที่ต้องตั้งใน Railway
@@ -650,9 +681,19 @@ S3_REGION=auto
 | `DATABASE_URL` | Railway จัดให้อัตโนมัติเมื่อ add PostgreSQL service |
 | `JWT_SECRET` | random string — ตั้งครั้งแรกแล้วอย่าเปลี่ยน (invalidates all sessions) |
 | `PORT` | Railway inject อัตโนมัติ — ไม่ต้องตั้ง |
+| `MEDIA_QUOTA_GB` | เพดานพื้นที่ไฟล์ของโรงเรียนนั้น (ไม่ตั้ง = 15) |
+| `RAILWAY_GIT_COMMIT_SHA` | Railway inject เอง — `lib/buildId.js` ใช้เป็นรหัสรุ่นของ cache |
 
 ### Healthcheck
-Railway ใช้ HTTP check — server.js ตอบ `200` ทุก GET request (SPA fallback)
+Railway ใช้ HTTP check ที่ `/` timeout 30 วิ (`railway.toml`)
+
+⚠️ **`runMigrations()` เป็นขั้นเดียวใน `server.js` ที่ล้มแล้วบล็อก `app.listen()`** โดยตั้งใจ —
+แอปที่ขึ้นมาพร้อมตารางผิดรูปแย่กว่าแอปที่ไม่ขึ้น · migration พังจึงโผล่มาเป็น
+**"Healthcheck failed / replicas never became healthy"** ใน Build Logs ซึ่งไม่บอกอะไรเลย
+**สาเหตุจริงอยู่ที่แท็บ Deploy Logs** บรรทัด `[boot] migration ล้มเหลว: ...`
+
+Railway ไม่สลับไป deployment ที่ล้ม โรงเรียนจึงยังรันตัวเก่าต่อ ไม่มีช่วงล่ม
+และ `db/migrate.js` ห่อแต่ละไฟล์ไว้ใน transaction เดียว พังแล้ว ROLLBACK ครบ
 
 ### Database Connection
 `lib/db.js` เลือก SSL อัตโนมัติจาก hostname — `localhost` → ปิด, ที่เหลือ → เปิด
@@ -694,6 +735,9 @@ Railway ใช้ HTTP check — server.js ตอบ `200` ทุก GET request
 | **หัวตารางขาวโพลน / ตัวหนังสือหาย** | `#page-content .table thead th` บังคับ `background:transparent !important` + `color:text-muted` specificity สูง | ใส่ `!important` + specificity ให้ชนะ (ดู `#scoreTableHeader`) |
 | **แถว sticky ที่ 2 เลื่อนไปทับแถวแรก** | rule ที่ตั้ง `top:0` มี specificity สูงกว่า rule ที่ตั้ง offset | prefix ให้ specificity เท่ากันแล้วใส่ `!important` ที่ `top` |
 | ปุ่มกดแล้วเงียบ ไม่มี error | `querySelector` หาปุ่มด้วย class ที่เปลี่ยนไปตอน restyle → `null` → throw ใน callback | อ้างปุ่มด้วย `id` ตายตัว ไม่ใช่ class ที่เป็นสไตล์ |
+| **ปุ่มกดแล้วเงียบ เฉพาะช่วงหลัง deploy** | HTML ของหน้าค้างใน `sessionStorage` 30 นาที ส่วน JS เสิร์ฟ `no-store` → id ที่เพิ่งเปลี่ยนหาไม่เจอ → TypeError ตัดเงียบ | cache key ต้องผสม `window.__PSSMS_BUILD` — ใช้ `_pgKey(name)` เสมอ ห้ามต่อคีย์เอง · ปลดล็อกเฉพาะหน้า: ปิดแท็บแล้วเปิดใหม่ |
+| **deploy ล้มที่ "replicas never became healthy"** | migration พังตอน boot — `runMigrations()` บล็อก `app.listen()` โดยตั้งใจ · Build Logs เห็นแค่ healthcheck timeout | ดู **Deploy Logs** บรรทัด `[boot] migration ล้มเหลว: ...` · DB ไม่เสียหาย แต่ละไฟล์อยู่ใน transaction เดียว |
+| **migration ผ่าน dev แต่ล้ม production** | เทสต์รันบนตารางว่าง — `UPDATE`/`ADD CONSTRAINT` ที่ชนข้อมูลเดิมจึงไม่มีอะไรไปละเมิด | เขียนเทสต์ที่สร้าง **schema แบบเก่า + ข้อมูลจริง** แล้วรันไฟล์ migration ทับ (ดู `test/migrate.test.js`) |
 | Handler ไม่รู้ว่าใครเรียก | ลงทะเบียนเป็น `(args) => fn(args)` ทิ้ง `user` | ต้องเป็น `(args, user) => fn(args, user)` ทุก write ที่ต้องเช็คสิทธิ์ |
 | `subjectCode='HR'` ผ่าน permission ทุกครู | `verifyTeacherOwnsSubject` ปล่อย HR ผ่านโดยตั้งใจ | HR ต้องเช็ค ownership ระดับแถวเอง (`verifyMorningBatchOwner`) |
 | **`'<fn>' not implemented in web prototype yet`** | ชื่อ RPC ที่ frontend เรียก ไม่ตรง key ใน handlers map — ไม่มีอะไรจับตอน build | ไล่ chain `google.script.run` เทียบกับ handlers map (ตัวปิด chain คือ method แรกที่ไม่ขึ้นต้นด้วย `with`) |
