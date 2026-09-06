@@ -803,20 +803,43 @@ const pageCache = {};
 const _PG_TTL = 30 * 60 * 1000;   // 30 min page HTML cache
 const _DASH_TTL = 5 * 60 * 1000;  // 5 min dashboard data SWR
 
+/**
+ * ⚠️ cache key ต้องมีรหัสรุ่นเสมอ — HTML รายหน้าอยู่ใน sessionStorage 30 นาที
+ * แต่ไฟล์ JS เสิร์ฟแบบ no-store คือใหม่ทุกครั้ง · ถ้าคีย์ไม่ผูกกับรุ่น หลัง deploy
+ * ที่แก้ markup ครูที่เปิดแท็บค้างไว้จะได้ **JS ใหม่คู่กับ HTML เก่า** แล้วพังเงียบ ๆ
+ * (เคยเกิดจริงตอนเปลี่ยน id ในฟอร์มการ์ดสื่อ — กดปุ่มเพิ่มแล้วไม่มีอะไรขึ้นเลย
+ *  เพราะ getElementById คืน null แล้ว TypeError ตัดก่อนถึงบรรทัดเปิด modal)
+ * ค่ามาจาก `window.__PSSMS_BUILD` ที่ routes/assets.js ใส่มากับ JS (lib/buildId.js)
+ */
+function _pgKey(name) {
+  return 'pssms_pg_' + (window.__PSSMS_BUILD || '0') + '_' + name;
+}
+
+// กวาดคีย์ของรุ่นก่อนทิ้ง ไม่งั้น sessionStorage บวมขึ้นทุก deploy จนเขียนไม่ลง
+(function _pgCachePurgeOld() {
+  try {
+    var keep = 'pssms_pg_' + (window.__PSSMS_BUILD || '0') + '_';
+    for (var i = sessionStorage.length - 1; i >= 0; i--) {
+      var k = sessionStorage.key(i);
+      if (k && k.indexOf('pssms_pg_') === 0 && k.indexOf(keep) !== 0) sessionStorage.removeItem(k);
+    }
+  } catch(e) { /* โหมดส่วนตัว เขียน/อ่านไม่ได้ ก็แค่ไม่มี cache */ }
+})();
+
 function _pgCacheGet(name) {
   if (pageCache[name]) return pageCache[name];
   try {
-    var raw = sessionStorage.getItem('pssms_pg_' + name);
+    var raw = sessionStorage.getItem(_pgKey(name));
     if (!raw) return null;
     var obj = JSON.parse(raw);
-    if (Date.now() - obj.ts > _PG_TTL) { sessionStorage.removeItem('pssms_pg_' + name); return null; }
+    if (Date.now() - obj.ts > _PG_TTL) { sessionStorage.removeItem(_pgKey(name)); return null; }
     pageCache[name] = obj.html;
     return obj.html;
   } catch(e) { return null; }
 }
 function _pgCacheSet(name, html) {
   pageCache[name] = html;
-  try { sessionStorage.setItem('pssms_pg_' + name, JSON.stringify({html: html, ts: Date.now()})); } catch(e) {}
+  try { sessionStorage.setItem(_pgKey(name), JSON.stringify({html: html, ts: Date.now()})); } catch(e) {}
 }
 function _dashCacheGet(key) {
   try {
@@ -926,7 +949,7 @@ function loadPage(pageName) {
     .withSuccessHandler(function(html) {
         if (!html || html.indexOf('ไม่พบหน้าเว็บ:') === 0) {
           showLoader(false);
-          sessionStorage.removeItem('pssms_pg_' + pageName);
+          sessionStorage.removeItem(_pgKey(pageName));
           alert('โหลดหน้าเว็บไม่สำเร็จ: ' + (html || 'ไม่ทราบสาเหตุ'));
           return;
         }

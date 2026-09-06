@@ -114,3 +114,32 @@ test('หน้าเช็คชื่อต้องเขียนทับ�
   const fn = academic.slice(academic.indexOf('const fetchHistoryAndRender'), academic.indexOf('let cached = null;'));
   assert.match(fn, /dispClass/, 'ต้องอัปเดต #dispClass หลังได้รายชื่อ');
 });
+
+// ── cache HTML รายหน้าต้องผูกกับรหัสรุ่น ────────────────────────────────
+//
+// เคยหลุด: `sessionStorage.getItem('pssms_pg_' + name)` คีย์ไม่มีรุ่นอยู่ในนั้น
+// ไฟล์ JS เสิร์ฟแบบ no-store คือใหม่ทุกครั้ง แต่ HTML รายหน้าค้างได้ 30 นาที
+// deploy ที่แก้ id ในหน้าจึงทำให้ครูที่เปิดแท็บค้างได้ JS ใหม่คู่กับ HTML เก่า
+// แล้ว getElementById คืน null → TypeError → ปุ่มกดแล้วไม่มีอะไรเกิดขึ้น เงียบสนิท
+test('cache HTML รายหน้าต้องผสม __PSSMS_BUILD ในคีย์', () => {
+  const core = read('Scripts_Core.html');
+
+  assert.ok(/function _pgKey\(/.test(core), 'ต้องมี _pgKey ที่เดียวสำหรับประกอบคีย์');
+  assert.ok(/_pgKey[\s\S]{0,200}__PSSMS_BUILD/.test(core),
+    '_pgKey ต้องเอา window.__PSSMS_BUILD มาผสม (routes/assets.js เป็นคนใส่ค่ามาให้)');
+
+  // ห้ามมีที่ไหนต่อคีย์เองแบบไม่ผ่าน _pgKey
+  const raw = [...core.matchAll(/sessionStorage\.(?:getItem|setItem|removeItem)\(([^)]*)/g)]
+    .map(m => m[1].trim())
+    .filter(arg => arg.includes('pssms_pg_'));
+  assert.deepEqual(raw, [],
+    'ต่อคีย์ pssms_pg_ เองแปลว่ามีทางที่ข้ามรหัสรุ่นไปได้ — ใช้ _pgKey(name) เสมอ');
+});
+
+// ── ตัวกวาด cache ของรุ่นเก่า ────────────────────────────────────────
+// ไม่กวาด = sessionStorage บวมขึ้นทุก deploy จนเขียนไม่ลงแล้ว cache หยุดทำงานเงียบ ๆ
+test('ต้องกวาด cache ของรุ่นก่อนทิ้ง', () => {
+  const core = read('Scripts_Core.html');
+  assert.ok(/_pgCachePurgeOld/.test(core), 'ต้องมีตัวกวาดคีย์ของรุ่นเก่า');
+  assert.ok(/sessionStorage\.key\(/.test(core), 'ตัวกวาดต้องไล่คีย์ที่มีอยู่จริง');
+});

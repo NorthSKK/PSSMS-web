@@ -6,6 +6,8 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs').promises;
 
+const { buildId } = require('../lib/buildId');
+
 const SRC_DIR = path.join(__dirname, '../src');
 const ALLOWED = /^[a-zA-Z0-9_-]+$/;
 
@@ -27,7 +29,10 @@ router.get('/script/:name', async (req, res) => {
     const content = await fs.readFile(path.join(SRC_DIR, name + '.html'), 'utf8');
     const js = content.replace(/<script[^>]*>/gi, '').replace(/<\/script>/gi, '');
     res.set('Cache-Control', 'no-store');
-    res.type('application/javascript').send(js);
+    // รหัสรุ่นเดินทางมากับ JS ที่ไม่เคยถูก cache — ฝั่ง client เอาไปผสมใน cache key
+    // ของ HTML รายหน้า deploy ใหม่จึงล้าง HTML เก่าทิ้งเองโดยไม่ต้องรอ TTL (lib/buildId.js)
+    const header = `window.__PSSMS_BUILD=${JSON.stringify(buildId())};\n`;
+    res.type('application/javascript').send(header + js);
   } catch {
     res.status(404).type('application/javascript').send(`// '${name}' not found`);
   }
