@@ -217,8 +217,8 @@ async function main() {
     );
   }
 
-  // การ์ดแบบ PDF พร้อมไฟล์จริงบนดิสก์ — ใช้ตรวจว่า url แก้จากฟอร์มไม่ได้,
-  // การเสิร์ฟไฟล์ตรวจตั๋วจริง และการลบย้ายไฟล์ลงถังขยะจริง
+  // การ์ดแบบ files พร้อมไฟล์จริงบนดิสก์ — ใช้ตรวจว่าการเสิร์ฟไฟล์ตรวจตั๋วจริง
+  // การลบการ์ดพาไฟล์ลงถังขยะจริง และการ์ดใบเดียวถือหลายไฟล์ได้จริง
   const store = require('../lib/storage/disk');
   await store.ensureReady();
   // ล้างไฟล์ของ dev ทิ้งด้วย ไม่งั้นไฟล์จากรอบก่อนค้างอยู่ทั้งที่แถวในตารางถูกลบไปแล้ว
@@ -229,16 +229,53 @@ async function main() {
   for (const f of await fsp.readdir(store.ROOT).catch(() => [])) {
     if (storeTypes.isValidKey(f)) await fsp.unlink(nodePath.join(store.ROOT, f)).catch(() => {});
   }
-  const pdfBuf = Buffer.from('%PDF-1.4\n% ไฟล์ทดสอบของ seed-dev\n%%EOF\n');
-  const saved = await store.put({ buffer: pdfBuf, ext: 'pdf' });
-  // url ว่างโดยตั้งใจ — การ์ด PDF ออกลิงก์ใหม่ทุกครั้งที่ขอ (presigned / ตั๋ว) ไม่เก็บไว้
+  // url ว่างโดยตั้งใจ — การ์ด files ออกลิงก์ใหม่ทุกครั้งที่ขอ (presigned / ตั๋ว) ไม่เก็บไว้
+  const mkFileCard = async (title, levels, files) => {
+    const { rows } = await query(
+      `INSERT INTO media_cards(title,subject_group,icon,color,meta,description,url,card_type,
+                               visible_levels,is_featured,created_by)
+       VALUES($1,'สุขศึกษาและพลศึกษา','fa-file-pdf','#00897b',$2,$3,'','files',$4,false,'teacher2')
+       RETURNING id`,
+      [title, `${files.length} ไฟล์`, 'ใบความรู้ประกอบการสอน', levels]
+    );
+    const cardId = rows[0].id;
+    let order = 0;
+    for (const [name, ext, body] of files) {
+      const buf = Buffer.from(body);
+      const saved = await store.put({ buffer: buf, ext });
+      await query(
+        `INSERT INTO media_files(card_id,file_key,file_name,label,file_size,sort_order)
+         VALUES($1,$2,$3,'',$4,$5)`,
+        [cardId, saved.key, name, saved.size, order++]
+      );
+    }
+    return cardId;
+  };
+
+  const PDF = (n) => `%PDF-1.4\n% ไฟล์ทดสอบของ seed-dev ${n}\n%%EOF\n`;
+  // PNG ที่เล็กที่สุดที่ยังผ่าน magic bytes — สารบัญต้องมีทั้ง pdf และรูปถึงจะครอบ 2 ทางเรนเดอร์
+  const PNG = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from('seed-dev'),
+  ]);
+
+  // การ์ดใบเดียวหลายไฟล์ — เคสหลักของโหมดอ่าน
+  await mkFileCard('ใบความรู้หน่วยที่ 2 (PDF)', ['ม.2'], [
+    ['ใบความรู้หน่วย2.pdf', 'pdf', PDF(1)],
+    ['ใบงานหน่วย2.pdf', 'pdf', PDF(2)],
+    ['แผนภาพหน่วย2.png', 'png', PNG],
+  ]);
+  // การ์ดที่นักเรียนไม่มีสิทธิ์เห็น — ใช้ตรวจว่าตั๋วของไฟล์ในนี้ออกให้นักเรียนไม่ได้
+  await mkFileCard('เฉลยใบงานหน่วยที่ 2 (PDF)', [], [
+    ['เฉลยหน่วย2.pdf', 'pdf', PDF(3)],
+  ]);
+  // การ์ด files ที่ยังไม่มีไฟล์ — ครูสร้างค้างไว้ นักเรียนต้องไม่เห็น
   await query(
     `INSERT INTO media_cards(title,subject_group,icon,color,meta,description,url,card_type,
-                             visible_levels,is_featured,created_by,file_key,file_name,file_size)
-     VALUES($1,$2,$3,$4,$5,$6,'','pdf',$7,false,$8,$9,$10,$11)`,
-    ['ใบความรู้หน่วยที่ 2 (PDF)', 'สุขศึกษาและพลศึกษา', 'fa-file-pdf', '#00897b',
-     'PDF · 1.2 MB', 'ใบความรู้ประกอบการสอน',
-     ['ม.2'], 'teacher2', saved.key, 'ใบความรู้หน่วย2.pdf', pdfBuf.length]
+                             visible_levels,is_featured,created_by)
+     VALUES('ชุดสื่อที่ยังไม่ได้อัปไฟล์','สุขศึกษาและพลศึกษา','fa-book','#00897b','','',
+            '','files',$1,false,'teacher2')`,
+    [['ม.2']]
   );
 
 

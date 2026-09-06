@@ -456,14 +456,12 @@ CREATE TABLE IF NOT EXISTS media_cards (
   meta           TEXT NOT NULL DEFAULT '',
   description    TEXT NOT NULL DEFAULT '',
   url            TEXT NOT NULL DEFAULT '',
-  card_type      TEXT NOT NULL DEFAULT 'link' CHECK (card_type IN ('link', 'pdf')),
+  -- 'files' = การ์ดที่ถือไฟล์ · ไฟล์เองอยู่ใน media_files ข้างล่าง ไม่ใช่บนแถวนี้
+  card_type      TEXT NOT NULL DEFAULT 'link'
+                 CONSTRAINT media_cards_card_type_check CHECK (card_type IN ('link', 'files')),
   visible_levels TEXT[] NOT NULL DEFAULT '{}',
   is_featured    BOOLEAN NOT NULL DEFAULT FALSE,
   created_by     TEXT NOT NULL DEFAULT '',
-  -- การ์ดแบบ pdf: ไฟล์อยู่ในที่เก็บที่เลือกด้วย STORAGE_DRIVER — ดู lib/storage/
-  file_key       TEXT,
-  file_name      TEXT,
-  file_size      BIGINT,
   created_at     TIMESTAMPTZ DEFAULT NOW(),
   updated_at     TIMESTAMPTZ DEFAULT NOW(),
   deleted_at     TIMESTAMPTZ
@@ -472,5 +470,20 @@ CREATE TABLE IF NOT EXISTS media_cards (
 CREATE INDEX IF NOT EXISTS idx_media_cards_live
   ON media_cards (is_featured DESC, created_at DESC) WHERE deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_media_cards_file_key
-  ON media_cards (file_key) WHERE file_key IS NOT NULL;
+-- ไฟล์ของการ์ดแบบ 'files' — หลายไฟล์ต่อการ์ด อ่านเรียงตาม sort_order
+-- ไฟล์จริงอยู่ในที่เก็บที่เลือกด้วย STORAGE_DRIVER (ดู lib/storage/) ตารางนี้เก็บแค่ key
+CREATE TABLE IF NOT EXISTS media_files (
+  id         SERIAL PRIMARY KEY,
+  -- CASCADE เป็นตาข่ายกันแถวกำพร้า **ไม่ใช่ตัวลบไฟล์** — ต้องลบ object ก่อนเสมอ
+  card_id    INTEGER NOT NULL REFERENCES media_cards(id) ON DELETE CASCADE,
+  file_key   TEXT NOT NULL,
+  file_name  TEXT NOT NULL DEFAULT '',   -- ชื่อไฟล์เดิมที่ครูอัปมา
+  label      TEXT NOT NULL DEFAULT '',   -- ชื่อในสารบัญ · ว่าง = ใช้ file_name
+  file_size  BIGINT NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_files_card ON media_files (card_id, sort_order, id);
+-- หาไฟล์กำพร้าตอนสอบสวนปัญหาพื้นที่เต็ม
+CREATE INDEX IF NOT EXISTS idx_media_files_key  ON media_files (file_key);

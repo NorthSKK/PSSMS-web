@@ -83,47 +83,65 @@ test('disk driver ปฏิเสธ key ที่ไม่ใช่รูปแ
   assert.doesNotThrow(() => disk.safePath('b'.repeat(32) + '.pdf'));
 });
 
-test('กวาดของหมดอายุ: ลบเฉพาะการ์ดที่เกิน 30 วัน และลบไฟล์ด้วย', async () => {
-  const fresh = await disk.put({ buffer: Buffer.from('%PDF-1.4 old'), ext: 'pdf' });
-  const keep = await disk.put({ buffer: Buffer.from('%PDF-1.4 keep'), ext: 'pdf' });
-
-  const mk = async (title, deletedDaysAgo, key) => {
+test('กวาดของหมดอายุ: ลบเฉพาะการ์ดที่เกิน 30 วัน และลบไฟล์ทุกใบในการ์ดนั้น', async () => {
+  const mk = async (title, deletedDaysAgo, count) => {
     const { rows } = await query(
-      `INSERT INTO media_cards(title, card_type, url, file_key, file_name, file_size,
-                               visible_levels, created_by, deleted_at)
-       VALUES($1,'pdf','',$2,$3,10,'{}','teacher1', NOW() - ($4 || ' days')::interval)
+      `INSERT INTO media_cards(title, card_type, url, visible_levels, created_by, deleted_at)
+       VALUES($1,'files','','{}','teacher1', NOW() - ($2 || ' days')::interval)
        RETURNING id`,
-      [title, key, title + '.pdf', String(deletedDaysAgo)]
+      [title, String(deletedDaysAgo)]
     );
-    return rows[0].id;
+    const keys = [];
+    for (let i = 0; i < count; i++) {
+      const saved = await disk.put({ buffer: Buffer.from(`%PDF-1.4 ${title} ${i}`), ext: 'pdf' });
+      await query(
+        `INSERT INTO media_files(card_id,file_key,file_name,file_size,sort_order)
+         VALUES($1,$2,$3,$4,$5)`,
+        [rows[0].id, saved.key, `${title}-${i}.pdf`, saved.size, i]
+      );
+      keys.push(saved.key);
+    }
+    return { id: rows[0].id, keys };
   };
 
-  const expiredId = await mk('หมดอายุแล้ว', mediaCards.TRASH_DAYS + 1, fresh.key);
-  const recentId = await mk('เพิ่งลบ', 1, keep.key);
+  // การ์ดใบเดียวหลายไฟล์ — ต้องลบ object ครบทุกใบ ไม่ใช่แค่ใบแรก
+  const expired = await mk('หมดอายุแล้ว', mediaCards.TRASH_DAYS + 1, 3);
+  const recent = await mk('เพิ่งลบ', 1, 1);
 
   const res = await mediaCards.purgeExpiredCards({ log: () => {} });
   assert.ok(res.purged >= 1);
   assert.equal(res.failed, 0);
 
-  const rows = await query(`SELECT id FROM media_cards WHERE id = ANY($1)`, [[expiredId, recentId]]);
-  assert.deepEqual(rows.rows.map(r => r.id), [recentId], 'ต้องลบเฉพาะใบที่เกิน 30 วัน');
+  const rows = await query(`SELECT id FROM media_cards WHERE id = ANY($1)`,
+    [[expired.id, recent.id]]);
+  assert.deepEqual(rows.rows.map(r => r.id), [recent.id], 'ต้องลบเฉพาะใบที่เกิน 30 วัน');
 
-  assert.equal(disk.statSync(fresh.key), null, 'ไฟล์ของใบที่หมดอายุต้องถูกลบ');
-  assert.ok(disk.statSync(keep.key), 'ไฟล์ของใบที่ยังไม่หมดอายุต้องอยู่');
+  for (const k of expired.keys) {
+    assert.equal(disk.statSync(k), null, 'ไฟล์ทุกใบของการ์ดที่หมดอายุต้องถูกลบ');
+  }
+  assert.ok(disk.statSync(recent.keys[0]), 'ไฟล์ของใบที่ยังไม่หมดอายุต้องอยู่');
+  const left = await query(`SELECT count(*)::int AS n FROM media_files WHERE card_id=$1`,
+    [expired.id]);
+  assert.equal(left.rows[0].n, 0, 'แถวไฟล์ต้องหายไปพร้อมกัน');
 
-  await query(`DELETE FROM media_cards WHERE id=$1`, [recentId]);
-  await disk.remove(keep.key);
+  await query(`DELETE FROM media_cards WHERE id=$1`, [recent.id]);
+  await disk.remove(recent.keys[0]);
 });
 
 test('กวาดไฟล์ไม่สำเร็จ ต้องไม่ลบแถวทิ้ง — กันไฟล์กำพร้า', async () => {
   const { rows } = await query(
-    `INSERT INTO media_cards(title, card_type, url, file_key, file_name, file_size,
-                             visible_levels, created_by, deleted_at)
-     VALUES('คีย์พัง','pdf','','คีย์ที่ไม่ถูกรูปแบบ','x.pdf',10,'{}','teacher1',
-            NOW() - INTERVAL '90 days')
+    `INSERT INTO media_cards(title, card_type, url, visible_levels, created_by, deleted_at)
+     VALUES('คีย์พัง','files','','{}','teacher1', NOW() - INTERVAL '90 days')
      RETURNING id`
   );
   const id = rows[0].id;
+  // ใบแรกลบได้ ใบที่สองคีย์พัง — การ์ดต้องถูกข้ามไว้ทั้งใบ ไม่ใช่ลบแถวทิ้งแล้วปล่อยกำพร้า
+  const good = await disk.put({ buffer: Buffer.from('%PDF-1.4 ok'), ext: 'pdf' });
+  await query(
+    `INSERT INTO media_files(card_id,file_key,file_name,file_size,sort_order)
+     VALUES($1,$2,'ปกติ.pdf',$3,0), ($1,'คีย์ที่ไม่ถูกรูปแบบ','พัง.pdf',10,1)`,
+    [id, good.key, good.size]
+  );
 
   const res = await mediaCards.purgeExpiredCards({ log: () => {} });
   assert.ok(res.failed >= 1, 'ลบไฟล์ไม่สำเร็จต้องนับเป็น failed');
@@ -131,6 +149,9 @@ test('กวาดไฟล์ไม่สำเร็จ ต้องไม่�
   const still = await query(`SELECT id FROM media_cards WHERE id=$1`, [id]);
   assert.equal(still.rows.length, 1,
     'ลบไฟล์ไม่สำเร็จแล้วยังลบแถว = ไฟล์กำพร้าที่ไม่มีอะไรชี้ถึงตลอดกาล');
+  const left = await query(`SELECT count(*)::int AS n FROM media_files WHERE card_id=$1`, [id]);
+  assert.equal(left.rows[0].n, 1,
+    'ใบที่ลบสำเร็จแล้วต้องหายไปจริง รอบหน้าจะได้เดินต่อจากที่ค้าง ไม่ลบซ้ำ');
 
   await query(`DELETE FROM media_cards WHERE id=$1`, [id]);
 });

@@ -36,12 +36,20 @@ test('DB ที่ migrate ด้วยมือมาแล้ว ต้อง�
   const { rows } = await query(`SELECT filename FROM schema_migrations ORDER BY filename`);
   assert.ok(rows.length >= 4, 'ต้องบันทึกไฟล์ที่มีอยู่เป็น baseline');
 
+  // ไฟล์ของการ์ดสื่อย้ายไป media_files แล้ว (2026-09-06-media-multifile.sql)
+  // คอลัมน์เก่าต้องไม่โผล่กลับมา ไม่งั้นจะมีแหล่งความจริง 2 ที่
   const cols = await query(
     `SELECT column_name FROM information_schema.columns
-     WHERE table_name='media_cards' AND column_name IN ('file_key','drive_file_id')`
+     WHERE table_name='media_cards'
+       AND column_name IN ('file_key','drive_file_id','file_name','file_size')`
   );
-  assert.deepEqual(cols.rows.map(r => r.column_name), ['file_key'],
-    'drive_file_id ต้องไม่โผล่กลับมา');
+  assert.deepEqual(cols.rows.map(r => r.column_name), [],
+    'media_cards ต้องไม่ถือไฟล์เองอีกแล้ว');
+  const moved = await query(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_name='media_files' AND column_name='file_key'`
+  );
+  assert.equal(moved.rows.length, 1, 'file_key ต้องย้ายไปอยู่ที่ media_files');
 });
 
 test('รันซ้ำแล้วไม่มีอะไรเกิดขึ้น', async () => {
@@ -84,10 +92,16 @@ test('DB เปล่าของโรงเรียนใหม่ สร้�
     // schema.sql ต้องสะท้อนทุก migration — เคสที่เคยหลุดจริง
     const cols = await fresh.query(
       `SELECT column_name FROM information_schema.columns
-       WHERE table_name='media_cards' AND column_name IN ('file_key','drive_file_id')`
+       WHERE table_name='media_files' AND column_name IN ('file_key','label','sort_order')`
     );
-    assert.deepEqual(cols.rows.map(r => r.column_name), ['file_key'],
-      'schema.sql ต้องมี file_key ไม่ใช่ drive_file_id');
+    assert.deepEqual(cols.rows.map(r => r.column_name).sort(), ['file_key', 'label', 'sort_order'],
+      'schema.sql ต้องมีตาราง media_files ครบตาม 2026-09-06-media-multifile.sql');
+    const cardType = await fresh.query(
+      `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+       WHERE conname='media_cards_card_type_check'`
+    );
+    assert.match(cardType.rows[0].def, /'files'/,
+      "schema.sql ต้องยอม card_type 'files' ไม่ใช่ 'pdf'");
 
     const fk = await fresh.query(
       `SELECT confdeltype FROM pg_constraint WHERE conname='substitute_assignments_leave_id_fkey'`

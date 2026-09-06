@@ -57,6 +57,8 @@ const TEACHER_OR_ADMIN = new Set([
   'getClubAttendanceSummary',
   'saveSavingsTransaction',
   'saveMediaCard', 'deleteMediaCard',
+  // ไฟล์ในการ์ดสื่อ — ตัวฟังก์ชันเช็คต่ออีกชั้นว่าเป็นการ์ดของครูคนนั้นจริง (_loadOwned)
+  'deleteMediaFile', 'renameMediaFile', 'reorderMediaFiles',
 ]);
 
 // บุคลากรทั้งหมด (ครู + Admin + ผอ./รอง) — กันแค่ "ไม่ใช่นักเรียน"
@@ -101,7 +103,7 @@ const READONLY_ALLOWED = new Set([
     // จึงไม่อยู่ในลิสต์) — ชื่อไม่ขึ้นต้นด้วย get เลยหลุดตอนไล่เพิ่มรอบแรก
     'findDuplicateTimetableRows',
     'getFilteredTimetables', 'getHomeroomAssignments', 'getLeaveRequestBundle',
-    'getMassiveAttendanceGrid', 'getMediaCardOptions', 'getMediaCards',
+    'getMassiveAttendanceGrid', 'getMediaCardFiles', 'getMediaCardOptions', 'getMediaCards',
     'getMediaFileTicket', 'getMediaStorageStatus', 'getMorningActivityData',
     'getMyClub', 'getMyClubs', 'getPage',
     'getPendingLeaves', 'getPendingSubstitutes', 'getPrintConfigData',
@@ -354,6 +356,10 @@ const handlers = {
   getDeletedMediaCards:            (args, user) => mediaCards.getDeletedMediaCards(args, user),
   getMediaStorageStatus:           () => mediaCards.getMediaStorageStatus(),
   getMediaFileTicket:              (args, user) => mediaCards.getMediaFileTicket(args, user),
+  getMediaCardFiles:               (args, user) => mediaCards.getMediaCardFiles(args, user),
+  deleteMediaFile:                 (args, user) => mediaCards.deleteMediaFile(args, user),
+  renameMediaFile:                 (args, user) => mediaCards.renameMediaFile(args, user),
+  reorderMediaFiles:               (args, user) => mediaCards.reorderMediaFiles(args, user),
 
   // Todo (in-memory)
   getTodoList:                     require('../functions/getTodoList'),

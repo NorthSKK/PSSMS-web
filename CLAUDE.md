@@ -1288,15 +1288,20 @@ completeness gate อยู่แล้ว แถวว่างกลางเ�
 
 ### เมนู "สื่อการสอน" — `Page_Teaching_Media`
 
-หน้ารวมการ์ดสื่อการเรียนการสอน คลิกแล้วเปิดในแท็บใหม่
-(`window.open(url, '_blank', 'noopener')`) **ครูเพิ่ม/แก้/ลบการ์ดเองได้จากในหน้า**
+หน้ารวมการ์ดสื่อการเรียนการสอน **ครูเพิ่ม/แก้/ลบการ์ดเองได้จากในหน้า**
+
+การ์ดมี 2 ชนิด:
+- `link` — แปะลิงก์เว็บ กดแล้วเปิดแท็บใหม่ (`window.open(url, '_blank', 'noopener')`)
+- `files` — **ถือไฟล์ได้หลายใบ กดแล้วเปิดอ่านในหน้าเดิม** สลับไฟล์จากสารบัญ ไม่เด้งแท็บ
 
 - `src/Page_Teaching_Media.html` — toolbar (ค้นหา + ชิปกรองกลุ่มสาระ + ปุ่มเพิ่ม/ถังขยะ),
-  `#mediaSubjectGrid`, และ modal `#mediaCardModal` (ฟอร์มการ์ด)
+  `#mediaSubjectGrid`, modal `#mediaCardModal` (ฟอร์มการ์ด), modal `#mediaReaderModal` (ตัวอ่าน)
 - `src/Scripts_General.html` — `initTeachingMediaPage()` + `_mediaRender()` +
-  `openMediaCardForm()` / `saveMediaCardForm()` / `deleteMediaCardPrompt()`
+  `openMediaCardForm()` / `saveMediaCardForm()` / `deleteMediaCardPrompt()` +
+  `openMediaReader()` / `_mediaReaderShow()` (ตัวอ่าน) + `_mediaRenderFileList()` (จัดการไฟล์)
 - `functions/mediaCards.js` — CRUD + กติกาการมองเห็น + allowlist ของ icon/สี/กลุ่มสาระ
-- ตาราง `media_cards` (migration `db/migrations/2026-08-25-media-cards.sql`)
+- ตาราง `media_cards` + `media_files` (migration `db/migrations/2026-09-06-media-multifile.sql`)
+- เหตุผลของทุกทางเลือกในฟีเจอร์นี้อยู่ที่ `docs/plan-media-multifile.md`
 - `src/Scripts_Core.html` — `<li>` ในเมนู 3 จุด: ครูและแอดมินเป็น **เมนูย่อยท้ายกลุ่ม
   "ฝ่ายวิชาการ"** (`nav-link-sub`, สี `#00897b`) ส่วนนักเรียนเป็น `dept-btn` ระดับบน
   เพราะเมนูนักเรียนไม่มีกลุ่มฝ่าย · `PAGE_DEPT.Page_Teaching_Media = 'academic'` ·
@@ -1324,8 +1329,8 @@ completeness gate อยู่แล้ว แถวว่างกลางเ�
 - ลบเป็น soft delete (`deleted_at`) ไม่ใช่ลบจริง
 - ปุ่ม "แชร์ไป Google Classroom" เปิด `https://classroom.google.com/share?url=...` ตรง ๆ
   **ไม่ได้โหลด widget `platform.js` ของ Google** — ไม่ต้องพึ่ง script ภายนอก ไม่ใช้ Classroom API
-  ไม่ต้อง OAuth ไม่ต้อง verification · ขึ้นเฉพาะการ์ดแบบลิงก์ เพราะการ์ด PDF ใช้ลิงก์แบบมีตั๋ว
-  อายุ 10 นาทีและผูกกับคนขอ แชร์ไปแล้วเปิดไม่ได้ · ทุกคนที่เห็นการ์ดกดแชร์ได้ ไม่จำกัดเจ้าของ
+  ไม่ต้อง OAuth ไม่ต้อง verification · ขึ้นเฉพาะการ์ดแบบลิงก์ เพราะการ์ด `files` ใช้ลิงก์
+  แบบมีตั๋วอายุสั้น แชร์ไปแล้วเปิดไม่ได้ · ทุกคนที่เห็นการ์ดกดแชร์ได้ ไม่จำกัดเจ้าของ
 
 `MEDIA_SUBJECTS` ใน `Scripts_General.html` **ไม่ใช่แหล่งความจริงแล้ว** — เหลือหน้าที่เดียว
 คือรายการสำรองตอน `getMediaCards` ล้มเหลว (ขึ้นแถบเตือน `#mediaFallbackWarn` คู่กัน
@@ -1336,39 +1341,82 @@ completeness gate อยู่แล้ว แถวว่างกลางเ�
   = deploy production ทันที ไม่ควรเอาเนื้อหาเรียนกับ PDF หลายสิบ MB มาปน
 - ไอคอนในการ์ดใช้ `background: <สีวิชา>; color:#fff` ไม่ใช่สีอ่อน + ตัวอักษรสีเดียวกัน
   เพราะบน dark mode พื้นอ่อน 13% กับตัวอักษรสีเดิม contrast ต่ำจนอ่านไม่ออก
-**การ์ดแบบ PDF (`card_type = 'pdf'`)**:
+**การ์ดชุดไฟล์ (`card_type = 'files'`)**:
 
+- **1 การ์ด = หลายไฟล์** แถวไฟล์อยู่ใน `media_files` (`card_id` FK `ON DELETE CASCADE`)
+  ไม่ใช่คอลัมน์บน `media_cards` และไม่ใช่ JSONB — `purgeExpiredCards` กับ
+  `getMediaStorageStatus` ยืนบน `file_key` / `sum(file_size)` ที่เป็นคอลัมน์จริง
+  และเพิ่ม/ลบทีละใบบน JSONB คือ read-modify-write ทั้ง array ที่อัปพร้อมกันแล้วทับกันหาย
+- ⚠️ `ON DELETE CASCADE` เป็น **ตาข่ายกันแถวกำพร้า ไม่ใช่ตัวลบไฟล์** — ต้องลบ object
+  บนที่เก็บก่อนเสมอ ไม่งั้น cascade กินแถวไปแล้วไฟล์ค้างตลอดกาลโดยไม่มีอะไรชี้ถึง
 - ที่เก็บไฟล์อยู่หลัง adapter `lib/storage/` เลือกด้วย `STORAGE_DRIVER`
   `disk` (dev + เทสต์) / `s3` (production, Cloudflare R2) — เหตุผลที่ไม่ใช้ Drive,
   Railway Volume, หรือ Postgres bytea อยู่ในหัวไฟล์ `lib/storage/s3.js`
 - **ตั้งค่าไม่ครบ = ปิดฟีเจอร์อัปโหลด** ไม่ใช่เขียนลงที่ชั่วคราวแล้วบอกว่าสำเร็จ
   (`uploadEnabled=false`, endpoint 503, Admin เห็นแถบสถานะ) — การ์ดลิงก์ต้องใช้ได้เสมอ
-- **เปิดไฟล์**: `getMediaFileTicket` ตรวจ `visible_levels` แล้วให้ driver ออก URL อายุสั้น
-  · `s3` → presigned URL 5 นาที เบราว์เซอร์โหลดจาก R2 ตรง **Railway ไม่แตะไฟล์**
-  · `disk` → ตั๋ว JWT 10 นาที ชี้ `GET /api/media/file/:id?t=` ซึ่ง **mount เฉพาะ driver disk**
-  ทั้งสองแบบตรวจสิทธิ์ตอน *ออก* URL ไม่ใช่ตอนเสิร์ฟ — `window.open` แนบ Authorization
-  header ไม่ได้เพราะ JWT อยู่ใน localStorage ไม่ใช่ cookie
-- `media_cards.url` ของการ์ด PDF **เป็นค่าว่างเสมอ** ลิงก์ออกใหม่ทุกครั้งที่ขอ
-  (เก็บ presigned URL ที่หมดอายุใน 5 นาทีไว้ในตารางไม่มีความหมาย)
-- **อัปโหลดผ่าน backend เสมอ** ทั้งสอง driver — `POST /api/media/upload` (`routes/media.js`)
-  **เส้นแบ่งคือ binary ไป REST ที่เหลือไป `/api/gas`** · ยอมให้ byte วิ่งผ่าน Railway
-  ตอนอัปเพราะเป็น write path นาน ๆ ครั้ง และต้องเห็นไฟล์ถึงจะตรวจ magic bytes ได้
-- ด่านตรวจ: 25MB, MIME `application/pdf`, **magic bytes `%PDF-`** (ไม่เชื่อ MIME จาก client),
-  rate limit 20 ไฟล์/ชม./คน — ตรวจ metadata ให้ครบ *ก่อน* เขียนไฟล์เสมอ
-  ไม่งั้นได้ไฟล์กำพร้าที่กินพื้นที่โดยไม่มีแถวไหนชี้ถึง (insert ล้ม → ลบไฟล์ทิ้ง)
+- **เปิดไฟล์**: `getMediaFileTicket(fileId)` ตรวจ `visible_levels` **ของการ์ดแม่**
+  แล้วให้ driver ออก URL อายุสั้น · `s3` → presigned URL เบราว์เซอร์โหลดจาก R2 ตรง
+  **Railway ไม่แตะไฟล์** · `disk` → ตั๋ว JWT ชี้ `GET /api/media/file/media/:fileId?t=`
+  ซึ่ง **mount เฉพาะ driver disk** · ทั้งสองแบบตรวจสิทธิ์ตอน *ออก* URL ไม่ใช่ตอนเสิร์ฟ
+  เพราะ `iframe`/`window.open` แนบ Authorization header ไม่ได้ (JWT อยู่ใน localStorage)
+- ⚠️ **`id` ในตั๋วคือ `media_files.id` ไม่ใช่ card id** และ SQL ที่เสิร์ฟไฟล์ต้อง join
+  กลับหา `media_cards` เพื่อเช็ค `deleted_at` — ไม่งั้นตั๋วที่ออกก่อนลบยังเปิดได้
+- **อายุตั๋วของสื่อการสอนคือ 1 ชม.** ไม่ใช่ 5 นาทีเหมือนสารบรรณ (`MEDIA_URL_TTL_SECONDS`,
+  ส่งเป็น `ttlSeconds` เข้า `getFileUrl`) เพราะ **PDF viewer ของเบราว์เซอร์โหลดไฟล์ใหญ่
+  แบบ Range request ทยอยขอตอนเลื่อน** — ตั๋วตายระหว่างอ่าน = PDF ค้างกลางเล่มเงียบ ๆ
+  ราคาที่จ่ายคือ URL ที่หลุดออกไปใช้ได้ 1 ชม. · `s3` มีเพดาน `MAX_URL_TTL_SECONDS`
+- `media_cards.url` ของการ์ด `files` **เป็นค่าว่างเสมอ** และแก้จากฟอร์มไม่ได้
+- **อัปโหลดผ่าน backend เสมอ** ทั้งสอง driver — `POST /api/media/upload/:cardId`
+  (`routes/media.js`) **เส้นแบ่งคือ binary ไป REST ที่เหลือไป `/api/gas`**
+- ⚠️ **การ์ดถูกสร้างก่อนด้วย `saveMediaCard` แล้วค่อยแนบไฟล์ทีละใบ** — client ยิงเรียงกันเอง
+  ไม่ใช่ก้อนเดียวหลายไฟล์ เพราะ multer ใช้ `memoryStorage()` ไฟล์อยู่ใน RAM ทั้งก้อน
+  30 ไฟล์ × 25MB = 750MB เข้า memory ครั้งเดียว Railway ตาย · แถมล้มใบเดียวไม่ล้มทั้งชุด
+  ปิดหน้ากลางคัน = ได้การ์ดเปล่า ซึ่ง **นักเรียนไม่เห็น (กรองที่ SQL) ครูเห็นพร้อมป้าย**
+- ด่านตรวจ: 25MB/ไฟล์, **magic bytes** (`ALLOWED_EXTS = pdf/jpg/png` — ไม่รับ docx
+  เพราะ `types.js` เสิร์ฟเป็น attachment เปิดในหน้าเดิมไม่ได้), เพดาน 50 ไฟล์/การ์ด,
+  โควตารวมของโรงเรียน `MEDIA_QUOTA_GB` (เกิน → **507** ไม่ใช่ 400 เพราะครูแก้เองได้)
+  — ตรวจทุกอย่างให้ครบ *ก่อน* เขียนไฟล์เสมอ (insert ล้ม → ลบไฟล์ทิ้ง)
+- ⚠️ **rate limit นับเป็นไบต์ ไม่ใช่จำนวนครั้ง** (500MB/ชม./คน) — เจตนาเดิมคือกันพื้นที่
+  ที่ใช้ร่วมกันทั้งโรงเรียน · เพดาน 20 ครั้ง/ชม. แบบเดิมทำให้อัปหนังสือ 30 บทไม่ได้เลย
 - ⚠️ **busboy ถอด `filename` เป็น latin1** ชื่อไฟล์ภาษาไทยจะเป็น mojibake ตั้งแต่รับเข้ามา
   `decodeFilename()` แปลงกลับ อย่าถอดออก
 - ชื่อไฟล์ในที่เก็บเป็น hex สุ่มล้วน ไม่เอาชื่อที่ครูตั้งมาประกอบ (กัน path traversal
   และปัญหา encoding) — ทั้งสอง driver ตรวจซ้ำอีกชั้นแม้ค่าจะมาจาก DB
-- `url` ของการ์ด PDF **แก้จากฟอร์มไม่ได้** — เปลี่ยนไฟล์ = ลบการ์ดแล้วอัปใหม่
-- **ถังขยะ 30 วันอยู่ที่ `deleted_at` ที่เดียว ไม่แตะไฟล์**: ลบ = ไม่ทำอะไรกับ storage,
-  กู้คืน = ล้าง `deleted_at` (จึงไม่มีทางกู้แล้วได้การ์ดที่เปิดไฟล์ไม่ได้)
-  พ้น 30 วัน `purgeExpiredCards()` **ลบ object ก่อนแล้วค่อยลบแถว** — สลับลำดับเมื่อไหร่
-  ได้ไฟล์กำพร้าที่ไม่มีอะไรชี้ถึงตลอดกาล · รันตอน boot ต่อจาก migration ไม่มี cron
+- **จัดการไฟล์รายใบ**: `getMediaCardFiles` / `deleteMediaFile` / `renameMediaFile` /
+  `reorderMediaFiles` · `media_files.label` ว่าง = ใช้ `file_name` (ล้าง label =
+  กลับไปใช้ชื่อไฟล์เดิม) · เรียงด้วยปุ่ม ↑↓ ไม่ใช่ drag-drop (มือถือใช้ไม่ได้จริง)
+- ⚠️ **ลบไฟล์เดี่ยว = ลบจริงทันที ไม่มีถังขยะระดับไฟล์** — ถังขยะ 30 วันมีที่เดียวคือ
+  `media_cards.deleted_at` · เพิ่ม `deleted_at` ที่ตารางไฟล์ = สถานะ 2 ที่ ซึ่งเคยพังมาแล้ว
+  และทำให้ "กู้คืนการ์ด" ต้องตอบว่ากู้ไฟล์ที่ลบแยกด้วยไหม
+- **ถังขยะ 30 วันไม่แตะไฟล์**: ลบ = ไม่ทำอะไรกับ storage, กู้คืน = ล้าง `deleted_at`
+  (จึงไม่มีทางกู้แล้วได้การ์ดที่เปิดไฟล์ไม่ได้) · พ้น 30 วัน `purgeExpiredCards()`
+  **ลบ object ทุกใบก่อน แล้วค่อยลบแถวการ์ด** ใบไหนลบไม่ผ่าน = ข้ามการ์ดนั้นทั้งใบ
+  ไว้รอบหน้า (ใบที่ลบไปแล้วหายจากตารางแล้ว รอบหน้าเดินต่อจากที่ค้าง) ·
+  รันตอน boot ต่อจาก migration ไม่มี cron
 - **1 bucket + 1 token ต่อ 1 โรงเรียน** จำกัด blast radius ตอน key หลุด — วิธีตั้งอยู่ใน `WEB_DEV.md`
 - driver `s3` เป็น path ที่ production ใช้แต่เทสต์อัตโนมัติไม่ครอบ (ไม่มี R2 ตอนรันเทส)
   `test/storage.test.js` ล็อกเท่าที่ล็อกได้: การตรวจ key, รูปทรง presigned URL, การปิดตัวเองเมื่อ env ไม่ครบ
   **แก้ `lib/storage/s3.js` แล้วต้อง smoke test บน production จริง**
+
+**ตัวอ่าน (`#mediaReaderModal`)**:
+
+- `<iframe>` สำหรับ PDF · `<img>` สำหรับรูป — ใช้ viewer ของเบราว์เซอร์เอง
+  **ไม่ได้ลง pdf.js** เพราะ pdf.js `fetch` ข้าม origin ต้องตั้ง **CORS บน bucket
+  ของทุกโรงเรียน** (bucket สร้างใหม่ต่อโรงเรียน = ขั้นตอนติดตั้งที่ลืมแล้วพังเงียบ)
+  ส่วน iframe ไม่ต้อง · แลกกับการที่ **เลื่อนรวดข้ามไฟล์เหมือนเล่มเดียวไม่ได้ ทำได้แค่สลับไฟล์**
+- ⚠️ **ปุ่ม "แท็บใหม่" ในหัว modal ห้ามลบ** — iOS Safari เรนเดอร์ PDF ใน iframe ได้งั้น ๆ
+  ปุ่มนี้คือทางหนีเดียว
+- ขอตั๋ว **ทีละไฟล์ตอนกดสลับ** ไม่ sign ล่วงหน้าทั้งการ์ด · เช็ค `_mediaState.reader`
+  กับ `index` ก่อนวาด เพราะกดสลับเร็วกว่าตั๋วมาถึงได้
+- จำไฟล์ล่าสุดที่เปิดใน `localStorage['mediaLastFile_<cardId>']` ·
+  **ไม่จำเลขหน้าใน PDF** — iframe ข้าม origin อ่านตำแหน่ง scroll ไม่ได้
+- viewer ของเบราว์เซอร์มีปุ่มดาวน์โหลด/พิมพ์ติดมาเอง **กันไม่ได้** — นักเรียนที่เห็นการ์ด
+  โหลดไฟล์เก็บได้ ซึ่งเป็นจริงอยู่แล้วก่อนหน้านี้ ไม่ได้แย่ลง
+- หน้ารวม (`getMediaCards`) ส่งแค่ `fileCount` / `totalSize` **ไม่ส่งสารบัญ** —
+  50 การ์ด × 30 ไฟล์ = 1,500 แถวยัดมาทุกครั้งที่เข้าเมนู · สารบัญขอตอนกดเปิดอ่าน
+- **ย่อรูปฝั่ง client ก่อนอัป** (`_mediaShrinkImage`, ด้านยาว 2000px, ข้ามไฟล์ < 1MB)
+  ไม่ลง `sharp` ที่ Railway · ⚠️ **PNG ต้อง export กลับเป็น PNG** — `toBlob('image/jpeg')`
+  จะทำให้พื้นโปร่งใสกลายเป็นพื้นดำทั้งใบ
 
 ### งานสารบรรณ — สิทธิ์และไฟล์แนบ
 

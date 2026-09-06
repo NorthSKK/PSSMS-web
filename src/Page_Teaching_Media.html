@@ -2,7 +2,7 @@
   <div class="pssms-page-header d-flex flex-wrap align-items-start justify-content-between gap-2">
     <div>
       <h4><i class="fas fa-book-open-reader me-2" style="color: var(--p-accent);"></i>สื่อการสอน</h4>
-      <p class="pssms-subtitle">เว็บสื่อการเรียนการสอนแยกตามรายวิชา · เปิดในแท็บใหม่ ใช้ได้ทั้งครูและนักเรียน</p>
+      <p class="pssms-subtitle">สื่อการเรียนการสอนแยกตามรายวิชา · การ์ดที่แนบไฟล์เปิดอ่านได้ในหน้านี้เลย ใช้ได้ทั้งครูและนักเรียน</p>
     </div>
     <div class="d-flex gap-2">
       <button type="button" id="mediaTrashToggle" class="btn btn-outline-secondary btn-sm d-none">
@@ -69,12 +69,12 @@
               <label class="form-check-label" for="mcTypeLink">แปะลิงก์</label>
             </div>
             <div class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" name="mcType" id="mcTypePdf" value="pdf">
-              <label class="form-check-label" for="mcTypePdf">อัปโหลดไฟล์ PDF</label>
+              <input class="form-check-input" type="radio" name="mcType" id="mcTypeFiles" value="files">
+              <label class="form-check-label" for="mcTypeFiles">อัปโหลดไฟล์ (หลายไฟล์ได้)</label>
             </div>
           </div>
           <div class="form-text d-none" id="mcUploadDisabledNote">
-            ยังไม่เปิดให้อัปโหลด PDF — ตอนนี้เพิ่มได้เฉพาะแบบแปะลิงก์
+            ยังไม่เปิดให้อัปโหลดไฟล์ — ตอนนี้เพิ่มได้เฉพาะแบบแปะลิงก์
           </div>
         </div>
 
@@ -87,21 +87,24 @@
         </div>
 
         <div class="mb-3 d-none" id="mcFileWrap">
-          <label class="form-label" for="mcFile">ไฟล์ PDF <span class="text-danger">*</span></label>
-          <input type="file" class="form-control" id="mcFile" accept="application/pdf">
+          <label class="form-label" for="mcFile">เลือกไฟล์</label>
+          <input type="file" class="form-control" id="mcFile" multiple
+                 accept="application/pdf,image/jpeg,image/png">
           <div class="form-text" id="mcFileHint"></div>
+          <div id="mcFileQueue" class="mt-2 small"></div>
           <div class="mt-2 p-2 rounded-2 small" style="background:var(--p-chip-bg);">
             <i class="fas fa-lock me-1"></i>
             ไฟล์เปิดได้เฉพาะคนที่ล็อกอินและมีสิทธิ์เห็นการ์ดใบนี้ ตามระดับชั้นที่เลือกไว้ด้านล่าง
           </div>
         </div>
 
+        <!-- ไฟล์ที่แนบไว้แล้ว — เรียง/เปลี่ยนชื่อ/ลบได้ทีละใบ (ลบแล้วหายเลย ไม่มีถังขยะระดับไฟล์) -->
         <div class="mb-3 d-none" id="mcFileCurrentWrap">
-          <label class="form-label">ไฟล์ที่แนบไว้</label>
-          <div class="p-2 rounded-2 small" style="background:var(--p-chip-bg);">
-            <i class="fas fa-file-pdf me-1"></i><span id="mcFileCurrent"></span>
+          <label class="form-label">ไฟล์ในการ์ดนี้ <span id="mcFileCount" class="pssms-chip"></span></label>
+          <div id="mcFileList" class="border rounded-2"></div>
+          <div class="form-text">
+            ลำดับนี้คือลำดับในสารบัญตอนเปิดอ่าน · ลบไฟล์แล้วกู้คืนไม่ได้ ต้องอัปใหม่
           </div>
-          <div class="form-text">เปลี่ยนไฟล์ไม่ได้ — ถ้าต้องเปลี่ยนให้ลบการ์ดนี้แล้วอัปโหลดใหม่</div>
         </div>
 
         <div class="row g-3 mb-3">
@@ -151,6 +154,40 @@
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ยกเลิก</button>
         <button type="button" class="btn btn-primary" id="mcSaveBtn" onclick="saveMediaCardForm()">
           <i class="fas fa-floppy-disk me-1"></i>บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ตัวอ่านสื่อ — เปิดในหน้าเดิม ไม่เด้งแท็บ
+     PDF เรนเดอร์ด้วย viewer ของเบราว์เซอร์ผ่าน <iframe> (ไม่ได้ลง pdf.js เพราะจะต้อง
+     ตั้ง CORS บน bucket ของทุกโรงเรียน — ดู docs/plan-media-multifile.md)
+     iOS Safari เรนเดอร์ PDF ใน iframe ได้งั้น ๆ ปุ่ม "เปิดในแท็บใหม่" จึงเป็นทางหนี ห้ามลบ -->
+<div class="modal fade pssms-modal" id="mediaReaderModal" tabindex="-1">
+  <div class="modal-dialog modal-fullscreen">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary d-md-none me-2" id="mrToggleToc">
+          <i class="fas fa-list"></i>
+        </button>
+        <h5 class="modal-title flex-grow-1 text-truncate" id="mrTitle"></h5>
+        <a class="btn btn-sm btn-outline-secondary me-2" id="mrOpenTab" target="_blank" rel="noopener">
+          <i class="fas fa-arrow-up-right-from-square me-1"></i>แท็บใหม่
+        </a>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0 mr-body" id="mrBody">
+        <div class="mr-sidebar" id="mrSidebar"></div>
+        <div class="mr-stage" id="mrStage"></div>
+      </div>
+      <div class="modal-footer py-2 justify-content-between">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="mrPrev">
+          <i class="fas fa-chevron-left me-1"></i>ก่อนหน้า
+        </button>
+        <span class="small" id="mrPos" style="color: var(--p-text-muted);"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="mrNext">
+          ถัดไป<i class="fas fa-chevron-right ms-1"></i>
         </button>
       </div>
     </div>

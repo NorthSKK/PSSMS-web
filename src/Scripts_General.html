@@ -1956,6 +1956,7 @@ function initTeachingMediaPage() {
 
   grid.innerHTML = '<div class="col-12"><div class="pssms-empty">กำลังโหลด...</div></div>';
 
+  _mediaBindReader();
   _mediaLoadOptions();
   _mediaLoad();
   if (_mediaIsAdmin()) _mediaLoadStorageStatus();
@@ -1989,9 +1990,11 @@ function _mediaLoadStorageStatus() {
       }
       var mb = function(b) { return (Number(b || 0) / (1024*1024)).toFixed(1); };
       box.style.cssText = 'background:var(--p-accent-soft);color:var(--p-accent);';
+      var gb = function(b) { return (Number(b || 0) / (1024*1024*1024)).toFixed(0); };
       box.textContent = 'ที่เก็บไฟล์: ปกติ (' + (st.driver || '?') + ') · '
         + st.files + ' ไฟล์ · ใช้ไป ' + mb(st.usage) + ' MB'
-        + (st.trashed ? ' · อยู่ในถังขยะ ' + st.trashed + ' ใบ' : '');
+        + (st.quota ? ' จากโควตา ' + gb(st.quota) + ' GB' : '')
+        + (st.trashed ? ' · อยู่ในถังขยะ ' + st.trashed + ' ไฟล์' : '');
     })
     .withFailureHandler(function() { box.classList.add('d-none'); })
     .getMediaStorageStatus();
@@ -2010,7 +2013,8 @@ function _mediaLoad() {
       _mediaState.cards = MEDIA_SUBJECTS.map(function(m, i) {
         return {
           id: 'fallback' + i, title: m.title, group: m.group, icon: m.icon, color: m.color,
-          meta: m.meta, desc: m.desc, url: m.url, visibleLevels: [], isFeatured: true,
+          meta: m.meta, desc: m.desc, url: m.url, cardType: 'link',
+          visibleLevels: [], isFeatured: true, fileCount: 0, totalSize: 0,
           canEdit: false
         };
       });
@@ -2144,6 +2148,19 @@ function _mediaCardEl(c) {
     meta.textContent = c.meta;
     chips.appendChild(meta);
   }
+  // การ์ดชุดไฟล์ต้องบอกความหนาตั้งแต่หน้ารวม ไม่งั้นดูไม่ออกว่าต่างจากการ์ดลิงก์ยังไง
+  if (c.cardType === 'files') {
+    var fc = document.createElement('span');
+    fc.className = 'pssms-chip';
+    if (c.fileCount) {
+      fc.textContent = c.fileCount + ' ไฟล์ · ' + _mediaSizeLabel(c.totalSize);
+    } else {
+      fc.textContent = 'ยังไม่มีไฟล์';
+      fc.style.color = '#92400e';
+      fc.style.background = '#fffbeb';
+    }
+    chips.appendChild(fc);
+  }
   // ครู/Admin ต้องเห็นว่าการ์ดใบนี้ใครเห็นบ้าง ไม่งั้นครูจะงงว่าทำไมเด็กหาไม่เจอ
   if (_mediaIsStaff() && !_mediaState.fallback) {
     var vis = document.createElement('span');
@@ -2179,14 +2196,19 @@ function _mediaCardEl(c) {
     restore.addEventListener('click', function() { restoreMediaCardById(c.id); });
     foot.appendChild(restore);
   } else {
+    var isFiles = c.cardType === 'files';
     var open = document.createElement('button');
     open.type = 'button';
     open.className = 'btn btn-sm btn-link p-0 text-decoration-none';
     open.style.color = 'var(--p-accent)';
-    open.innerHTML = (c.cardType === 'pdf' ? 'เปิดไฟล์ PDF' : 'เปิดสื่อการสอน')
-      + ' <i class="fas fa-arrow-up-right-from-square ms-1"></i>';
+    // การ์ดชุดไฟล์เปิดอ่านในหน้าเดิม ไอคอนจึงไม่ใช่ "ออกไปข้างนอก" เหมือนการ์ดลิงก์
+    open.innerHTML = isFiles
+      ? '<i class="fas fa-book-open me-1"></i>เปิดอ่าน'
+      : 'เปิดสื่อการสอน <i class="fas fa-arrow-up-right-from-square ms-1"></i>';
+    open.disabled = isFiles && !c.fileCount;
+    if (open.disabled) open.style.color = 'var(--p-text-muted)';
     open.addEventListener('click', function() {
-      if (c.cardType === 'pdf') openMediaFile(c.id); else openTeachingMedia(c.url);
+      if (isFiles) openMediaReader(c); else openTeachingMedia(c.url);
     });
     foot.appendChild(open);
 
@@ -2195,7 +2217,7 @@ function _mediaCardEl(c) {
 
     // แชร์เข้า Google Classroom ได้เฉพาะการ์ดแบบลิงก์
     // การ์ด PDF ใช้ลิงก์แบบมีตั๋ว อายุ 10 นาทีและผูกกับคนขอ แชร์ไปก็เปิดไม่ได้
-    if (c.cardType !== 'pdf' && c.url && !_mediaState.trash) {
+    if (c.cardType !== 'files' && c.url && !_mediaState.trash) {
       var share = document.createElement('button');
       share.type = 'button';
       share.className = 'btn btn-sm btn-outline-secondary';
@@ -2250,15 +2272,159 @@ function openTeachingMedia(url) {
   window.open(url, '_blank', 'noopener');
 }
 
-// ไฟล์ PDF ไม่ได้เปิดสาธารณะ — ต้องขอตั๋วอายุสั้นก่อน เพราะ window.open
+function _mediaSizeLabel(bytes) {
+  var n = Number(bytes || 0);
+  var mb = n / (1024 * 1024);
+  return mb >= 1 ? mb.toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+}
+
+// ==========================================
+// 📖 ตัวอ่านสื่อ — การ์ดชุดไฟล์เปิดในหน้าเดิม
+// ==========================================
+// เดิมกดเปิดไฟล์ = window.open เด้งแท็บใหม่ทุกใบ · การ์ดใบเดียวมี 30 ไฟล์แล้วทำแบบนั้นไม่ไหว
+//
+// ไฟล์ไม่ได้เปิดสาธารณะ — ต้องขอตั๋วอายุสั้นก่อน เพราะทั้ง iframe และ window.open
 // ไม่ได้แนบ Authorization header ไปให้ (JWT อยู่ใน localStorage ไม่ใช่ cookie)
-function openMediaFile(cardId) {
+// ขอ **ทีละไฟล์ตอนกดสลับ** ไม่ sign ล่วงหน้าทั้งการ์ด — 30 ไฟล์จะได้ไม่ต้องออกตั๋วทิ้ง 30 ใบ
+
+function openMediaReader(card) {
   google.script.run
-    .withSuccessHandler(function(res) { window.open(res.url, '_blank', 'noopener'); })
-    .withFailureHandler(function(err) {
-      Swal.fire('เปิดไฟล์ไม่ได้', err.message || String(err), 'error');
+    .withSuccessHandler(function(files) {
+      if (!files || !files.length) { showAlert('การ์ดนี้ยังไม่มีไฟล์'); return; }
+      _mediaState.reader = { card: card, files: files, index: 0 };
+      document.getElementById('mrTitle').textContent = card.title;
+      _mediaRenderToc();
+      _mediaReaderShow(_mediaReaderLastIndex(card.id, files));
+
+      var el = document.getElementById('mediaReaderModal');
+      _mediaState.readerModal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+      _mediaState.readerModal.show();
     })
-    .getMediaFileTicket(cardId);
+    .withFailureHandler(function(err) {
+      Swal.fire('เปิดไม่ได้', err.message || String(err), 'error');
+    })
+    .getMediaCardFiles(card.id);
+}
+
+// จำไฟล์ล่าสุดที่เปิดไว้ในเบราว์เซอร์ของแต่ละคน — ตรงกับที่หน้านี้ทำกับความคืบหน้าการเรียนอยู่แล้ว
+// ไม่จำเลขหน้าใน PDF: iframe ข้าม origin อ่านตำแหน่ง scroll ไม่ได้
+function _mediaReaderLastIndex(cardId, files) {
+  var saved = null;
+  try { saved = localStorage.getItem('mediaLastFile_' + cardId); } catch (e) { /* โหมดส่วนตัว */ }
+  for (var i = 0; i < files.length; i++) {
+    if (String(files[i].id) === String(saved)) return i;
+  }
+  return 0;
+}
+
+function _mediaRenderToc() {
+  var box = document.getElementById('mrSidebar');
+  var r = _mediaState.reader;
+  box.innerHTML = '';
+  r.files.forEach(function(f, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn w-100 mr-item d-flex align-items-center gap-2 py-2 px-3';
+    b.dataset.index = String(i);
+    var ic = document.createElement('i');
+    ic.className = 'fas ' + (f.ext === 'pdf' ? 'fa-file-pdf' : 'fa-image');
+    ic.style.opacity = '.6';
+    var text = document.createElement('span');
+    text.className = 'flex-grow-1 text-truncate small';
+    text.textContent = f.label;              // textContent — ชื่อไฟล์มาจากที่ครูอัป
+    var size = document.createElement('span');
+    size.className = 'small';
+    size.style.color = 'var(--p-text-muted)';
+    size.textContent = _mediaSizeLabel(f.size);
+    b.appendChild(ic); b.appendChild(text); b.appendChild(size);
+    b.addEventListener('click', function() {
+      _mediaReaderShow(i);
+      document.getElementById('mrBody').classList.remove('mr-open');
+    });
+    box.appendChild(b);
+  });
+}
+
+function _mediaReaderShow(i) {
+  var r = _mediaState.reader;
+  if (!r || i < 0 || i >= r.files.length) return;
+  r.index = i;
+  var f = r.files[i];
+
+  Array.prototype.forEach.call(document.getElementById('mrSidebar').children, function(b) {
+    b.classList.toggle('active', Number(b.dataset.index) === i);
+  });
+  document.getElementById('mrPos').textContent = (i + 1) + ' / ' + r.files.length + ' · ' + f.label;
+  document.getElementById('mrPrev').disabled = (i === 0);
+  document.getElementById('mrNext').disabled = (i === r.files.length - 1);
+  try { localStorage.setItem('mediaLastFile_' + r.card.id, String(f.id)); } catch (e) { /* โหมดส่วนตัว */ }
+
+  var stage = document.getElementById('mrStage');
+  stage.innerHTML = '';
+  var loading = document.createElement('div');
+  loading.className = 'p-4 text-center small';
+  loading.style.color = 'var(--p-text-muted)';
+  loading.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>กำลังเปิด...';
+  stage.appendChild(loading);
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      // กดสลับเร็วกว่าตั๋วมาถึง — ตั๋วของใบเก่าต้องไม่แย่งจอของใบที่กำลังดูอยู่
+      if (_mediaState.reader !== r || r.index !== i) return;
+      stage.innerHTML = '';
+      var el;
+      if (f.ext === 'pdf') {
+        el = document.createElement('iframe');
+        el.title = f.label;
+      } else {
+        el = document.createElement('img');
+        el.alt = f.label;
+      }
+      el.src = res.url;
+      stage.appendChild(el);
+      // ทางหนีตอน iOS Safari เรนเดอร์ PDF ใน iframe ไม่ไหว — ห้ามเอาปุ่มนี้ออก
+      document.getElementById('mrOpenTab').href = res.url;
+    })
+    .withFailureHandler(function(err) {
+      if (_mediaState.reader !== r || r.index !== i) return;
+      stage.innerHTML = '';
+      var msg = document.createElement('div');
+      msg.className = 'p-4 text-center small text-danger';
+      msg.textContent = 'เปิดไฟล์ไม่ได้: ' + (err.message || String(err));
+      stage.appendChild(msg);
+    })
+    .getMediaFileTicket(f.id);
+}
+
+function _mediaReaderStep(delta) {
+  if (!_mediaState.reader) return;
+  _mediaReaderShow(_mediaState.reader.index + delta);
+}
+
+// ผูกครั้งเดียวต่อการเข้าหน้า — HTML ของหน้าถูกยัดใหม่ทุกครั้งที่เปลี่ยนเมนู element จึงเป็นตัวใหม่
+function _mediaBindReader() {
+  var modal = document.getElementById('mediaReaderModal');
+  if (!modal) return;
+  document.getElementById('mrPrev').onclick = function() { _mediaReaderStep(-1); };
+  document.getElementById('mrNext').onclick = function() { _mediaReaderStep(1); };
+  document.getElementById('mrToggleToc').onclick = function() {
+    document.getElementById('mrBody').classList.toggle('mr-open');
+  };
+
+  // ลูกศรซ้าย/ขวา — ครูสอนหน้าห้องกดรีโมกดผ่านได้ · ผูกตอนเปิด ถอดตอนปิด
+  // ไม่งั้นลูกศรของทั้งระบบจะโดนดักไว้ตลอดหลังเคยเปิดตัวอ่านครั้งหนึ่ง
+  var onKey = function(e) {
+    if (e.key === 'ArrowLeft') _mediaReaderStep(-1);
+    else if (e.key === 'ArrowRight') _mediaReaderStep(1);
+  };
+  modal.addEventListener('shown.bs.modal', function() { document.addEventListener('keydown', onKey); });
+  modal.addEventListener('hidden.bs.modal', function() {
+    document.removeEventListener('keydown', onKey);
+    // ปล่อย iframe ทิ้ง ไม่งั้นเบราว์เซอร์ยังโหลด/เล่นไฟล์อยู่เบื้องหลังหลังปิดหน้าต่างไปแล้ว
+    document.getElementById('mrStage').innerHTML = '';
+    document.getElementById('mrBody').classList.remove('mr-open');
+    _mediaState.reader = null;
+  });
 }
 
 // ---------- ฟอร์มเพิ่ม/แก้การ์ด ----------
@@ -2306,41 +2472,62 @@ function openMediaCardForm(id) {
   _mediaState.modal.show();
 }
 
-// ชนิดสื่อเลือกได้เฉพาะตอนสร้างใหม่ — การ์ดที่มีไฟล์อยู่แล้วเปลี่ยนไฟล์ไม่ได้
-// (จะเปลี่ยนต้องลบแล้วอัปใหม่ ไม่งั้นต้องจัดการไฟล์เก่าที่ค้างบน Drive)
+// ชนิดสื่อเลือกได้เฉพาะตอนสร้างใหม่ — การ์ดลิงก์กับการ์ดชุดไฟล์สลับกันทีหลังไม่ได้
+// แต่ **ไฟล์ในการ์ดชุดไฟล์เพิ่ม/ลบ/เรียงได้ตลอด** ต่างจากเดิมที่ต้องลบการ์ดแล้วอัปใหม่
 function _mediaSetupType(card, opts) {
-  var isPdf = !!(card && card.cardType === 'pdf');
+  var isFiles = !!(card && card.cardType === 'files');
   var canUpload = !!(opts && opts.uploadEnabled);
 
   document.getElementById('mcTypeWrap').classList.toggle('d-none', !!card);
-  document.getElementById('mcTypePdf').disabled = !canUpload;
+  document.getElementById('mcTypeFiles').disabled = !canUpload;
   document.getElementById('mcUploadDisabledNote').classList.toggle('d-none', canUpload);
-  document.getElementById('mcTypeLink').checked = !isPdf;
-  document.getElementById('mcTypePdf').checked = isPdf;
+  document.getElementById('mcTypeLink').checked = !isFiles;
+  document.getElementById('mcTypeFiles').checked = isFiles;
 
   var fileInput = document.getElementById('mcFile');
   fileInput.value = '';
+  document.getElementById('mcFileQueue').innerHTML = '';
+  fileInput.onchange = _mediaRenderQueue;
   document.getElementById('mcFileHint').textContent =
-    'ไฟล์ PDF ขนาดไม่เกิน ' + ((opts && opts.maxUploadMB) || 25) + ' MB';
+    'ไฟล์ ' + ((opts && opts.allowedLabel) || 'PDF') + ' ไม่เกิน '
+    + ((opts && opts.maxUploadMB) || 25) + ' MB ต่อไฟล์ · การ์ดหนึ่งใบไม่เกิน '
+    + ((opts && opts.maxFilesPerCard) || 50) + ' ไฟล์ · เลือกทีเดียวหลายไฟล์ได้';
 
-  document.getElementById('mcFileCurrentWrap').classList.toggle('d-none', !isPdf);
-  if (isPdf) {
-    var size = card.fileSize ? ' · ' + (card.fileSize / (1024*1024)).toFixed(1) + ' MB' : '';
-    document.getElementById('mcFileCurrent').textContent = (card.fileName || 'ไฟล์ PDF') + size;
-  }
+  document.getElementById('mcFileCurrentWrap').classList.toggle('d-none', !isFiles);
+  if (isFiles) _mediaRenderFileList(card.id);
 
-  ['mcTypeLink', 'mcTypePdf'].forEach(function(id) {
+  ['mcTypeLink', 'mcTypeFiles'].forEach(function(id) {
     document.getElementById(id).onchange = _mediaSyncTypeFields;
   });
   _mediaSyncTypeFields();
 }
 
 function _mediaSyncTypeFields() {
-  var isPdf = document.getElementById('mcTypePdf').checked;
-  var editingExisting = !!document.getElementById('mcId').value;
-  document.getElementById('mcUrlWrap').classList.toggle('d-none', isPdf);
-  // แก้การ์ด PDF เดิม = ไม่ต้องเลือกไฟล์ใหม่ ช่องอัปโหลดจึงโผล่เฉพาะตอนสร้างใหม่
-  document.getElementById('mcFileWrap').classList.toggle('d-none', !isPdf || editingExisting);
+  var isFiles = document.getElementById('mcTypeFiles').checked;
+  document.getElementById('mcUrlWrap').classList.toggle('d-none', isFiles);
+  // ช่องเลือกไฟล์โผล่ทั้งตอนสร้างใหม่และตอนแก้ — แก้การ์ดเดิมคือ "เพิ่มไฟล์เข้าไปอีก"
+  document.getElementById('mcFileWrap').classList.toggle('d-none', !isFiles);
+}
+
+/** พรีวิวไฟล์ที่เลือกไว้ก่อนกดบันทึก — ครูจะได้เห็นว่าเลือกครบไหมก่อนเสียเวลาอัป */
+function _mediaRenderQueue() {
+  var box = document.getElementById('mcFileQueue');
+  var files = Array.prototype.slice.call(document.getElementById('mcFile').files || []);
+  box.innerHTML = '';
+  if (!files.length) return;
+  var total = files.reduce(function(a, f) { return a + f.size; }, 0);
+  var head = document.createElement('div');
+  head.className = 'mb-1';
+  head.style.color = 'var(--p-text-muted)';
+  head.textContent = 'จะอัป ' + files.length + ' ไฟล์ · รวม ' + _mediaSizeLabel(total)
+    + ' (รูปจะถูกย่อก่อนส่ง)';
+  box.appendChild(head);
+  files.forEach(function(f) {
+    var row = document.createElement('div');
+    row.className = 'text-truncate';
+    row.textContent = '· ' + f.name + ' — ' + _mediaSizeLabel(f.size);
+    box.appendChild(row);
+  });
 }
 
 function _mediaApplyGroupDefaults(group) {
@@ -2434,9 +2621,11 @@ function saveMediaCardForm() {
     isFeatured: document.getElementById('mcFeatured').checked
   };
 
-  var isNewPdf = !payload.id && document.getElementById('mcTypePdf').checked;
-  var file = document.getElementById('mcFile').files[0];
-  if (isNewPdf && !file) { showAlert('เลือกไฟล์ PDF ก่อน'); return; }
+  var isFiles = document.getElementById('mcTypeFiles').checked;
+  var queued = Array.prototype.slice.call(document.getElementById('mcFile').files || []);
+  payload.cardType = isFiles ? 'files' : 'link';
+  // การ์ดใหม่แบบชุดไฟล์ที่ไม่แนบอะไรเลย = การ์ดเปล่าที่นักเรียนไม่เห็น กันไว้ตั้งแต่ต้น
+  if (isFiles && !payload.id && !queued.length) { showAlert('เลือกไฟล์อย่างน้อย 1 ไฟล์'); return; }
 
   var done = function(res) {
     if (_mediaState.modal) _mediaState.modal.hide();
@@ -2451,10 +2640,14 @@ function saveMediaCardForm() {
     if (btn) btn.disabled = true;
     var release = function() { if (btn) btn.disabled = false; };
 
-    if (isNewPdf) { _mediaUpload(payload, file, done, failed, release); return; }
-
+    // บันทึกการ์ดก่อนเสมอ แล้วค่อยแนบไฟล์ — ไฟล์ต้องมี card id ให้ผูกก่อนถึงจะอัปได้
     google.script.run
-      .withSuccessHandler(function(res) { release(); done(res); })
+      .withSuccessHandler(function(res) {
+        if (!queued.length) { release(); done(res); return; }
+        _mediaUploadAll(res.id, queued,
+          function() { release(); done(res); },
+          function(msg) { release(); failed(msg); _mediaLoad(); });
+      })
       .withFailureHandler(function(err) { release(); failed(err.message || String(err)); })
       .saveMediaCard(payload);
   };
@@ -2476,34 +2669,227 @@ function saveMediaCardForm() {
 
 // อัปโหลดไม่ผ่าน google.script.run เพราะ shim ส่งได้แต่ JSON — ยิง REST endpoint ตรง
 // (ดูเหตุผลของเส้นแบ่งนี้ใน routes/media.js)
-function _mediaUpload(payload, file, done, failed, release) {
-  var fd = new FormData();
-  fd.append('payload', JSON.stringify(payload));
-  fd.append('file', file);
+//
+// ยิง **ทีละไฟล์เรียงกัน** ไม่ใช่ก้อนเดียว: ฝั่ง server ใช้ multer memoryStorage ไฟล์อยู่ใน RAM
+// ทั้งก้อน ส่ง 30 ไฟล์พร้อมกันคือ 750MB เข้า memory ครั้งเดียว · แถมล้มใบเดียวไม่ล้มทั้งชุด
+function _mediaUploadAll(cardId, files, done, failed) {
+  var uploaded = 0;
+  var errors = [];
 
   Swal.fire({
     title: 'กำลังอัปโหลด...',
-    html: file.name + ' (' + (file.size / (1024*1024)).toFixed(1) + ' MB)',
+    html: '<div id="mcUpProgress" class="small"></div>',
     allowOutsideClick: false,
     didOpen: function() { Swal.showLoading(); }
   });
+  var progress = function(text) {
+    var el = document.getElementById('mcUpProgress');
+    if (el) el.textContent = text;
+  };
 
-  fetch('/api/media/upload', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + (localStorage.getItem('pssms_jwt') || '') },
-    body: fd
-  })
-    .then(function(r) { return r.json().catch(function() { return { __error: 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ' }; }); })
-    .then(function(res) {
-      release();
-      // ห้ามรายงานว่าสำเร็จเมื่อไฟล์ไม่ได้ขึ้นจริง — ต้องขึ้น error ให้ครูเห็น
-      if (res.__error) { failed(res.__error); return; }
-      done(res.__result);
+  var step = function(i) {
+    if (i >= files.length) {
+      if (!errors.length) { done(); return; }
+      // ⚠️ สำเร็จบางส่วนต้องรายงานว่าใบไหนไม่ขึ้น ห้ามบอกว่าสำเร็จทั้งชุด
+      // (บั๊กเดิมของ uploadSarabunFile คือรายงานสำเร็จทั้งที่ไฟล์ไม่ได้ขึ้น)
+      failed('อัปโหลดสำเร็จ ' + uploaded + '/' + files.length + ' ไฟล์\n\n' + errors.join('\n'));
+      return;
+    }
+    var f = files[i];
+    progress('(' + (i + 1) + '/' + files.length + ') ' + f.name);
+
+    _mediaShrinkImage(f).then(function(body) {
+      var fd = new FormData();
+      fd.append('file', body, f.name);
+      return fetch('/api/media/upload/' + encodeURIComponent(cardId), {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + (localStorage.getItem('pssms_jwt') || '') },
+        body: fd
+      });
     })
-    .catch(function(err) {
-      release();
-      failed('อัปโหลดไม่สำเร็จ: ' + (err.message || err));
-    });
+      .then(function(r) {
+        return r.json().catch(function() { return { __error: 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ' }; });
+      })
+      .then(function(res) {
+        if (res.__error) errors.push(f.name + ' — ' + res.__error);
+        else uploaded++;
+        step(i + 1);
+      })
+      .catch(function(err) {
+        errors.push(f.name + ' — ' + (err.message || err));
+        step(i + 1);
+      });
+  };
+  step(0);
+}
+
+// ย่อรูปก่อนส่ง — ภาพจากมือถือ 4032×3024 = 4-6MB/ใบ ใบงาน 30 หน้าคือ 150MB ต่อการ์ดเดียว
+// ทำในเบราว์เซอร์ ไม่ต้องลง sharp ที่ Railway (native binary เพิ่มทั้งเวลา build และขนาด image)
+var MEDIA_IMG_MAX_EDGE = 2000;      // อ่านบนจอเกินพอ · สแกนใบงานอ่านออกสบาย
+var MEDIA_IMG_SKIP_BYTES = 1024 * 1024;
+function _mediaShrinkImage(file) {
+  var isPng = file.type === 'image/png';
+  var isJpeg = file.type === 'image/jpeg';
+  // เล็กอยู่แล้วไม่ต้องแตะ — ย่อไปก็ไม่ได้อะไร เสียคุณภาพฟรี ๆ
+  if ((!isPng && !isJpeg) || file.size <= MEDIA_IMG_SKIP_BYTES) return Promise.resolve(file);
+
+  return new Promise(function(resolve) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function() {
+      var scale = Math.min(1, MEDIA_IMG_MAX_EDGE / Math.max(img.width, img.height));
+      if (scale >= 1) { URL.revokeObjectURL(url); resolve(file); return; }
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      // ⚠️ PNG ต้อง export กลับเป็น PNG — canvas ที่ว่างคือโปร่งใส และ jpeg ไม่มี alpha
+      // แผนภาพ PNG พื้นใสจะกลายเป็นพื้นดำทั้งใบ
+      canvas.toBlob(function(blob) {
+        URL.revokeObjectURL(url);
+        // PNG ที่บีบมาดีอยู่แล้ว ย่อออกมาอาจใหญ่กว่าเดิม — กรณีนั้นส่งของเดิมไป
+        resolve(blob && blob.size < file.size ? blob : file);
+      }, isPng ? 'image/png' : 'image/jpeg', 0.85);
+    };
+    img.onerror = function() { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
+// ---------- จัดการไฟล์ในการ์ดที่มีอยู่แล้ว ----------
+
+function _mediaRenderFileList(cardId) {
+  var box = document.getElementById('mcFileList');
+  box.innerHTML = '<div class="p-2 small" style="color:var(--p-text-muted);">กำลังโหลด...</div>';
+  google.script.run
+    .withSuccessHandler(function(files) {
+      _mediaState.editFiles = files || [];
+      document.getElementById('mcFileCount').textContent = _mediaState.editFiles.length + ' ไฟล์';
+      box.innerHTML = '';
+      if (!_mediaState.editFiles.length) {
+        var empty = document.createElement('div');
+        empty.className = 'p-2 small';
+        empty.style.color = 'var(--p-text-muted)';
+        empty.textContent = 'ยังไม่มีไฟล์ — เลือกไฟล์ด้านบนแล้วกดบันทึก';
+        box.appendChild(empty);
+        return;
+      }
+      _mediaState.editFiles.forEach(function(f, i) {
+        box.appendChild(_mediaFileRow(cardId, f, i, _mediaState.editFiles.length));
+      });
+    })
+    .withFailureHandler(function(err) {
+      box.innerHTML = '';
+      var msg = document.createElement('div');
+      msg.className = 'p-2 small text-danger';
+      msg.textContent = 'โหลดรายการไฟล์ไม่ได้: ' + (err.message || String(err));
+      box.appendChild(msg);
+    })
+    .getMediaCardFiles(cardId);
+}
+
+function _mediaFileRow(cardId, file, index, total) {
+  var row = document.createElement('div');
+  row.className = 'd-flex align-items-center gap-2 px-2 py-1 border-bottom';
+
+  var ic = document.createElement('i');
+  ic.className = 'fas ' + (file.ext === 'pdf' ? 'fa-file-pdf' : 'fa-image');
+  ic.style.color = 'var(--p-text-muted)';
+  row.appendChild(ic);
+
+  var name = document.createElement('span');
+  name.className = 'flex-grow-1 text-truncate small';
+  name.textContent = file.label;
+  name.title = file.name;
+  row.appendChild(name);
+
+  var size = document.createElement('span');
+  size.className = 'small';
+  size.style.color = 'var(--p-text-muted)';
+  size.textContent = _mediaSizeLabel(file.size);
+  row.appendChild(size);
+
+  // ปุ่ม ↑↓ แทน drag-drop — DnD บนมือถือใช้ไม่ได้จริงและต้องลง lib เพิ่ม
+  var mk = function(icon, title, disabled, fn) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-sm btn-outline-secondary py-0 px-1';
+    b.title = title;
+    b.disabled = disabled;
+    b.innerHTML = '<i class="fas ' + icon + '"></i>';
+    b.addEventListener('click', fn);
+    return b;
+  };
+  row.appendChild(mk('fa-arrow-up', 'เลื่อนขึ้น', index === 0,
+    function() { _mediaMoveFile(cardId, index, -1); }));
+  row.appendChild(mk('fa-arrow-down', 'เลื่อนลง', index === total - 1,
+    function() { _mediaMoveFile(cardId, index, 1); }));
+  row.appendChild(mk('fa-pen', 'เปลี่ยนชื่อในสารบัญ', false,
+    function() { _mediaRenameFile(cardId, file); }));
+
+  var del = mk('fa-trash', 'ลบไฟล์นี้', false, function() { _mediaDeleteFile(cardId, file); });
+  del.className = 'btn btn-sm btn-outline-danger py-0 px-1';
+  row.appendChild(del);
+  return row;
+}
+
+function _mediaMoveFile(cardId, index, delta) {
+  var ids = _mediaState.editFiles.map(function(f) { return f.id; });
+  var to = index + delta;
+  if (to < 0 || to >= ids.length) return;
+  var moved = ids.splice(index, 1)[0];
+  ids.splice(to, 0, moved);
+  google.script.run
+    .withSuccessHandler(function() { _mediaRenderFileList(cardId); })
+    .withFailureHandler(function(err) { Swal.fire('เรียงไม่สำเร็จ', err.message || String(err), 'error'); })
+    .reorderMediaFiles(cardId, ids);
+}
+
+function _mediaRenameFile(cardId, file) {
+  Swal.fire({
+    title: 'ชื่อในสารบัญ',
+    input: 'text',
+    inputValue: file.label,
+    inputPlaceholder: file.name,
+    text: 'เว้นว่างไว้ = ใช้ชื่อไฟล์เดิม',
+    showCancelButton: true,
+    confirmButtonText: 'บันทึก',
+    cancelButtonText: 'ยกเลิก'
+  }).then(function(r) {
+    if (!r.isConfirmed) return;
+    google.script.run
+      .withSuccessHandler(function() { _mediaRenderFileList(cardId); })
+      .withFailureHandler(function(err) {
+        Swal.fire('เปลี่ยนชื่อไม่สำเร็จ', err.message || String(err), 'error');
+      })
+      .renameMediaFile(file.id, r.value || '');
+  });
+}
+
+function _mediaDeleteFile(cardId, file) {
+  // ไม่มีถังขยะระดับไฟล์ (ดู functions/mediaCards.js deleteMediaFile) — ต้องบอกให้ชัด
+  Swal.fire({
+    icon: 'warning',
+    title: 'ลบไฟล์นี้?',
+    html: '<div class="small">' + _esc(file.label) + '</div>'
+      + '<div class="small text-danger mt-2">ลบแล้วกู้คืนไม่ได้ ต้องอัปโหลดใหม่</div>',
+    showCancelButton: true,
+    confirmButtonText: 'ลบ',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#c62828'
+  }).then(function(r) {
+    if (!r.isConfirmed) return;
+    google.script.run
+      .withSuccessHandler(function() {
+        _mediaRenderFileList(cardId);
+        _mediaLoad();   // จำนวนไฟล์บนการ์ดในหน้ารวมต้องตรงทันที
+        if (_mediaIsAdmin()) _mediaLoadStorageStatus();
+      })
+      .withFailureHandler(function(err) {
+        Swal.fire('ลบไม่สำเร็จ', err.message || String(err), 'error');
+      })
+      .deleteMediaFile(file.id);
+  });
 }
 
 function deleteMediaCardPrompt(card) {

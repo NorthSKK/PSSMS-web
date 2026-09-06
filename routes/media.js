@@ -9,9 +9,13 @@
  *
  * เส้นแบ่งจึงเป็น: **binary ไป REST, ที่เหลือไป /api/gas**
  *
- *   POST /api/media/upload          การ์ดสื่อการสอน — PDF เท่านั้น 25MB
+ *   POST /api/media/upload/:cardId  แนบไฟล์เข้าการ์ดสื่อการสอน — PDF/JPEG/PNG 25MB ต่อไฟล์
  *   POST /api/media/sarabun/:id     ไฟล์แนบงานสารบรรณ — PDF/JPEG/PNG/DOCX 10MB
  *   GET  /api/media/file/:kind/:id  เสิร์ฟไฟล์เอง — **เฉพาะ driver disk (dev)**
+ *
+ * การ์ดสื่อรับ **ทีละไฟล์** ถึงจะอัปหลายใบพร้อมกันในหน้าเดียว — client ยิงเรียงกันเอง
+ * multer ใช้ memoryStorage() ไฟล์อยู่ใน RAM ทั้งก้อน รับ 30 ไฟล์ใน request เดียว
+ * = 750MB เข้า memory ครั้งเดียว Railway ตาย · แถมล้มใบเดียวไม่ล้มทั้งชุด
  */
 const express = require('express');
 const multer = require('multer');
@@ -27,19 +31,34 @@ const sarabun = require('../functions/sarabun');
 const storage = require('../lib/storage');
 const types = require('../lib/storage/types');
 
-// จำกัดจำนวนครั้งต่อคน — พื้นที่เก็บใช้ร่วมกันทั้งโรงเรียน คนเดียวยิงรัวจนเต็มได้ถ้าไม่กั้น
-const RATE_LIMIT = { max: 20, windowSec: 3600 };
+/**
+ * โควตาต่อคนต่อชั่วโมง — **นับเป็นไบต์ ไม่ใช่จำนวนครั้ง**
+ *
+ * เจตนาเดิมคือกันพื้นที่เก็บที่ใช้ร่วมกันทั้งโรงเรียน ไม่ใช่กันจำนวนครั้ง ·
+ * ตอนที่การ์ดหนึ่งใบ = ไฟล์หนึ่งใบ นับครั้งก็ได้ผลเท่ากัน แต่พอการ์ดใบเดียวมีได้ 30 ไฟล์
+ * เพดาน 20 ครั้ง/ชม. จะชนตั้งแต่ใบที่ 21 = อัปหนังสือทั้งเล่มไม่ได้เลย
+ */
+const RATE_LIMIT = { maxBytes: 500 * 1024 * 1024, windowSec: 3600 };
 
-function rateLimit(req, res, next) {
-  const key = `media_upload_${String(req.user?.id || '').toLowerCase()}`;
-  const used = cache.get(key) || 0;
-  if (used >= RATE_LIMIT.max) {
+function budgetKey(req) {
+  return `media_upload_${String(req.user?.id || '').toLowerCase()}`;
+}
+
+// เช็คก่อนรับ: ใช้เกินไปแล้วหรือยัง · ไฟล์ใบที่ทำให้เกินพอดีปล่อยผ่าน แล้วใบถัดไปค่อยโดนกั้น
+// (ต้องอ่านไฟล์จบก่อนถึงจะรู้ขนาดจริง — กันแบบเป๊ะต้องเชื่อ Content-Length ที่ client ส่งมา)
+function underBudget(req, res, next) {
+  if ((cache.get(budgetKey(req)) || 0) >= RATE_LIMIT.maxBytes) {
+    const mb = Math.round(RATE_LIMIT.maxBytes / (1024 * 1024));
     return res.status(429).json({
-      __error: `อัปโหลดเกิน ${RATE_LIMIT.max} ไฟล์ต่อชั่วโมงแล้ว รอสักครู่แล้วลองใหม่`,
+      __error: `อัปโหลดเกิน ${mb} MB ต่อชั่วโมงแล้ว รอสักครู่แล้วลองใหม่`,
     });
   }
-  cache.set(key, used + 1, RATE_LIMIT.windowSec);
   next();
+}
+
+function chargeBudget(req, bytes) {
+  const key = budgetKey(req);
+  cache.set(key, (cache.get(key) || 0) + Number(bytes || 0), RATE_LIMIT.windowSec);
 }
 
 /**
@@ -85,13 +104,17 @@ function receive({ maxMB, allowed }) {
         __error: 'ยังไม่เปิดให้อัปโหลดไฟล์ — แจ้งผู้ดูแลระบบ',
       });
     }
-    rateLimit(req, res, () => {
+    underBudget(req, res, () => {
       upload(req, res, (err) => {
         if (err) {
           const msg = err.code === 'LIMIT_FILE_SIZE' ? `ไฟล์ใหญ่เกิน ${maxMB} MB` : err.message;
           return res.status(400).json({ __error: msg });
         }
         if (!req.file) return res.status(400).json({ __error: 'ไม่พบไฟล์ที่อัปโหลด' });
+
+        // คิดโควตาทันทีที่อ่านไฟล์จบ ไม่รอว่าจะบันทึกสำเร็จไหม — ไม่งั้นยิงไฟล์ที่ถูกปฏิเสธ
+        // รัว ๆ ก็กินแบนด์วิดท์กับ RAM ได้ฟรีไม่จำกัด
+        chargeBudget(req, req.file.size);
 
         // ตัดสินชนิดจาก magic bytes เท่านั้น — MIME กับนามสกุลที่ client ส่งมาเชื่อไม่ได้
         const type = types.detect(req.file.buffer, allowed);
@@ -110,20 +133,21 @@ function receive({ maxMB, allowed }) {
 
 // ---------- การ์ดสื่อการสอน ----------
 
-router.post('/upload', requireAuth, guardTeacher,
-  receive({ maxMB: mediaCards.MAX_UPLOAD_MB, allowed: ['pdf'] }),
+// การ์ดถูกสร้างไว้ก่อนด้วย saveMediaCard (ผ่าน /api/gas) — ที่นี่แค่แนบไฟล์เข้าการ์ดนั้น
+// แยกกันเพราะ metadata เป็น JSON ธรรมดาที่ไม่มีเหตุผลต้องมาปนกับ multipart
+router.post('/upload/:cardId', requireAuth, guardTeacher,
+  receive({ maxMB: mediaCards.MAX_UPLOAD_MB, allowed: mediaCards.ALLOWED_EXTS }),
   async (req, res) => {
-    let payload;
     try {
-      payload = JSON.parse(req.body.payload || '{}');
-    } catch {
-      return res.status(400).json({ __error: 'ข้อมูลการ์ดไม่ถูกต้อง' });
-    }
-    try {
-      res.json({ __result: await mediaCards.createPdfCard({ payload, file: req.file }, req.user) });
+      res.json({
+        __result: await mediaCards.addCardFile(
+          { cardId: req.params.cardId, file: req.file }, req.user
+        ),
+      });
     } catch (e) {
       console.error('[media:upload]', e.message);
-      res.status(400).json({ __error: e.message });
+      // 507 = พื้นที่ของโรงเรียนเต็ม ซึ่งครูแก้เองได้ (ไปลบของเก่า) ต่างจาก 400 ที่แปลว่าคำขอผิด
+      res.status(e.status || 400).json({ __error: e.message });
     }
   });
 
@@ -142,9 +166,12 @@ router.post('/sarabun/:id', requireAuth, guardTeacher,
 
 // ---------- เสิร์ฟไฟล์เอง (driver disk เท่านั้น) ----------
 
+// media: id ในตั๋วคือ **media_files.id ไม่ใช่ card id** — สิทธิ์อยู่ที่การ์ดแม่จึงต้อง join
+// กลับไปเช็ค deleted_at ด้วย ไม่งั้นไฟล์ของการ์ดที่อยู่ในถังขยะยังเปิดได้ด้วยตั๋วที่ออกไว้ก่อน
 const SOURCES = {
-  media: `SELECT file_key, file_name FROM media_cards
-          WHERE id=$1 AND deleted_at IS NULL AND card_type='pdf'`,
+  media: `SELECT f.file_key, f.file_name
+          FROM media_files f JOIN media_cards c ON c.id = f.card_id
+          WHERE f.id=$1 AND c.deleted_at IS NULL`,
   sarabun: `SELECT file_key, file_name FROM sarabun WHERE id=$1`,
 };
 
