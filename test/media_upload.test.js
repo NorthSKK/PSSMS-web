@@ -103,6 +103,10 @@ async function diskCount() {
 const ticketId = (url) => new URL('http://x' + url).pathname.split('/').pop();
 const ticketToken = (url) => new URL('http://x' + url).searchParams.get('t');
 
+/** getMediaCardFiles คืน { files, url, fileId } — เทสต์ส่วนใหญ่สนใจแค่สารบัญ */
+const filesOf = async (cardId, as, want) =>
+  (await ok('getMediaCardFiles', want === undefined ? [cardId] : [cardId, want], as)).files;
+
 // ---------------------------------------------------------------- ด่านตรวจขาเข้า
 
 test('ชนิดไฟล์ตัดสินจาก magic bytes ไม่ใช่ MIME หรือนามสกุล', () => {
@@ -179,7 +183,7 @@ test('อัปหลายไฟล์เข้าการ์ดเดีย�
   });
   for (const r of [a, b, c]) assert.equal(r.status, 200, JSON.stringify(r.body));
 
-  const files = await ok('getMediaCardFiles', [cardId], 'teacher1');
+  const files = await filesOf(cardId, 'teacher1');
   assert.equal(files.length, 3);
   assert.deepEqual(files.map(f => f.label), ['บทที่1.pdf', 'บทที่2.pdf', 'แผนภาพ.png'],
     'เรียงตามลำดับที่อัป และ label ว่างต้องตกกลับไปใช้ชื่อไฟล์');
@@ -216,7 +220,7 @@ test('การ์ด files ที่ยังไม่มีไฟล์ — �
 
 test('เปิดไฟล์โดยไม่มีตั๋ว หรือตั๋วของไฟล์อื่น → ไม่ผ่าน', async () => {
   const card = await cardByTitle(FILE_CARD);
-  const files = await ok('getMediaCardFiles', [card.id], 'admin');
+  const files = await filesOf(card.id, 'admin');
   const [first, second] = files;
 
   const noTicket = await request(`/api/media/file/media/${first.id}`);
@@ -234,12 +238,41 @@ test('เปิดไฟล์โดยไม่มีตั๋ว หรือ�
   assert.equal(ticketId(ticket.url), String(second.id), 'ตั๋วต้องอ้าง media_files.id');
 });
 
+test('สารบัญต้องพกตั๋วของไฟล์ที่จะเปิดมาด้วยในรอบเดียว', async () => {
+  const card = await cardByTitle(FILE_CARD);
+  const files = await filesOf(card.id, 'admin');
+
+  // ไม่บอกว่าจะเปิดไฟล์ไหน = ไฟล์แรกในสารบัญ
+  const first = await ok('getMediaCardFiles', [card.id], 'admin');
+  assert.equal(first.fileId, files[0].id);
+  assert.ok(first.url, 'ไม่มีตั๋วมาด้วย = client ต้องยิงรอบสองก่อนไฟล์จะเริ่มโหลด');
+  assert.equal((await request(first.url)).status, 200, 'ตั๋วที่แนบมาต้องใช้ได้จริง');
+
+  // บอกไฟล์ที่ค้างอ่านไว้ = ได้ตั๋วของใบนั้น ไม่ใช่ใบแรก
+  const resumed = await ok('getMediaCardFiles', [card.id, files[2].id], 'admin');
+  assert.equal(resumed.fileId, files[2].id);
+  assert.equal(ticketId(resumed.url), String(files[2].id));
+
+  // ไฟล์ที่ไม่ได้อยู่ในการ์ดนี้ (หรือถูกลบไปแล้ว) ต้องตกกลับไปไฟล์แรก ไม่ใช่พังหรือออกตั๋วให้
+  const bogus = await ok('getMediaCardFiles', [card.id, 999999], 'admin');
+  assert.equal(bogus.fileId, files[0].id);
+});
+
+test('นักเรียนขอสารบัญได้ ต้องได้ตั๋วที่เปิดได้จริงมาด้วย', async () => {
+  const card = await cardByTitle(FILE_CARD);          // เปิดให้ ม.2
+  const res = await ok('getMediaCardFiles', [card.id], STUDENT_M2);
+  assert.ok(res.files.length > 0);
+  assert.equal((await request(res.url)).status, 200);
+  // ตั๋วที่แนบมากับสารบัญต้องผ่านด่านสิทธิ์เดียวกับตอนขอทีละใบ ไม่ใช่ทางลัด
+  await denied('getMediaCardFiles', [card.id], STUDENT_M6);
+});
+
 test('ตั๋วของไฟล์ในการ์ดที่นักเรียนไม่มีสิทธิ์เห็น → ไม่ผ่าน', async () => {
   const open = await cardByTitle(FILE_CARD);     // เปิดให้ ม.2
   const staffOnly = await cardByTitle(STAFF_CARD); // visible_levels ว่าง = ครูเท่านั้น
 
-  const openFiles = await ok('getMediaCardFiles', [open.id], 'admin');
-  const secretFiles = await ok('getMediaCardFiles', [staffOnly.id], 'admin');
+  const openFiles = await filesOf(open.id, 'admin');
+  const secretFiles = await filesOf(staffOnly.id, 'admin');
 
   // ม.6 ขอไฟล์ของการ์ด ม.2 ไม่ได้ · ม.2 ขอได้
   await denied('getMediaFileTicket', [openFiles[0].id], STUDENT_M6);
@@ -255,7 +288,7 @@ test('ตั๋วของไฟล์ในการ์ดที่นัก�
 test('ตั๋วที่ออกไว้ก่อน ใช้ไม่ได้เมื่อการ์ดถูกย้ายลงถังขยะ', async () => {
   const cardId = await newFileCard('การ์ดที่จะโดนลบ');
   await uploadRaw({ token: TOKENS.teacher1, cardId, filename: 'ชั่วคราว.pdf' });
-  const [file] = await ok('getMediaCardFiles', [cardId], 'teacher1');
+  const [file] = await filesOf(cardId, 'teacher1');
 
   const ticket = await ok('getMediaFileTicket', [file.id], 'teacher1');
   assert.equal((await request(ticket.url)).status, 200);
@@ -275,7 +308,7 @@ test('ลบไฟล์เดี่ยว — ไฟล์หายจริง
   await uploadRaw({ token: TOKENS.teacher1, cardId, filename: 'เก็บไว้.pdf' });
   await uploadRaw({ token: TOKENS.teacher1, cardId, filename: 'จะลบ.pdf' });
 
-  const before = await ok('getMediaCardFiles', [cardId], 'teacher1');
+  const before = await filesOf(cardId, 'teacher1');
   const target = before.find(f => f.label === 'จะลบ.pdf');
   const { rows } = await query(`SELECT file_key FROM media_files WHERE id=$1`, [target.id]);
   const key = rows[0].file_key;
@@ -284,7 +317,7 @@ test('ลบไฟล์เดี่ยว — ไฟล์หายจริง
   await denied('deleteMediaFile', [target.id], 'teacher2');
 
   await ok('deleteMediaFile', [target.id], 'teacher1');
-  const after_ = await ok('getMediaCardFiles', [cardId], 'teacher1');
+  const after_ = await filesOf(cardId, 'teacher1');
   assert.deepEqual(after_.map(f => f.label), ['เก็บไว้.pdf']);
   assert.equal(store.statSync(key), null, 'ลบจริงทันที ไม่มีถังขยะระดับไฟล์');
   assert.ok(await cardByTitle('การ์ดลบทีละไฟล์', 'teacher1'), 'การ์ดต้องยังอยู่');
@@ -295,16 +328,16 @@ test('ลบไฟล์เดี่ยว — ไฟล์หายจริง
 test('ตั้งชื่อในสารบัญได้ · ล้างชื่อแล้วกลับไปใช้ชื่อไฟล์เดิม', async () => {
   const cardId = await newFileCard('การ์ดตั้งชื่อ');
   await uploadRaw({ token: TOKENS.teacher1, cardId, filename: 'IMG_20260901.pdf' });
-  const [file] = await ok('getMediaCardFiles', [cardId], 'teacher1');
+  const [file] = await filesOf(cardId, 'teacher1');
   assert.equal(file.label, 'IMG_20260901.pdf');
 
   await denied('renameMediaFile', [file.id, 'แอบแก้'], 'teacher2');
 
   await ok('renameMediaFile', [file.id, 'บทที่ 1 — บทนำ'], 'teacher1');
-  assert.equal((await ok('getMediaCardFiles', [cardId], 'teacher1'))[0].label, 'บทที่ 1 — บทนำ');
+  assert.equal((await filesOf(cardId, 'teacher1'))[0].label, 'บทที่ 1 — บทนำ');
 
   await ok('renameMediaFile', [file.id, '  '], 'teacher1');
-  assert.equal((await ok('getMediaCardFiles', [cardId], 'teacher1'))[0].label, 'IMG_20260901.pdf');
+  assert.equal((await filesOf(cardId, 'teacher1'))[0].label, 'IMG_20260901.pdf');
 
   await ok('deleteMediaCard', [cardId], 'teacher1');
 });
@@ -314,7 +347,7 @@ test('เรียงลำดับใหม่ได้ · ส่ง id ไม
   for (const n of ['ก.pdf', 'ข.pdf', 'ค.pdf']) {
     await uploadRaw({ token: TOKENS.teacher1, cardId, filename: n });
   }
-  const files = await ok('getMediaCardFiles', [cardId], 'teacher1');
+  const files = await filesOf(cardId, 'teacher1');
   const ids = files.map(f => f.id);
 
   await denied('reorderMediaFiles', [cardId, [ids[2], ids[0], ids[1]]], 'teacher2');
@@ -322,11 +355,11 @@ test('เรียงลำดับใหม่ได้ · ส่ง id ไม
   await denied('reorderMediaFiles', [cardId, [ids[0], ids[1]]], 'teacher1');
   await denied('reorderMediaFiles', [cardId, [ids[0], ids[0], ids[1]]], 'teacher1');
   await denied('reorderMediaFiles', [cardId, [ids[0], ids[1], 999999]], 'teacher1');
-  assert.deepEqual((await ok('getMediaCardFiles', [cardId], 'teacher1')).map(f => f.id), ids,
+  assert.deepEqual((await filesOf(cardId, 'teacher1')).map(f => f.id), ids,
     'คำขอที่ถูกปฏิเสธต้องไม่ทิ้งลำดับครึ่ง ๆ กลาง ๆ ไว้');
 
   await ok('reorderMediaFiles', [cardId, [ids[2], ids[0], ids[1]]], 'teacher1');
-  assert.deepEqual((await ok('getMediaCardFiles', [cardId], 'teacher1')).map(f => f.label),
+  assert.deepEqual((await filesOf(cardId, 'teacher1')).map(f => f.label),
     ['ค.pdf', 'ก.pdf', 'ข.pdf']);
 
   await ok('deleteMediaCard', [cardId], 'teacher1');
@@ -399,7 +432,7 @@ test('สถานะที่เก็บไฟล์เป็นของ Admi
 
 test('ลบการ์ดที่มีหลายไฟล์ → เข้าถังขยะ กู้คืนแล้วเปิดได้ครบทุกใบ', async () => {
   const card = await cardByTitle(FILE_CARD, 'teacher2');
-  const files = await ok('getMediaCardFiles', [card.id], 'teacher2');
+  const files = await filesOf(card.id, 'teacher2');
   assert.equal(files.length, 3);
 
   const del = await ok('deleteMediaCard', [card.id], 'teacher2');

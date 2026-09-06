@@ -2288,13 +2288,29 @@ function _mediaSizeLabel(bytes) {
 // ขอ **ทีละไฟล์ตอนกดสลับ** ไม่ sign ล่วงหน้าทั้งการ์ด — 30 ไฟล์จะได้ไม่ต้องออกตั๋วทิ้ง 30 ใบ
 
 function openMediaReader(card) {
+  // ส่งไฟล์ที่ค้างไว้ครั้งก่อนไปด้วย server จะได้แนบตั๋วของไฟล์นั้นกลับมาในรอบเดียว
+  // — ไม่งั้นมี round-trip ที่สองคั่นระหว่างกดปุ่มกับตอนไฟล์เริ่มโหลดจริง
+  var want = null;
+  try { want = localStorage.getItem('mediaLastFile_' + card.id); } catch (e) { /* โหมดส่วนตัว */ }
+
   google.script.run
-    .withSuccessHandler(function(files) {
-      if (!files || !files.length) { showAlert('การ์ดนี้ยังไม่มีไฟล์'); return; }
-      _mediaState.reader = { card: card, files: files, index: 0 };
+    .withSuccessHandler(function(res) {
+      var files = (res && res.files) || [];
+      if (!files.length) { showAlert('การ์ดนี้ยังไม่มีไฟล์'); return; }
+
+      // urls: cache ตั๋วต่อรอบการเปิดอ่าน — ตั๋วอยู่ได้ 1 ชม. สลับกลับมาไฟล์เดิมจึงไม่ต้องขอใหม่
+      _mediaState.reader = { card: card, files: files, index: 0, urls: {} };
+      if (res.url && res.fileId != null) _mediaState.reader.urls[res.fileId] = res.url;
+      _mediaPreconnect(res.url);
+
+      var start = 0;
+      for (var i = 0; i < files.length; i++) {
+        if (String(files[i].id) === String(res.fileId)) { start = i; break; }
+      }
+
       document.getElementById('mrTitle').textContent = card.title;
       _mediaRenderToc();
-      _mediaReaderShow(_mediaReaderLastIndex(card.id, files));
+      _mediaReaderShow(start);
 
       var el = document.getElementById('mediaReaderModal');
       _mediaState.readerModal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
@@ -2303,18 +2319,25 @@ function openMediaReader(card) {
     .withFailureHandler(function(err) {
       Swal.fire('เปิดไม่ได้', err.message || String(err), 'error');
     })
-    .getMediaCardFiles(card.id);
+    .getMediaCardFiles(card.id, want);
 }
 
-// จำไฟล์ล่าสุดที่เปิดไว้ในเบราว์เซอร์ของแต่ละคน — ตรงกับที่หน้านี้ทำกับความคืบหน้าการเรียนอยู่แล้ว
-// ไม่จำเลขหน้าใน PDF: iframe ข้าม origin อ่านตำแหน่ง scroll ไม่ได้
-function _mediaReaderLastIndex(cardId, files) {
-  var saved = null;
-  try { saved = localStorage.getItem('mediaLastFile_' + cardId); } catch (e) { /* โหมดส่วนตัว */ }
-  for (var i = 0; i < files.length; i++) {
-    if (String(files[i].id) === String(saved)) return i;
-  }
-  return 0;
+/**
+ * เปิดคิว DNS + TLS ไปที่ origin ของไฟล์ล่วงหน้า
+ * ไฟล์อยู่คนละโดเมนกับตัวเว็บ (R2) การเปิดครั้งแรกจึงเสียเวลา handshake ก่อนได้ byte แรก
+ * — บนเน็ตมือถือหลายร้อยมิลลิวินาที ซึ่งคนกดรู้สึกได้
+ */
+function _mediaPreconnect(url) {
+  if (!url || url.charAt(0) === '/') return;   // driver disk เสิร์ฟจาก origin เดียวกันอยู่แล้ว
+  try {
+    var origin = new URL(url).origin;
+    if (document.querySelector('link[rel="preconnect"][href="' + origin + '"]')) return;
+    var link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = origin;
+    link.crossOrigin = '';
+    document.head.appendChild(link);
+  } catch (e) { /* URL แปลก ๆ ก็แค่ไม่ได้ preconnect */ }
 }
 
 function _mediaRenderToc() {
@@ -2360,30 +2383,40 @@ function _mediaReaderShow(i) {
   try { localStorage.setItem('mediaLastFile_' + r.card.id, String(f.id)); } catch (e) { /* โหมดส่วนตัว */ }
 
   var stage = document.getElementById('mrStage');
+  var render = function(url) {
+    if (_mediaState.reader !== r || r.index !== i) return;   // กดสลับเร็วกว่าตั๋วมาถึง
+    stage.innerHTML = '';
+    var el;
+    if (f.ext === 'pdf') {
+      el = document.createElement('iframe');
+      el.title = f.label;
+    } else {
+      el = document.createElement('img');
+      el.alt = f.label;
+    }
+    el.src = url;
+    stage.appendChild(el);
+    // ทางหนีตอน iOS Safari เรนเดอร์ PDF ใน iframe ไม่ไหว — ห้ามเอาปุ่มนี้ออก
+    document.getElementById('mrOpenTab').href = url;
+    _mediaPrefetchNeighbours(r, i);
+  };
+
+  // มีตั๋วอยู่แล้ว = เริ่มโหลดไฟล์ทันที ไม่ต้องรอ round-trip
+  if (r.urls[f.id]) { render(r.urls[f.id]); return; }   // ค่าว่าง = prefetch ยังไม่กลับ ตกไปขอปกติ
+
   stage.innerHTML = '';
   var loading = document.createElement('div');
   loading.className = 'p-4 text-center small';
   loading.style.color = 'var(--p-text-muted)';
-  loading.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>กำลังเปิด...';
+  // บอกขนาดไปด้วย ไฟล์สแกนใหญ่ ๆ ใช้เวลาจริง คนจะได้ไม่คิดว่าค้าง
+  loading.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>กำลังเปิด '
+    + _esc(f.label) + ' (' + _mediaSizeLabel(f.size) + ')...';
   stage.appendChild(loading);
 
   google.script.run
     .withSuccessHandler(function(res) {
-      // กดสลับเร็วกว่าตั๋วมาถึง — ตั๋วของใบเก่าต้องไม่แย่งจอของใบที่กำลังดูอยู่
-      if (_mediaState.reader !== r || r.index !== i) return;
-      stage.innerHTML = '';
-      var el;
-      if (f.ext === 'pdf') {
-        el = document.createElement('iframe');
-        el.title = f.label;
-      } else {
-        el = document.createElement('img');
-        el.alt = f.label;
-      }
-      el.src = res.url;
-      stage.appendChild(el);
-      // ทางหนีตอน iOS Safari เรนเดอร์ PDF ใน iframe ไม่ไหว — ห้ามเอาปุ่มนี้ออก
-      document.getElementById('mrOpenTab').href = res.url;
+      r.urls[f.id] = res.url;
+      render(res.url);
     })
     .withFailureHandler(function(err) {
       if (_mediaState.reader !== r || r.index !== i) return;
@@ -2394,6 +2427,23 @@ function _mediaReaderShow(i) {
       stage.appendChild(msg);
     })
     .getMediaFileTicket(f.id);
+}
+
+/**
+ * ขอตั๋วของไฟล์ที่อยู่ติดกันไว้เงียบ ๆ ระหว่างคนกำลังอ่านใบปัจจุบัน
+ * กด "ถัดไป" แล้วไฟล์เริ่มโหลดทันที ไม่ต้องรอ round-trip ก่อน
+ * ล้มก็ไม่ต้องบอกใคร — ตอนกดจริงจะขอใหม่เองอยู่แล้ว
+ */
+function _mediaPrefetchNeighbours(r, i) {
+  [i + 1, i - 1].forEach(function(n) {
+    var f = r.files[n];
+    if (!f || r.urls[f.id]) return;
+    r.urls[f.id] = '';   // จองไว้กัน prefetch ซ้ำระหว่างรอ
+    google.script.run
+      .withSuccessHandler(function(res) { if (_mediaState.reader === r) r.urls[f.id] = res.url; })
+      .withFailureHandler(function() { if (_mediaState.reader === r) delete r.urls[f.id]; })
+      .getMediaFileTicket(f.id);
+  });
 }
 
 function _mediaReaderStep(delta) {

@@ -390,8 +390,16 @@ async function addCardFile({ cardId, file }, user) {
   }
 }
 
-/** สารบัญของการ์ดใบเดียว — ขอตอนกดเปิดอ่าน ไม่ได้ติดมากับหน้ารวม */
-async function getMediaCardFiles([cardId], user) {
+/**
+ * สารบัญของการ์ดใบเดียว — ขอตอนกดเปิดอ่าน ไม่ได้ติดมากับหน้ารวม
+ *
+ * คืนตั๋วของไฟล์ที่จะเปิดก่อนมาให้ในรอบเดียวกันด้วย (`wantFileId` = ไฟล์ที่คนอ่าน
+ * ค้างไว้ครั้งก่อน ไม่ส่งมา = ไฟล์แรก) — ไม่งั้น client ต้องยิงรอบสองแค่เพื่อขอลิงก์
+ * ซึ่งเป็น round-trip เต็ม ๆ คั่นระหว่างกด "เปิดอ่าน" กับตอนไฟล์เริ่มโหลดจริง
+ *
+ * ไฟล์ที่เหลือยังขอตั๋วทีละใบตอนสลับเหมือนเดิม — การ์ด 30 ไฟล์จะได้ไม่ต้องออกตั๋วทิ้ง 30 ใบ
+ */
+async function getMediaCardFiles([cardId, wantFileId], user) {
   const id = parseInt(cardId, 10);
   if (!Number.isInteger(id)) throw new Error('ไม่พบการ์ดนี้');
   const { rows } = await query(
@@ -405,7 +413,15 @@ async function getMediaCardFiles([cardId], user) {
     `SELECT id, file_key, file_name, label, file_size
      FROM media_files WHERE card_id=$1 ORDER BY sort_order, id`, [id]
   );
-  return files.map(_fileToClient);
+
+  const want = parseInt(wantFileId, 10);
+  const opening = files.find(f => f.id === want) || files[0] || null;
+  const url = opening ? await storage.getFileUrl({
+    kind: 'media', id: opening.id, key: opening.file_key,
+    filename: opening.file_name, user, ttlSeconds: MEDIA_URL_TTL_SECONDS,
+  }) : '';
+
+  return { files: files.map(_fileToClient), url, fileId: opening ? opening.id : null };
 }
 
 /**
