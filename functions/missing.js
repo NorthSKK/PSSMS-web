@@ -304,24 +304,56 @@ async function getClubMembersForTeacher([teacherId, term, year]) {
   }));
 }
 
+/**
+ * สรุปการเช็คชื่อของชุมนุม — คืน `{ sessions: ['YYYY-MM-DD'...], members: [{...pct}] }`
+ *
+ * ⚠️ ของเดิมพังสองชั้นพร้อมกัน หน้าจอเลยขึ้น "ยังไม่มีข้อมูลการเช็คชื่อ" ตลอดกาล:
+ *  1. หน้าเว็บส่ง `(user.id, clubId, term, year, role)` 5 ตัว แต่ backend รับ 3
+ *     → `clubId` ได้ค่าเป็น `user.id` แล้วเอาไปจับกับ `attendance.class` ซึ่งคนละอย่าง
+ *  2. คืนเป็น "อาร์เรย์ของนักเรียน" แต่ฝั่งหน้าเว็บอ่าน `summary.sessions` /
+ *     `summary.members` / `m.pct` — คนละรูปกันทั้งก้อน
+ *
+ * แถวเช็คชื่อของชุมนุมใช้ `subject_code = 'CLUB_<clubId>'` (ตั้งโดย `tcGoToAttendance`)
+ * ไม่ใช่ `class` · รายชื่อยึดจาก `club_members` ไม่ใช่จากแถวเช็คชื่อ เด็กที่ไม่เคยมาเลย
+ * ต้องขึ้นเป็น 0% ไม่ใช่หายไปจากรายการ
+ */
 async function getClubAttendanceSummary([clubId, term, year]) {
-  const { rows } = await query(
-    `SELECT a.student_id, a.student_name,
-            COUNT(*) as total,
-            COUNT(CASE WHEN a.status IN ('มา','present') THEN 1 END) as present
-     FROM attendance a
-     WHERE a.subject_code LIKE 'CLUB_%' AND a.class=$1
-       AND a.term=$2 AND a.year=$3
-     GROUP BY a.student_id, a.student_name
-     ORDER BY a.student_id`,
-    [clubId, term, year]
+  const code = `CLUB_${String(clubId || '').trim()}`;
+  const t = String(term || '');
+  const y = String(year || '');
+
+  const { rows: sessionRows } = await query(
+    `SELECT DISTINCT to_char(date,'YYYY-MM-DD') AS d
+       FROM attendance WHERE subject_code=$1 AND term=$2 AND year=$3
+      ORDER BY d`,
+    [code, t, y]
   );
-  return rows.map(r => ({
-    studentId: r.student_id,
-    studentName: r.student_name || '',
-    total: parseInt(r.total),
-    present: parseInt(r.present),
-  }));
+  const sessions = sessionRows.map((r) => r.d);
+
+  const { rows } = await query(
+    `SELECT m.student_id, m.student_name, m.class_name,
+            COUNT(a.id) FILTER (WHERE a.status IN ('มา','สาย')) AS present
+       FROM club_members m
+       LEFT JOIN attendance a
+              ON a.student_id = m.student_id
+             AND a.subject_code = $1 AND a.term = $2 AND a.year = $3
+      WHERE m.club_id = $4 AND m.term = $2 AND m.year = $3
+      GROUP BY m.student_id, m.student_name, m.class_name
+      ORDER BY m.class_name, m.student_id`,
+    [code, t, y, String(clubId || '').trim()]
+  );
+
+  return {
+    sessions,
+    members: rows.map((r) => ({
+      studentId: r.student_id,
+      studentName: r.student_name || '',
+      className: r.class_name || '',
+      present: parseInt(r.present, 10),
+      // ยังไม่มีคาบที่เช็ค = ไม่มีเปอร์เซ็นต์ให้พูดถึง ไม่ใช่ 0% (หน้าเว็บแสดง '-')
+      pct: sessions.length ? Math.round((parseInt(r.present, 10) / sessions.length) * 100) : null,
+    })),
+  };
 }
 
 async function deleteClub([clubId]) {
@@ -330,12 +362,46 @@ async function deleteClub([clubId]) {
   return { status: 'success', message: 'ลบชุมนุมสำเร็จ' };
 }
 
-async function registerToClub([studentId, studentName, className, clubId, term, year, registeredBy]) {
-  return require('./clubs_write').registerClub([studentId, studentName, className, clubId, term, year, registeredBy]);
+/**
+ * นักเรียนลงทะเบียนชุมนุมด้วยตัวเอง — `registerToClub(studentId, clubId)`
+ *
+ * ⚠️ เดิมรับ 7 ตัว (`[studentId, studentName, className, clubId, term, year, registeredBy]`)
+ * แต่หน้าเว็บส่งมาแค่ 3 (`user.id, clubId, 'self'`) → `clubId` เป็น `undefined` ทุกครั้ง
+ * นักเรียนกดลงทะเบียนแล้วเจอ **"ไม่พบชุมนุม" เสมอ ลงชุมนุมไม่ได้เลยทั้งระบบ**
+ *
+ * ชื่อ/ห้อง/เทอม/ปี **ไม่รับจาก client อีกแล้ว** — ชื่อกับห้องอ่านสดจาก `users`
+ * (เด็กเปลี่ยนชื่อหรือเลื่อนชั้นแล้วแถวเก่าค้างชื่อเดิม) เทอม/ปีเอาจากค่า active
+ * ส่วนตัวตนผ่าน `resolveStudentId` — นักเรียนลงให้ตัวเองเท่านั้น ส่งรหัสเพื่อนมาก็ไม่มีผล
+ */
+async function registerToClub([studentId, clubId], user) {
+  const sid = resolveStudentId(user, studentId);
+  const cid = String(clubId || '').trim();
+  if (!cid) throw new Error('ไม่ได้ระบุชุมนุม');
+
+  const { term, year } = await require('./getSystemConfig')();
+  const { rows } = await query(
+    `SELECT full_name, department FROM users WHERE username=$1`, [sid]
+  );
+  if (!rows.length) throw new Error('ไม่พบข้อมูลนักเรียน');
+
+  return require('./clubs_write').registerClub([
+    sid, rows[0].full_name || '', rows[0].department || '',
+    cid, String(term), String(year), sid,
+  ]);
 }
 
-async function unregisterFromClub([studentId, term, year]) {
-  return require('./clubs_write').unregisterClub([studentId, term, year]);
+/**
+ * ยกเลิกชุมนุมของตัวเอง — `unregisterFromClub(studentId)`
+ *
+ * ⚠️ เดิมรับ `[studentId, term, year]` แต่หน้าเว็บส่ง `(user.id, clubId, 'self')`
+ * → `term` ได้ค่าเป็น clubId, `year` เป็น `'self'` → `DELETE` ไม่ตรงแถวไหนเลย
+ * แล้ว **คืน "ยกเลิกสำเร็จ"** นักเรียนเชื่อว่ายกเลิกแล้ว แต่ยังอยู่ในชุมนุมเดิม
+ * (1 นักเรียน : 1 ชุมนุม : 1 เทอม จึงไม่ต้องระบุ clubId — เทอม/ปีเอาจากค่า active)
+ */
+async function unregisterFromClub([studentId], user) {
+  const sid = resolveStudentId(user, studentId);
+  const { term, year } = await require('./getSystemConfig')();
+  return require('./clubs_write').unregisterClub([sid, String(term), String(year)]);
 }
 
 // ============================================================

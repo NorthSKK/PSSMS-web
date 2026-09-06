@@ -141,6 +141,14 @@ function loadStudentList(forceRefresh = false) {
   const cacheKey = isClub ? `v5_stdlist_CLUB_${clubId}` : `v5_stdlist_${fullClassName}`;
 
   const fetchHistoryAndRender = (studentsData) => {
+      // ⚠️ ป้าย "กำลังดึงรายชื่อ..." ข้างบนต้องถูกแทนที่เมื่อได้รายชื่อแล้ว
+      // ของเดิมเขียนครั้งเดียวตอนเริ่มโหลดแล้วไม่มีใครเขียนทับ ครูจึงเห็นคำว่า
+      // "กำลังดึงรายชื่อห้อง: ม.6/1" ค้างอยู่ตลอดคาบทั้งที่รายชื่อขึ้นครบแล้ว
+      const dispEl = document.getElementById('dispClass');
+      if (dispEl) {
+        const n = (studentsData || []).length;
+        dispEl.innerText = (isClub ? `ชุมนุม ${item[1]}` : `ห้อง ${fullClassName}`) + ` · ${n} คน`;
+      }
       if (isHR) {
           google.script.run
           .withFailureHandler(err => { showLoader(false); renderMorningTable(studentsData, {}); })
@@ -1414,50 +1422,6 @@ function runSmartAIAnalysis(records, body) {
      }
   }
   body.innerHTML = html;
-}
-
-function loadStudentSummary() {
-  var cached = _dashCacheGet('admin_student_summary');
-  if (cached) {
-    renderStudentTable(cached);
-    renderStudentChart(cached);
-  } else {
-    var tbody = document.getElementById('summaryTableBody');
-    if (tbody) tbody.innerHTML = _skelRows(6, ['35%','15%','15%','15%']);
-  }
-  google.script.run.withSuccessHandler(function(data) {
-    if (!data || !data.length) return;
-    _dashCacheSet('admin_student_summary', data);
-    renderStudentTable(data);
-    renderStudentChart(data);
-  }).getStudentSummaryStats();
-}
-
-function renderStudentTable(data) {
-  const tbody = document.getElementById('summaryTableBody');
-  const tfooter = document.getElementById('tableFooter');
-  if(!tbody) return;
-  let html = ''; let sumM = 0, sumF = 0, sumT = 0;
-  data.forEach(item => {
-    sumM += item.male; sumF += item.female; sumT += item.total;
-    html += `<tr><td><span class="badge bg-light text-dark border">${item.grade}</span></td><td class="text-center text-primary">${item.male}</td><td class="text-center text-danger">${item.female}</td><td class="text-center fw-bold">${item.total}</td></tr>`;
-  });
-  tbody.innerHTML = html;
-  if(tfooter) tfooter.innerHTML = `<tr><td>รวมทั้งหมด</td><td class="text-center text-primary">${sumM}</td><td class="text-center text-danger">${sumF}</td><td class="text-center bg-primary text-white">${sumT}</td></tr>`;
-}
-
-function renderStudentChart(data) {
-  const canvas = document.getElementById('studentChart');
-  if(!canvas) return;
-  if (window.myChart) window.myChart.destroy();
-  window.myChart = new Chart(canvas.getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: data.map(i => i.grade),
-      datasets: [{ label: 'ชาย', data: data.map(i => i.male), backgroundColor: '#3498db' }, { label: 'หญิง', data: data.map(i => i.female), backgroundColor: '#e74c3c' }]
-    },
-    options: { indexAxis: 'y', responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-  });
 }
 
 // ==========================================

@@ -75,7 +75,12 @@ test('ตารางสอน: วันที่อ่านไม่ออก
 test('ตารางสอน: รูปย่อ "จ." แปลงเป็น "จันทร์" ให้ตรงกับที่ slotsFromRows อ่านออก', async () => {
   const res = await ok('importTimetableCSV', [[ttRow({ day: 'จ.' })]], 'admin');
   assert.strictEqual(res.imported, 1);
-  const { rows } = await query(`SELECT day FROM timetable WHERE term=$1 AND year=$2`, [TERM, YEAR]);
+  // แถวโฮมรูมไม่ถูกลบตอนนำเข้าแล้ว — ต้องกรองออกก่อน ไม่งั้นนับของหน้าครูที่ปรึกษามาด้วย
+  const { rows } = await query(
+    `SELECT day FROM timetable
+      WHERE term=$1 AND year=$2 AND UPPER(coalesce(subject_code,'')) NOT IN ('HR','-')`,
+    [TERM, YEAR]
+  );
   assert.strictEqual(rows[0].day, 'จันทร์');
 
   const { slotsFromRows } = require('../lib/sessionCalendar');
@@ -88,14 +93,59 @@ test('ตารางสอน: ครูที่ไม่มีในระบ
   assert.match(err, /ไม่พบครู/);
 });
 
+// คาบที่ไฟล์นำเข้าเป็นเจ้าของ — ไม่รวมโฮมรูม/แนะแนวที่หน้าครูที่ปรึกษาสร้างไว้
+const lessonCount = async () => (await query(
+  `SELECT count(*)::int n FROM timetable
+    WHERE term=$1 AND year=$2 AND UPPER(coalesce(subject_code,'')) NOT IN ('HR','-')`,
+  [TERM, YEAR]
+)).rows[0].n;
+
+const homeroomCount = async () => (await query(
+  `SELECT count(*)::int n FROM timetable
+    WHERE term=$1 AND year=$2 AND UPPER(coalesce(subject_code,'')) IN ('HR','-')`,
+  [TERM, YEAR]
+)).rows[0].n;
+
 test('ตารางสอน: อัปไฟล์เดิมซ้ำแล้วจำนวนแถวเท่าเดิม ไม่เกิดแถวซ้ำ', async () => {
   const file = [ttRow(), ttRow({ day: 'อังคาร', period: '4' })];
   await ok('importTimetableCSV', [file], 'admin');
-  const first = await query(`SELECT count(*)::int n FROM timetable WHERE term=$1 AND year=$2`, [TERM, YEAR]);
+  const first = await lessonCount();
   await ok('importTimetableCSV', [file], 'admin');
-  const second = await query(`SELECT count(*)::int n FROM timetable WHERE term=$1 AND year=$2`, [TERM, YEAR]);
-  assert.strictEqual(second.rows[0].n, first.rows[0].n);
-  assert.strictEqual(second.rows[0].n, 2);
+  const second = await lessonCount();
+  assert.strictEqual(second, first);
+  assert.strictEqual(second, 2);
+});
+
+// เดิม DELETE กวาดทั้งเทอมรวมแถว HR ครูที่ปรึกษาหายทั้งโรงเรียนทุกครั้งที่อัปตารางสอน
+// แล้วโฮมรูม/กิจกรรมหน้าเสาธงหายตาม โดยที่ผลลัพธ์ขึ้นว่า "นำเข้าสำเร็จ"
+test('ตารางสอน: นำเข้าแล้วครูที่ปรึกษา (แถว HR / แนะแนว) ต้องอยู่ครบ', async () => {
+  const before = await homeroomCount();
+  assert.ok(before > 0, 'seed ต้องมีแถวโฮมรูมไว้ให้เทสจับ');
+  await ok('importTimetableCSV', [[ttRow()]], 'admin');
+  assert.strictEqual(await homeroomCount(), before, 'นำเข้าตารางสอนต้องไม่แตะแถวโฮมรูม');
+});
+
+test('ตารางสอน: แถวโฮมรูมที่ติดมาในไฟล์ถูกข้าม ไม่ซ้อนของที่มีอยู่', async () => {
+  const hrBefore = await homeroomCount();
+  const res = await ok('importTimetableCSV', [[
+    ttRow(),
+    ttRow({ subjectCode: 'HR', subjectName: 'โฮมรูม', day: 'จันทร์', period: '0', level: 'ม.6', room: '1' }),
+    ttRow({ subjectCode: '-', subjectName: 'แนะแนว', day: 'จันทร์', period: '7' }),
+  ]], 'admin');
+  assert.strictEqual(res.imported, 1);
+  assert.strictEqual(res.skippedHomeroom, 2);
+  assert.match(res.message, /ข้ามคาบโฮมรูม/);
+  assert.strictEqual(await homeroomCount(), hrBefore);
+  assert.strictEqual(await lessonCount(), 1);
+});
+
+test('ตารางสอน: เลขแถวใน error ยังเป็นเลขแถวใน Excel แม้มีแถวโฮมรูมคั่น', async () => {
+  const err = await denied('importTimetableCSV', [[
+    ttRow(),                                                   // แถว 2
+    ttRow({ subjectCode: 'HR', period: '0' }),                 // แถว 3 (ข้าม)
+    ttRow({ teacherId: 'ไม่มีคนนี้', period: '6' }),             // แถว 4
+  ]], 'admin');
+  assert.match(err, /แถว 4/);
 });
 
 test('ตารางสอน: DELETE กวาดเฉพาะเทอมที่ active ไม่แตะเทอมอื่น', async () => {

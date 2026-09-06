@@ -105,11 +105,15 @@ async function registerClub([studentId, studentName, className, clubId, term, ye
   return { status: 'success', message: 'ลงทะเบียนชุมนุมสำเร็จ' };
 }
 
+// ⚠️ ลบไม่โดนแถวไหน = ต้องบอกว่าไม่โดน ไม่ใช่คืน success — เดิมคืนสำเร็จเสมอ
+// นักเรียนกดยกเลิกด้วย arg ที่ผิดรูปแล้วเชื่อว่ายกเลิกแล้ว ทั้งที่ยังอยู่ในชุมนุมเดิม
+// (แนวเดียวกับ `_setLeaveStatus` ที่ throw เมื่อ rowCount = 0)
 async function unregisterClub([studentId, term, year]) {
-  await query(
+  const res = await query(
     `DELETE FROM club_members WHERE student_id=$1 AND term=$2 AND year=$3`,
     [studentId, term, year]
   );
+  if (res.rowCount === 0) throw new Error('ยังไม่ได้ลงทะเบียนชุมนุมในเทอมนี้');
   invalidateClubs(term, year);
   return { status: 'success', message: 'ยกเลิกลงทะเบียนชุมนุมสำเร็จ' };
 }

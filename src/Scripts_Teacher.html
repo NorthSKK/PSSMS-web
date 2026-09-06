@@ -947,7 +947,8 @@ function _tcLoadAttSummary(cb) {
   google.script.run
     .withSuccessHandler(function(res) { _tcAttSummary = res; cb(res); })
     .withFailureHandler(function() { _tcAttSummary = { sessions:[], members:[] }; cb(_tcAttSummary); })
-    .getClubAttendanceSummary(user.id, _tcCurrentClub.clubId, user.currentTerm, user.currentYear, user.role);
+    // ⚠️ 3 args: (clubId, term, year) — เดิมส่ง 5 ตัวโดยมี user.id นำหน้า ทำให้ทุกค่าเลื่อน
+    .getClubAttendanceSummary(_tcCurrentClub.clubId, user.currentTerm, user.currentYear);
 }
 
 function tcShowAttendanceForDate(date) {
@@ -1175,8 +1176,11 @@ function ttOpenEditModal(rowIdx) {
   document.getElementById('ttEditLevel').value = row.data[2];
   document.getElementById('ttEditRoom').value = row.data[3];
   document.getElementById('ttEditLocation').value = row.data[4] || '';
-  document.getElementById('ttEditDay').value = String(row.data[6]).trim();
-  document.getElementById('ttEditPeriod').value = String(row.data[7]).trim();
+  // ⚠️ ผ่าน setSelectValue — คาบโฮมรูมของครูที่ปรึกษาเป็นคาบ '0' ซึ่งไม่มีในลิสต์ 1–8
+  // เซ็ตตรง ๆ แล้ว select ว่าง กดบันทึกคือเขียนคาบว่างทับคาบโฮมรูมของตัวเอง
+  setSelectValue('ttEditDay', String(row.data[6]).trim());
+  setSelectValue('ttEditPeriod', String(row.data[7]).trim(),
+    String(row.data[7]).trim() === '0' ? '— โฮมรูม' : '');
   document.getElementById('ttEditConflictMsg').classList.add('d-none');
   document.getElementById('ttEditSaveBtn').disabled = false;
   ttCheckEditConflict();

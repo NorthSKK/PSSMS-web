@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
+const { isHomeroomManagedSubject } = require('../lib/subjectGroup');
 const { assertRows, prepareRows, assertNoErrors } = require('../lib/importSpec');
 
 // Data array format: [subject_code, subject_name, level, room, location, teacher_id, day, period, term, year]
@@ -54,8 +55,31 @@ async function removeDuplicateTimetableRows([term, year]) {
   return { status: 'success', message: `ลบแถวซ้ำ ${ids.length} แถว (เก็บไว้ ${groups.length} แถว)`, removed: ids.length };
 }
 
+/**
+ * ช่องที่ว่างไม่ได้ — เว้นไว้แล้วแถวยังอยู่ใน DB แต่หลุดจากทุกหน้าที่ค้นด้วยค่านั้น
+ * เคยเกิดจริง: modal แก้คาบมีคาบให้เลือกแค่ 1–8 พอเปิดแถวโฮมรูม (คาบ '0')
+ * `select.value` กลายเป็น '' แล้วกดบันทึกคือเขียนคาบว่างทับ ขึ้น "บันทึกสำเร็จ" ตามปกติ
+ * ฝั่งหน้าเว็บกันไว้แล้วชั้นหนึ่ง ตรงนี้เป็นชั้นที่บั๊กฝั่งหน้าเว็บข้ามไม่ได้
+ */
+const REQUIRED_TIMETABLE_FIELDS = [
+  [0, 'รหัสวิชา'], [2, 'ระดับชั้น'], [3, 'ห้อง'],
+  [6, 'วันสอน'], [7, 'คาบ'], [8, 'ภาคเรียน'], [9, 'ปีการศึกษา'],
+];
+
+function assertTimetableFields(data) {
+  if (!Array.isArray(data) || data.length < 10) throw new Error('ข้อมูลคาบเรียนไม่ครบ');
+  const missing = REQUIRED_TIMETABLE_FIELDS
+    .filter(([i]) => !String(data[i] == null ? '' : data[i]).trim())
+    .map(([, label]) => label);
+  if (missing.length) throw new Error(`กรอกไม่ครบ: ${missing.join(', ')}`);
+  // หน้าเว็บฝั่งครูส่งคาบผ่าน parseInt — ช่องว่างจะกลายเป็น NaN ซึ่งไม่ใช่ค่าว่าง
+  // แต่ก็ไม่ใช่คาบ ปล่อยเข้าไปแล้วคาบนั้นหายจากทุกหน้าที่จับคู่ด้วยตัวเลข
+  if (!/^\d+$/.test(String(data[7]).trim())) throw new Error('คาบต้องเป็นตัวเลข');
+}
+
 async function updateTimetableRow([rowIndex, data]) {
   // data = [subject_code, subject_name, level, room, location, teacher_id, day, period, term, year]
+  assertTimetableFields(data);
   await query(
     `UPDATE timetable SET subject_code=$1,subject_name=$2,level=$3,room=$4,
      location=$5,teacher_id=$6,day=$7,period=$8,term=$9,year=$10 WHERE id=$11`,
@@ -75,6 +99,12 @@ async function deleteTimetableRow([rowIndex]) {
  *
  * เทอม/ปีมาจากค่า active ในระบบเท่านั้น ไม่ใช่คอลัมน์ในไฟล์ — ขอบเขต DELETE
  * ห้ามมาจากช่องใน Excel พิมพ์ปีผิดตัวเดียวคือลบตารางสอนของปีที่ใช้งานอยู่ทิ้ง
+ *
+ * ⚠️ **ยกเว้นแถวโฮมรูม/แนะแนว/วิถีพุทธ** (`isHomeroomManagedSubject`) — หน้าครูที่ปรึกษา
+ * ประจำชั้นเป็นเจ้าของแถวพวกนี้ทั้งชุด ไม่ได้อยู่ในไฟล์ตารางสอนตั้งแต่แรก เดิมกวาดไปด้วย
+ * ครูที่ปรึกษาจึงหายทั้งโรงเรียนทุกครั้งที่อัปตารางสอน แล้วโฮมรูมกับกิจกรรมหน้าเสาธง
+ * ก็หายตามโดยไม่มีอะไรฟ้อง · แถวชนิดนี้ที่ติดมาในไฟล์ถูก **ข้าม** ไม่ใช่บล็อกทั้งไฟล์
+ * (ไฟล์ที่ export จากระบบเดิมมักมีคาบโฮมรูมติดมาด้วย ถ้าใส่จะกลายเป็นซ้อนของที่มีอยู่แล้ว)
  */
 async function importTimetableCSV([rows]) {
   assertRows(rows);
@@ -83,9 +113,18 @@ async function importTimetableCSV([rows]) {
 
   const { term, year } = await require('./getSystemConfig')();
 
+  // แถวโฮมรูม/แนะแนวที่ติดมาในไฟล์ไม่ถูกนำเข้า แต่ยังนับ index เดิมไว้ทั้งไฟล์
+  // ⚠️ เลขแถวใน error ต้องเป็นเลขแถวใน Excel เสมอ — กรองก่อนแล้วค่อยหา index ไม่ได้
+  const importable = [];
+  let skippedHomeroom = 0;
+  prepared.rows.forEach((r, i) => {
+    if (isHomeroomManagedSubject(r.subjectCode)) { skippedHomeroom++; return; }
+    importable.push({ row: r, excelRow: i + 2 });
+  });
+
   // ครูต้องมีตัวตนก่อน — ของเดิม `continue` ทิ้งแถวเงียบ ๆ ครูทั้งคนหายจากตารางสอน
   // โดยที่ยอด "นำเข้า N รายการ" ยังขึ้นเป็นสีเขียว
-  const teacherIds = [...new Set(prepared.rows.map((r) => r.teacherId).filter(Boolean))];
+  const teacherIds = [...new Set(importable.map((x) => x.row.teacherId).filter(Boolean))];
   const known = new Set();
   if (teacherIds.length) {
     const { rows: found } = await query(
@@ -93,9 +132,9 @@ async function importTimetableCSV([rows]) {
     );
     for (const u of found) known.add(u.username);
   }
-  prepared.rows.forEach((r, i) => {
+  importable.forEach(({ row: r, excelRow }) => {
     if (r.teacherId && !known.has(r.teacherId)) {
-      errors.push({ row: i + 2, message: `ไม่พบครูชื่อผู้ใช้ "${r.teacherId}" ในระบบ — นำเข้าครูก่อน` });
+      errors.push({ row: excelRow, message: `ไม่พบครูชื่อผู้ใช้ "${r.teacherId}" ในระบบ — นำเข้าครูก่อน` });
     }
   });
 
@@ -107,10 +146,13 @@ async function importTimetableCSV([rows]) {
   try {
     await client.query('BEGIN');
     const del = await client.query(
-      `DELETE FROM timetable WHERE term=$1 AND year=$2`, [String(term), String(year)]
+      `DELETE FROM timetable
+        WHERE term=$1 AND year=$2
+          AND UPPER(coalesce(subject_code,'')) NOT IN ('HR','-')`,
+      [String(term), String(year)]
     );
     removed = del.rowCount;
-    for (const r of prepared.rows) {
+    for (const { row: r } of importable) {
       await client.query(
         `INSERT INTO timetable(subject_code,subject_name,level,room,location,teacher_id,day,period,term,year)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
@@ -125,11 +167,15 @@ async function importTimetableCSV([rows]) {
   } finally {
     client.release();
   }
+  const skipNote = skippedHomeroom
+    ? ` · ข้ามคาบโฮมรูม/แนะแนวในไฟล์ ${skippedHomeroom} แถว (ตั้งที่หน้าจัดการผู้ใช้งาน → ครูที่ปรึกษาประจำชั้น)`
+    : '';
   return {
     status: 'success',
-    imported: prepared.rows.length,
+    imported: importable.length,
     removed,
-    message: `นำเข้าตารางสอนเทอม ${term}/${year} สำเร็จ — ลบของเดิม ${removed} แถว ใส่ใหม่ ${prepared.rows.length} แถว`,
+    skippedHomeroom,
+    message: `นำเข้าตารางสอนเทอม ${term}/${year} สำเร็จ — ลบของเดิม ${removed} แถว ใส่ใหม่ ${importable.length} แถว${skipNote}`,
   };
 }
 
@@ -154,6 +200,7 @@ async function teacherUpdateTimetableRow([teacherId, rowIndex, newData], user) {
   // lets any teacher edit any row by sending that row's owner id.
   if (!isAdmin(user) && String(rows[0].teacher_id).trim().toLowerCase() !== String(user?.id || '').trim().toLowerCase())
     throw new Error('ไม่มีสิทธิ์แก้ไขรายการนี้');
+  assertTimetableFields(newData);   // ตรวจหลังสิทธิ์ — คนที่ไม่มีสิทธิ์ต้องเจอ error เรื่องสิทธิ์
   // Only allow editing display fields — subject_code/teacher_id/term/year are locked in DB
   await query(
     `UPDATE timetable SET subject_name=$1, level=$2, room=$3, location=$4, day=$5, period=$6 WHERE id=$7`,

@@ -777,7 +777,7 @@ async function fill({ term, year, teacherNames, schoolName }) {
   log.push(`สรุปคาบสอน ${acadRows} คาบ`);
 
   // ---------------------------------------------------------------- สรุปเกรด
-  // หน้ารายงานทุกรายวิชาและ Page_Grade_Summary อ่านจากตารางนี้ ไม่ได้คำนวณสด
+  // หน้ารายงานทุกรายวิชาอ่านจากตารางนี้ ไม่ได้คำนวณสด
   const GRADE = (pct) => pct >= 80 ? '4' : pct >= 75 ? '3.5' : pct >= 70 ? '3' : pct >= 65 ? '2.5'
                        : pct >= 60 ? '2' : pct >= 55 ? '1.5' : pct >= 50 ? '1' : '0';
   const { rows: totals } = await query(

@@ -1,0 +1,116 @@
+/**
+ * กติกาฝั่งหน้าเว็บที่ไม่มีอะไรจับตอน build — ทั้งหมดนี้เคยหลุดจริงและเจอตอนกดใช้งานเอง
+ *
+ * ไฟล์ `src/*.html` ถูกเสิร์ฟดิบ ไม่มี module system ไม่มี linter ไม่มี type check
+ * เทสชุดนี้จึงอ่านไฟล์ตรง ๆ แล้วล็อกกติกาที่พังแล้วเงียบไว้
+ */
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const SRC = path.join(__dirname, '../src');
+const read = (f) => fs.readFileSync(path.join(SRC, f), 'utf8');
+const scriptFiles = () => fs.readdirSync(SRC).filter((f) => f.startsWith('Scripts_') && f.endsWith('.html'));
+const allScripts = () => scriptFiles().map(read).join('\n');
+
+// ── setupPageContent เรียกฟังก์ชันที่ไม่มีอยู่จริง = เปิดหน้านั้นแล้ว throw ────
+//
+// เคยหลุด: `if(pageName === 'Page_Grade_Summary') initGradeSummaryPage();`
+// ทั้งที่ไม่มีใครเขียน `initGradeSummaryPage` ไว้เลย เปิดหน้าแล้วได้ ReferenceError
+// หน้าเปล่า และโค้ดที่เหลือใน setupPageContent ไม่ถูกรันต่อ
+test('ทุกตัวเริ่มหน้าใน setupPageContent ต้องมีฟังก์ชันอยู่จริง', () => {
+  const core = read('Scripts_Core.html');
+  const body = core.slice(core.indexOf('function setupPageContent'));
+  const scripts = allScripts();
+  const called = [...body.matchAll(/pageName === '([A-Za-z_]+)'\)\s*\{?\s*([A-Za-z_$][\w$]*)\(/g)];
+  assert.ok(called.length > 10, 'ต้องเจอรายการตัวเริ่มหน้า');
+  for (const [, page, fn] of called) {
+    // `if` มาจากบรรทัดที่ห่อด้วย `if (typeof initX === 'function')` — ตัวนั้นกันตัวเองอยู่แล้ว
+    if (fn === 'loadPage' || fn === 'if') continue;
+    assert.ok(
+      new RegExp(`function\\s+${fn}\\s*\\(|window\\.${fn}\\s*=|${fn}\\s*=\\s*function`).test(scripts),
+      `${page} เรียก ${fn}() แต่ไม่มีใครประกาศไว้ใน Scripts_*.html`
+    );
+  }
+});
+
+// ── ทุกหน้าที่ setupPageContent อ้างถึง ต้องมีไฟล์อยู่จริง ────────────────────
+test('ทุกหน้าที่ setupPageContent อ้างถึง ต้องมีไฟล์ใน src/', () => {
+  const core = read('Scripts_Core.html');
+  const body = core.slice(core.indexOf('function setupPageContent'));
+  const pages = new Set([...body.matchAll(/pageName === '([A-Za-z_]+)'/g)].map((m) => m[1]));
+  for (const p of pages) {
+    const exists = fs.existsSync(path.join(SRC, `${p}.html`)) || fs.existsSync(path.join(SRC, `${p}.html.html`));
+    assert.ok(exists, `setupPageContent อ้างถึง ${p} แต่ไม่มีไฟล์หน้านั้น`);
+  }
+});
+
+// ── เมนูต้องไม่พาไปหน้าที่ไม่มีอยู่ ──────────────────────────────────────────
+test('ทุกหน้าในเมนูต้องมีไฟล์อยู่จริง', () => {
+  const core = read('Scripts_Core.html');
+  const pages = new Set([...core.matchAll(/loadPage\('([A-Za-z_]+)'\)/g)].map((m) => m[1]));
+  for (const p of pages) {
+    const exists = fs.existsSync(path.join(SRC, `${p}.html`)) || fs.existsSync(path.join(SRC, `${p}.html.html`));
+    assert.ok(exists, `เมนู/โค้ดพาไป ${p} แต่ไม่มีไฟล์หน้านั้น`);
+  }
+});
+
+// ── ช่องคะแนนต้องผูก oninput ไม่ใช่ onkeyup ─────────────────────────────────
+//
+// keyup ไม่ยิงเมื่อวางค่าด้วยเมาส์ กด stepper ของ input[type=number] undo หรือ autofill
+// ค่าขึ้นในช่องแต่ไม่คำนวณใหม่และ autosave ไม่ทำงาน → ครูออกจากหน้าไปแล้วคะแนนหาย
+test('ช่องกรอกคะแนนต้องใช้ oninput ไม่ใช่ onkeyup', () => {
+  const score = read('Scripts_Score.html');
+  assert.ok(!/onkeyup=/.test(score), 'Scripts_Score.html ต้องไม่เหลือ onkeyup');
+  assert.ok(/oninput="calcRow\(/.test(score), 'ช่องคะแนนต้องเรียก calcRow ผ่าน oninput');
+  assert.ok(/oninput="calcEvalRow\(/.test(score), 'ช่องประเมินต้องเรียก calcEvalRow ผ่าน oninput');
+});
+
+// ── error จากเซิร์ฟเวอร์ห้ามถูกยิงซ้ำแบบ "สัญญาณขัดข้อง" ─────────────────────
+//
+// เจอตอน ผอ. เปิดหน้าสารบรรณ: error สิทธิ์ถูกยิงซ้ำ 3 รอบพร้อมขึ้น
+// "สัญญาณขัดข้อง กำลังส่งข้อมูลใหม่..." ทั้งที่เซิร์ฟเวอร์ตอบชัดแล้วว่าไม่ให้ทำ
+// อันตรายกว่านั้นคือถ้าเป็น write function ที่ล้มไปแล้ว จะถูกยิงซ้ำอีกสองครั้ง
+test('gas-shim ติดธง serverError และ safeRun ต้องไม่ยิงซ้ำเมื่อเจอธงนั้น', () => {
+  const shim = fs.readFileSync(path.join(__dirname, '../public/gas-shim.js'), 'utf8');
+  assert.match(shim, /serverError\s*=\s*true/, 'gas-shim ต้องติดธงให้ error ที่มาจากเซิร์ฟเวอร์');
+
+  const core = read('Scripts_Core.html');
+  assert.match(core, /retriesLeft > 0 && !\(err && err\.serverError\)/,
+    'safeRun ต้องยิงซ้ำเฉพาะตอนเชื่อมต่อไม่ได้');
+});
+
+// ── ห้ามใช้ native alert/confirm ในโค้ดที่รันระหว่างใช้งาน ──────────────────
+//
+// native dialog บล็อก JS ทั้งหน้าจนกว่าคนจะกดปิด (ทำให้หน้าค้างจริงตอนไล่เทส)
+// ที่ยกเว้นได้คือหน้าจอล็อกอิน/ออกจากระบบ ซึ่งยังไม่มี Swal/showToast ให้ใช้
+test('safeRun ต้องแจ้ง error ด้วย showToast ไม่ใช่ alert()', () => {
+  const core = read('Scripts_Core.html');
+  const block = core.slice(core.indexOf('const attemptCall'), core.indexOf('attemptCall(maxRetries)'))
+    .replace(/\/\/[^\n]*/g, '');       // ตัดคอมเมนต์ก่อน — คอมเมนต์ที่อธิบายกติกานี้เองก็มีคำว่า alert(
+  assert.ok(!/[^.\w]alert\(/.test(block), 'ตัวจัดการ error ของ safeRun ต้องไม่เรียก alert()');
+  assert.match(block, /showToast\(/);
+});
+
+// ── หน้าล่าสุดต้องผูกกับเจ้าของ ──────────────────────────────────────────────
+//
+// เครื่องที่โรงเรียนใช้ร่วมกัน: ครูปิดเบราว์เซอร์โดยไม่กดออกจากระบบ นักเรียนล็อกอินต่อ
+// แล้วถูกพาไปหน้างานสารบรรณของครู เจอ error สิทธิ์เต็มหน้าจอ
+test('กลับไปหน้าล่าสุดเฉพาะเมื่อเป็นคนเดิม', () => {
+  const core = read('Scripts_Core.html');
+  assert.match(core, /pssms_last_page_user/, 'ต้องจดว่าหน้าล่าสุดเป็นของใคร');
+  assert.match(core, /lastPageUser === meId/, 'ต้องเทียบเจ้าของก่อนพากลับไปหน้าเดิม');
+  // logout ต้องล้างทั้งคู่ ไม่งั้นคีย์ผู้ใช้ค้างไว้ชี้คนเก่า
+  const logout = core.slice(core.indexOf('function logout'), core.indexOf('function logout') + 600);
+  assert.match(logout, /removeItem\('pssms_last_page'\)/);
+  assert.match(logout, /removeItem\('pssms_last_page_user'\)/);
+});
+
+// ── ป้ายบอกห้องบนหน้าเช็คชื่อต้องไม่ค้างที่ "กำลังดึง..." ────────────────────
+test('หน้าเช็คชื่อต้องเขียนทับป้าย "กำลังดึงรายชื่อ" เมื่อได้รายชื่อแล้ว', () => {
+  const academic = read('Scripts_Academic.html');
+  const fn = academic.slice(academic.indexOf('const fetchHistoryAndRender'), academic.indexOf('let cached = null;'));
+  assert.match(fn, /dispClass/, 'ต้องอัปเดต #dispClass หลังได้รายชื่อ');
+});

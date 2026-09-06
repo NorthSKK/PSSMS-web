@@ -489,6 +489,26 @@ function saveConfig() {
 var allUsers = [];
 var _staffHomeroomMap = {};
 
+/**
+ * ผูก event ของแท็บในหน้าจัดการผู้ใช้งาน
+ *
+ * ⚠️ เดิมอยู่ใน `<script>` ท้าย `Page_Admin_Users.html` ซึ่ง **ไม่เคยทำงาน** —
+ * หน้าโหลดด้วย `innerHTML` สคริปต์ที่แทรกมาแบบนั้นเบราว์เซอร์ไม่รัน
+ * ผลคือแท็บ "ครูที่ปรึกษาประจำชั้น" กดแล้วไม่มีอะไรโหลด ตารางว่างตลอด
+ * ทั้งที่เป็นที่เดียวในระบบที่ตั้งครูที่ปรึกษาได้
+ */
+function initAdminUsersPage() {
+  var hrTab = document.getElementById('homeroom-tab');
+  if (hrTab) hrTab.addEventListener('shown.bs.tab', function() { initHomeroomPage(); });
+  // ตัวพาไปแท็บที่ต้องการตอนกดมาจากที่อื่น (ยังไม่มีใครตั้งค่านี้ แต่เก็บไว้ให้ครบเหมือนเดิม)
+  if (window._usersAutoTab) {
+    var target = window._usersAutoTab;
+    window._usersAutoTab = null;
+    var tabEl = document.getElementById(target + '-tab');
+    if (tabEl) bootstrap.Tab.getOrCreateInstance(tabEl).show();
+  }
+}
+
 function loadUserData(forceRefresh) {
   var user = getSessionUser();
   var _cacheKey = 'admin_users_' + (user.currentTerm||'') + '_' + (user.currentYear||'');
@@ -1205,9 +1225,15 @@ function handleTimetableUpload(inputElement) {
       // นำเข้าเลยจะขึ้น "ลบ 0 แถว" ทั้งที่กำลังจะลบทั้งเทอม ถามจำนวนจริงเสมอ
       var term = window._hrActiveTerm || (getSessionUser() || {}).currentTerm || '';
       var year = window._hrActiveYear || (getSessionUser() || {}).currentYear || '';
+      // ⚠️ นับเฉพาะคาบที่จะโดนลบจริง — แถวโฮมรูม/แนะแนวไม่ถูกลบแล้ว (ดู importTimetableCSV)
+      // นับรวมเข้าไปคือบอกตัวเลขที่ใหญ่กว่าความจริงเป็นสิบแถวทุกครั้ง
       return new Promise(function(resolve) {
         google.script.run
-          .withSuccessHandler(function(rows) { resolve(Array.isArray(rows) ? rows.length : null); })
+          .withSuccessHandler(function(rows) {
+            resolve(Array.isArray(rows)
+              ? rows.filter(function(r) { return !_ttIsHomeroomManaged(r.data[0]); }).length
+              : null);
+          })
           .withFailureHandler(function() { resolve(null); })
           .getFilteredTimetables('', term, year);
       }).then(function(existing) { return { parsed: parsed, term: term, year: year, existing: existing }; });
@@ -1227,7 +1253,8 @@ function handleTimetableUpload(inputElement) {
         unknownHeaders: parsed.unknownHeaders,
         errors: v.errors,
         warnings: v.warnings,
-        noteHtml: losing + ' แล้วใส่ใหม่ ' + parsed.rows.length + ' แถวจากไฟล์',
+        noteHtml: losing + ' แล้วใส่ใหม่ ' + parsed.rows.length + ' แถวจากไฟล์'
+          + '<div class="small mt-1">คาบโฮมรูมและแนะแนว/วิถีพุทธไม่ถูกลบ — ตั้งที่หน้าจัดการผู้ใช้งาน → ครูที่ปรึกษาประจำชั้น</div>',
         confirmText: 'ลบของเดิมแล้วนำเข้า ' + parsed.rows.length + ' แถว',
         onConfirm: function() {
           var labelBtn = inputElement.parentElement;
@@ -1446,17 +1473,43 @@ function renderTimetableList() {
   tbody.innerHTML = html;
 }
 
+// รหัสที่หน้า "ครูที่ปรึกษาประจำชั้น" เป็นเจ้าของ — ต้องตรงกับ isHomeroomManagedSubject()
+// ใน lib/subjectGroup.js (ไม่มี module system ฝั่งนี้ แก้ต้องแก้คู่กัน)
+function _ttIsHomeroomManaged(code) {
+  var c = String(code == null ? '' : code).trim().toUpperCase();
+  return c === 'HR' || c === '-';
+}
+
+function _ttEditLevelChanged() {
+  var lv = document.getElementById('editLevel').value;
+  document.getElementById('editRoom').innerHTML = _ttoRoomOpts(lv, '');
+}
+
 function openEditTimetable(rowIndex) {
   const item = currentTimetableData.find(i => i.rowIndex === rowIndex);
   if(!item) return;
   document.getElementById('editRowIndex').value = rowIndex;
   document.getElementById('editSubjectCode').value = item.data[0];
   document.getElementById('editSubjectName').value = item.data[1];
-  if(document.getElementById('editLevel')) document.getElementById('editLevel').value = item.data[2];
-  if(document.getElementById('editRoom')) document.getElementById('editRoom').value = item.data[3];
+  var lvSel = document.getElementById('editLevel');
+  var rmSel = document.getElementById('editRoom');
+  if (lvSel) lvSel.innerHTML = _ttoLevelOpts(String(item.data[2] || '').trim());
+  if (rmSel) rmSel.innerHTML = _ttoRoomOpts(String(item.data[2] || '').trim(), String(item.data[3] || '').trim());
   if(document.getElementById('editLocation')) document.getElementById('editLocation').value = item.data[4];
-  document.getElementById('editDay').value = item.data[6];
-  document.getElementById('editPeriod').value = item.data[7];
+  // ⚠️ ผ่าน setSelectValue เสมอ — คาบโฮมรูม ('0') กับวันเสาร์/อาทิตย์ไม่มีในลิสต์
+  setSelectValue('editDay', item.data[6]);
+  setSelectValue('editPeriod', item.data[7], item.data[7] === '0' ? '(โฮมรูม)' : '');
+
+  var warn = document.getElementById('editTimetableOwnerWarn');
+  if (warn) {
+    var managed = _ttIsHomeroomManaged(item.data[0]);
+    warn.classList.toggle('d-none', !managed);
+    warn.innerHTML = managed
+      ? '<i class="fas fa-exclamation-triangle me-1"></i>คาบนี้เป็นโฮมรูม/แนะแนว ซึ่งระบบสร้างเป็นชุดจันทร์–ศุกร์ '
+        + 'แก้ทีละแถวที่นี่แล้วชุดจะไม่ตรงกัน — ควรแก้ที่ <b>จัดการผู้ใช้งาน → ครูที่ปรึกษาประจำชั้น</b>'
+      : '';
+  }
+
   const modalEl = document.getElementById('editTimetableModal');
   if(modalEl) {
     if (!editModalInstance) editModalInstance = new bootstrap.Modal(modalEl);
@@ -1471,25 +1524,62 @@ function saveTimetableEdit() {
   const yearEl = document.getElementById('ttoYear') || document.getElementById('viewYear');
   const term = termEl ? termEl.value : '';
   const year = yearEl ? yearEl.value : '';
+  const level = document.getElementById('editLevel').value;
+  const room = document.getElementById('editRoom').value;
+  const period = document.getElementById('editPeriod').value;
+  // ปล่อยค่าว่างผ่าน = เขียนทับของจริงด้วยช่องว่าง แล้วคาบหายจากทุกหน้าแบบเงียบ ๆ
+  if (!level || !room) return showAlert('⚠️ เลือกระดับชั้นและห้องก่อนบันทึก');
+  if (!period) return showAlert('⚠️ เลือกคาบก่อนบันทึก');
+
   const rowData = [
-    document.getElementById('editSubjectCode').value, document.getElementById('editSubjectName').value, 
-    document.getElementById('editLevel').value, document.getElementById('editRoom').value, 
-    document.getElementById('editLocation').value, tid, document.getElementById('editDay').value, 
-    document.getElementById('editPeriod').value, term, year
+    document.getElementById('editSubjectCode').value, document.getElementById('editSubjectName').value,
+    level, room,
+    document.getElementById('editLocation').value, tid, document.getElementById('editDay').value,
+    period, term, year
   ];
   const btn = document.getElementById('btnSaveTimetable');
+  const original = btn.innerHTML;
+  const restore = function() { btn.disabled = false; btn.innerHTML = original; };
   btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-  google.script.run.withSuccessHandler(res => { 
-    btn.disabled = false; btn.innerHTML = 'บันทึกการแก้ไข'; showAlert(res.message); 
-    if(editModalInstance) editModalInstance.hide(); viewTimetable(); 
-  }).updateTimetableRow(rowIndex, rowData);
+  google.script.run
+    .withSuccessHandler(res => {
+      restore(); showAlert(res.message);
+      if(editModalInstance) editModalInstance.hide();
+      viewTimetable(); _ttoReloadAllRows();
+    })
+    // ไม่มีตัวรับ error = ปุ่มค้างหมุนตลอดกาลเมื่อ backend ปฏิเสธ คนกดจะอ่านว่า "แก้ไม่ได้"
+    .withFailureHandler(err => { restore(); showAlert('❌ ' + err.message); })
+    .updateTimetableRow(rowIndex, rowData);
+}
+
+// ตารางรวมทุกครูอ่านจาก _ttoAllRows ที่โหลดครั้งเดียวตอนเปิดหน้า — แก้/ลบคาบแล้วไม่รีเฟรช
+// จะกลับไปแท็บแรกแล้วเห็นค่าเดิม ซึ่งอ่านได้อย่างเดียวว่า "แก้ไขไม่ติด"
+function _ttoReloadAllRows() {
+  var termEl = document.getElementById('ttoTerm');
+  var yearEl = document.getElementById('ttoYear');
+  if (!termEl || !yearEl) return;
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      _ttoAllRows = rows || [];
+      _ttoBuildClassList();
+      if (document.getElementById('ttoGridWrap')) ttoRenderGrid();
+    })
+    .withFailureHandler(function() { /* ตารางรวมยังโชว์ของเดิมได้ ไม่ต้องขึ้น error ซ้อน */ })
+    .getFilteredTimetables('', termEl.value, yearEl.value);
 }
 
 function confirmDeleteTimetable() {
   Swal.fire({ title: 'ยืนยันลบคาบเรียนนี้?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก' }).then(r => {
     if (!r.isConfirmed) return;
     const rowIndex = document.getElementById('editRowIndex').value;
-    google.script.run.withSuccessHandler(res => { showAlert(res.message); if(editModalInstance) editModalInstance.hide(); viewTimetable(); }).deleteTimetableRow(rowIndex);
+    google.script.run
+      .withSuccessHandler(res => {
+        showAlert(res.message);
+        if(editModalInstance) editModalInstance.hide();
+        viewTimetable(); _ttoReloadAllRows();
+      })
+      .withFailureHandler(err => showAlert('❌ ' + err.message))
+      .deleteTimetableRow(rowIndex);
   });
 }
 

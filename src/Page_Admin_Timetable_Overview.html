@@ -1,4 +1,9 @@
-<script>
-// Redirected — merged into Page_Admin_Timetable
-if (typeof loadPage === 'function') loadPage('Page_Admin_Timetable');
-</script>
+<!--
+  หน้านี้ถูกยุบรวมเข้ากับ Page_Admin_Timetable แล้ว เหลือไว้เป็นทางเปลี่ยนเส้นทาง
+  สำหรับลิงก์เก่าและค่า pssms_last_page ที่ค้างอยู่ในเครื่องผู้ใช้
+
+  ⚠️ ตัวเปลี่ยนเส้นทางจริงอยู่ที่ `setupPageContent` ใน Scripts_Core.html —
+  `<script>` ที่เขียนไว้ในไฟล์หน้าไม่ทำงาน เพราะหน้าโหลดเข้ามาด้วย innerHTML
+  ⚠️ ไฟล์ต้องไม่ว่างเปล่า `loadPage` ถือว่าเนื้อหาว่าง = โหลดหน้าไม่สำเร็จ แล้วเด้ง alert
+-->
+<div class="p-4 text-muted">กำลังพาไปหน้าจัดการตารางสอน…</div>

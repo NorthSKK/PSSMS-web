@@ -131,9 +131,28 @@ test('ตารางสอนไม่นับแถว HR — ไม่งั
   const res = await fresh();
   const { rows: real } = await query(
     `SELECT count(*)::int n FROM timetable
-      WHERE term='1' AND year='2569' AND subject_code<>'HR'`
+      WHERE term='1' AND year='2569'
+        AND UPPER(coalesce(subject_code,'')) NOT IN ('HR','-')
+        AND UPPER(coalesce(subject_code,'')) NOT LIKE 'CLUB%'`
   );
   assert.strictEqual(item(res, 'timetable').count, real[0].n);
+});
+
+// ตัด 'HR' อย่างเดียวไม่พอ — setAllHomeroomTeachers ใส่แนะแนว/วิถีพุทธด้วยรหัส '-'
+// ให้ทุกห้องที่มีครูที่ปรึกษา ข้อ "นำเข้าตารางสอน" เลยติ๊กเองทั้งที่ยังไม่มีคาบสอนสักคาบ
+test("ตารางสอนไม่นับแถวแนะแนว/วิถีพุทธ (รหัส '-') และแถวชุมนุม", async () => {
+  const beforeCount = item(await fresh(), 'timetable').count;
+  await query(
+    `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year)
+     VALUES('-','แนะแนว','ม.6','9','teacher1','จันทร์','7','1','2569'),
+           ('-','วิถีพุทธ','ม.6','9','teacher1','ศุกร์','7','1','2569'),
+           ('CLUB_TEST','ชุมนุมทดสอบ','ม.6','9','teacher1','พุธ','8','1','2569')`
+  );
+  try {
+    assert.strictEqual(item(await fresh(), 'timetable').count, beforeCount);
+  } finally {
+    await query(`DELETE FROM timetable WHERE level='ม.6' AND room='9' AND year='2569'`);
+  }
 });
 
 test('บัญชี admin ที่ยังใช้รหัสเริ่มต้นต้องขึ้นว่ายังไม่ทำ', async () => {

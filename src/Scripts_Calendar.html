@@ -128,7 +128,10 @@ window.openCalendarModal = function(mode, start = '', end = '', eventObj = null)
             setDateValue('calEnd', endDate.toISOString().split('T')[0]);
         }
         
-        document.getElementById('calColor').value = eventObj.backgroundColor || '#0d6efd';
+        // ⚠️ ผ่าน setSelectValue — กิจกรรมที่นำเข้ามาก่อนหน้านี้มีสีนอกจานสี 5 สีนี้ได้
+        // เซ็ตตรง ๆ แล้ว select ว่าง พอแอดมินกดบันทึกคือเขียนสีว่างทับ (สีแดง = วันหยุด
+        // ที่ massive grid ใช้ข้ามวัน จึงห้ามให้หลุดมือแบบเงียบ ๆ)
+        setSelectValue('calColor', eventObj.backgroundColor || '#0d6efd');
         document.getElementById('calColor').style.color = eventObj.backgroundColor || '#0d6efd';
         document.getElementById('calDesc').value = eventObj.extendedProps.description || '';
 

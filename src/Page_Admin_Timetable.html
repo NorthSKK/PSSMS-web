@@ -236,6 +236,8 @@
       </div>
       <div class="modal-body p-4">
         <input type="hidden" id="editRowIndex">
+        <!-- แถวโฮมรูม/แนะแนวมีเจ้าของอยู่อีกหน้า แก้ที่นี่แล้วชุด 5 วันจะหลุดกัน -->
+        <div id="editTimetableOwnerWarn" class="alert alert-warning py-2 px-3 small d-none"></div>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label small fw-medium text-muted">รหัสวิชา</label>
@@ -245,13 +247,16 @@
             <label class="form-label small fw-medium text-muted">ชื่อวิชา</label>
             <input type="text" id="editSubjectName" class="form-control">
           </div>
+          <!-- ชั้น/ห้องเป็น dropdown ไม่ใช่ช่องพิมพ์ — พิมพ์ "ม.1 " ติดวรรคหรือ "ม1"
+               แล้ว normalize() จับคู่กับห้องของนักเรียนไม่ได้ คาบนั้นหายจากหน้าเช็คชื่อ
+               รายการห้องมาจาก _ttoClassList (ตารางสอน + ห้องที่นักเรียนสังกัดจริง) -->
           <div class="col-md-4">
             <label class="form-label small fw-medium text-muted">ระดับชั้น</label>
-            <input type="text" id="editLevel" class="form-control" placeholder="เช่น ม.1">
+            <select id="editLevel" class="form-select" onchange="_ttEditLevelChanged()"></select>
           </div>
           <div class="col-md-4">
             <label class="form-label small fw-medium text-muted">ห้อง</label>
-            <input type="text" id="editRoom" class="form-control" placeholder="เช่น 1">
+            <select id="editRoom" class="form-select"></select>
           </div>
           <div class="col-md-4">
             <label class="form-label small fw-medium text-muted">สถานที่</label>

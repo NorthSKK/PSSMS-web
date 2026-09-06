@@ -85,7 +85,10 @@ function loadRecordRoster() {
     .withFailureHandler(function(e) {
       showToast('โหลดรายชื่อไม่สำเร็จ: ' + e.message, 'danger');
     })
-    .getStudentsByClass([cls, null]);
+    // ⚠️ ส่งเป็น arg ทีละตัว ไม่ใช่ array ก้อนเดียว — gas-shim ห่อ args ให้อยู่แล้ว
+    // ของเดิม `([cls, null])` ทำให้ backend ได้ className เป็นอาร์เรย์ (บังเอิญรอดเพราะ
+    // normalizeClass ตัดเครื่องหมายทิ้งหมดจนได้คีย์เดียวกัน) และ year หายไปทั้งตัว
+    .getStudentsByClass(cls, null);
 }
 
 function updateSavingsTableColor() {

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { adminOnly, teacherOrAdmin, adminOrExecutive, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
+const { adminOnly, teacherOrAdmin, adminOrExecutive, staffOnly, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
 const cache = require('../lib/cache');
 const license = require('../lib/license');
 
@@ -53,10 +53,19 @@ const TEACHER_OR_ADMIN = new Set([
   'saveStudentRemarkDirectly', 'saveLeaveRequest', 'updateLeave', 'deleteLeave', 'reviewLeave',
   'saveSubstituteAssignment', 'confirmSubstitute', 'saveBudget', 'saveSarabun',
   'requestSarabunNumber', 'updateTaskStatus',
-  // ทะเบียนสารบรรณเป็นของบุคลากร ไม่ใช่ของนักเรียน — เดิมเรียกได้ทุก role
-  'getSarabunHistory', 'getSarabunFileTicket',
+  // สถิติเข้าชุมนุมรายคนของทั้งชุมนุม เป็นของครูที่ปรึกษาชุมนุม ไม่ใช่ของนักเรียนที่อยู่ในนั้น
+  'getClubAttendanceSummary',
   'saveSavingsTransaction',
   'saveMediaCard', 'deleteMediaCard',
+]);
+
+// บุคลากรทั้งหมด (ครู + Admin + ผอ./รอง) — กันแค่ "ไม่ใช่นักเรียน"
+//
+// ⚠️ ทะเบียนสารบรรณเคยอยู่ใน TEACHER_OR_ADMIN ซึ่งกัน Executive ออกไปด้วย ทั้งที่เมนู
+// ของ ผอ. มีหน้างานสารบรรณอยู่จริง — กดจากเมนูตัวเองแล้วเจอ "สงวนสิทธิ์เฉพาะครู
+// หรือผู้ดูแลระบบ" · **การเขียนยังเป็น TEACHER_OR_ADMIN เหมือนเดิม** ผอ. อ่านอย่างเดียว
+const STAFF_ONLY = new Set([
+  'getSarabunHistory', 'getSarabunFileTicket',
 ]);
 
 // อ่านได้ทั้งโรงเรียน แก้ไม่ได้ — Executive คือ ผอ./รอง ไม่ใช่หัวหน้ากลุ่มสาระ
@@ -88,6 +97,9 @@ const READONLY_ALLOWED = new Set([
     'getCourseSessionList', 'getCurriculumBySubject', 'getCurriculumData',
     'getDailyStudentWatch', 'getStudentAttendanceProfile', 'getStudentWatchRanking',
     'getDeletedMediaCards', 'getDetailedLessonRecords', 'getExecutiveDashboardBundle',
+    // ตัวตรวจแถวซ้ำอ่านอย่างเดียว (ตัวลบคือ removeDuplicateTimetableRows ซึ่งเป็น write
+    // จึงไม่อยู่ในลิสต์) — ชื่อไม่ขึ้นต้นด้วย get เลยหลุดตอนไล่เพิ่มรอบแรก
+    'findDuplicateTimetableRows',
     'getFilteredTimetables', 'getHomeroomAssignments', 'getLeaveRequestBundle',
     'getMassiveAttendanceGrid', 'getMediaCardOptions', 'getMediaCards',
     'getMediaFileTicket', 'getMediaStorageStatus', 'getMorningActivityData',
@@ -293,8 +305,9 @@ const handlers = {
   getClubMembersForTeacher:        (args) => missing.getClubMembersForTeacher(args),
   getClubAttendanceSummary:        (args) => missing.getClubAttendanceSummary(args),
   deleteClub:                      (args) => missing.deleteClub(args),
-  registerToClub:                  (args) => missing.registerToClub(args),
-  unregisterFromClub:              (args) => missing.unregisterFromClub(args),
+  // ต้องส่ง user ต่อ — ตัวตนนักเรียนมาจาก JWT ไม่ใช่รหัสใน payload
+  registerToClub:                  (args, user) => missing.registerToClub(args, user),
+  unregisterFromClub:              (args, user) => missing.unregisterFromClub(args, user),
   getAllLeaves:                     (args) => missing.getAllLeaves(args),
   saveSchoolInfo:                  (args) => missing.saveSchoolInfo(args),
   savePrintConfigData:             (args) => missing.savePrintConfigData(args),
@@ -366,6 +379,7 @@ router.post('/:fnName', async (req, res) => {
   try {
     if (ADMIN_ONLY.has(fnName)) adminOnly(user);
     else if (ADMIN_OR_EXECUTIVE.has(fnName)) adminOrExecutive(user);
+    else if (STAFF_ONLY.has(fnName)) staffOnly(user);
     else if (TEACHER_OR_ADMIN.has(fnName)) teacherOrAdmin(user);
   } catch (e) {
     return res.json({ __error: e.message });

@@ -452,3 +452,31 @@ test('จำนวนที่ส่งมาเพี้ยนต้องไ�
   const huge = await askCert(9999);
   assert.equal(huge.count, 500, 'ต้องตัดที่เพดาน ไม่ใช่สร้างตามที่ขอ');
 });
+
+// ── ผอ./รอง (Executive) — อ่านทะเบียนได้ แต่แก้ไม่ได้ ────────────────────────
+
+/**
+ * เมนูของ Executive มีหน้างานสารบรรณอยู่จริง แต่ `getSarabunHistory` เคยอยู่ใน
+ * `TEACHER_OR_ADMIN` ซึ่งกัน Executive ออกไปด้วย — ผอ. กดจากเมนูตัวเองแล้วเจอ
+ * "สงวนสิทธิ์เฉพาะครูหรือผู้ดูแลระบบ" (เจอตอนกดจริงในเบราว์เซอร์)
+ * ตอนนี้อยู่ใน `STAFF_ONLY` = ครู + Admin + Executive
+ */
+test('Executive อ่านทะเบียนสารบรรณได้ (เมนูของ ผอ. มีหน้านี้)', async () => {
+  const rows = await ok('getSarabunHistory', [], 'executive');
+  assert.ok(Array.isArray(rows), 'ต้องได้รายการกลับมา ไม่ใช่ error สิทธิ์');
+});
+
+test('Executive ยังเขียนทะเบียนไม่ได้ — อ่านอย่างเดียวตาม ADR 0001', async () => {
+  const err = await denied('saveSarabun', [{
+    docType: 'บันทึกข้อความ', subject: 'ผอ.แก้เอง', requester: 'ผอ.ทดสอบ',
+  }], 'executive');
+  assert.match(err, /สงวนสิทธิ์/);
+
+  const err2 = await denied('requestSarabunNumber', [{ docType: 'ทะเบียนคำสั่ง', amount: 1 }], 'executive');
+  assert.match(err2, /สงวนสิทธิ์/);
+});
+
+test('นักเรียนยังอ่านทะเบียนไม่ได้', async () => {
+  const err = await denied('getSarabunHistory', [], 'student');
+  assert.match(err, /สงวนสิทธิ์/);
+});

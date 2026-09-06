@@ -46,7 +46,13 @@ async function getSetupChecklist() {
     SELECT
       (SELECT count(*)::int FROM users WHERE UPPER(role)='TEACHER')                       AS teachers,
       (SELECT count(*)::int FROM users WHERE UPPER(role)='STUDENT' AND status='ปกติ')      AS students,
-      (SELECT count(*)::int FROM timetable WHERE term=$1 AND year=$2 AND subject_code<>'HR') AS lessons,
+      -- ⚠️ ต้องนับเฉพาะ "คาบรายวิชาจริง" ให้ตรงกับ subjectPrefixOf() — ไม่ใช่แค่ตัด 'HR'
+      --    setAllHomeroomTeachers ใส่แถวแนะแนว/วิถีพุทธด้วยรหัส '-' มาให้ทุกห้อง
+      --    ตั้งครูที่ปรึกษาเสร็จข้อ "นำเข้าตารางสอน" จะติ๊กเองทันทีทั้งที่ยังไม่มีคาบสอนสักคาบ
+      (SELECT count(*)::int FROM timetable
+         WHERE term=$1 AND year=$2
+           AND UPPER(coalesce(subject_code,'')) NOT IN ('HR','-')
+           AND UPPER(coalesce(subject_code,'')) NOT LIKE 'CLUB%')                          AS lessons,
       (SELECT count(DISTINCT teacher_id)::int FROM timetable
          WHERE term=$1 AND year=$2 AND subject_code='HR')                                 AS homeroom,
       -- หัวกระดาษ ปพ.5 ของเทอมที่ใช้อยู่ — ต้องมีที่ตั้งและชื่อ ผอ. ถึงจะพิมพ์ส่งเขตได้

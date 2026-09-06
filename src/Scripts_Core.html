@@ -594,6 +594,7 @@ function logout() {
   if(confirm('ต้องการออกจากระบบใช่หรือไม่?')) {
     _clearSavedSession();
     localStorage.removeItem('pssms_last_page');
+    localStorage.removeItem('pssms_last_page_user');
     sessionStorage.clear();
     document.getElementById('main-app').classList.add('d-none');
     document.getElementById('login-section').classList.remove('d-none');
@@ -719,8 +720,19 @@ function renderApp(user) {
   }
 
   document.getElementById('menu-list').innerHTML = menuHTML;
+  // ⚠️ กลับไปหน้าล่าสุด **เฉพาะเมื่อเป็นหน้าล่าสุดของคนเดียวกัน** — `logout()` ล้างคีย์นี้ให้
+  // แต่คนไม่ได้กดออกจากระบบทุกครั้ง (ปิดเบราว์เซอร์ / token หมดอายุ / สลับบัญชีจาก dropdown)
+  // เครื่องที่โรงเรียนใช้ร่วมกัน นักเรียนที่ล็อกอินต่อจากครูจึงเคยเด้งไปหน้างานสารบรรณ
+  // แล้วเจอ error สิทธิ์เต็มหน้าจอ ทั้งที่เมนูตัวเองไม่มีหน้านั้นด้วยซ้ำ
   const lastPage = localStorage.getItem('pssms_last_page');
-  if (lastPage) loadPage(lastPage); else loadPage(startPage);
+  const lastPageUser = localStorage.getItem('pssms_last_page_user');
+  const meId = String((user && user.id) || '');
+  if (lastPage && lastPageUser && lastPageUser === meId) loadPage(lastPage);
+  else {
+    localStorage.removeItem('pssms_last_page');
+    localStorage.removeItem('pssms_last_page_user');
+    loadPage(startPage);
+  }
   setTimeout(preloadTeacherDataBackground, 2000);
   setTimeout(_syncSchoolBrandingFromServer, 1000);
   _setupMenuPrefetch();
@@ -843,11 +855,10 @@ function _skelTbody(cols) {
 var PAGE_DEPT = {
   Page_Academic:'academic', Page_Score_Entry:'academic', Page_Subject_Config:'academic',
   Page_Academic_Report:'academic', Page_Lesson_History:'academic',
-  Page_Admin_Timetable:'academic', Page_Grade_Summary:'academic', Page_Admin_Curriculum:'academic',
+  Page_Admin_Timetable:'academic', Page_Admin_Curriculum:'academic',
   Page_Budget:'budget',
   Page_Personnel:'personnel', Page_Leave_Admin:'personnel',
   Page_Leave_Request:'personnel', Page_Substitute_Admin:'personnel', Page_Admin_Users:'personnel',
-  Page_Homeroom:'personnel',
   Page_General:'general',
   Page_Savings:'general',
   Page_Teaching_Media:'academic',
@@ -895,7 +906,10 @@ function loadPage(pageName) {
   document.body.style.paddingRight = '';
 
   // 🌟 3. บันทึกหน้าล่าสุดแล้วโหลดหน้าใหม่ตามปกติ
+  // ⚠️ ต้องจดว่าเป็นหน้าล่าสุด **ของใคร** — โรงเรียนใช้เครื่องร่วมกัน ถ้าไม่จด
+  // นักเรียนที่ล็อกอินต่อจากครูจะถูกพากลับไปหน้าที่ครูเปิดค้างไว้ (ดู renderApp)
   localStorage.setItem('pssms_last_page', pageName);
+  try { localStorage.setItem('pssms_last_page_user', String((getSessionUser() || {}).id || '')); } catch (e) {}
   
   var cachedHtml = _pgCacheGet(pageName);
   if (cachedHtml) {
@@ -922,6 +936,16 @@ function loadPage(pageName) {
     .getPage(pageName);
 }
 
+/**
+ * ⚠️ **`<script>` ที่เขียนไว้ในไฟล์ `Page_*.html` ไม่ทำงาน** — หน้าโหลดเข้ามาด้วย
+ * `innerHTML` และตามสเปก HTML สคริปต์ที่ถูกแทรกด้วย innerHTML จะไม่ถูกรัน
+ * (ยืนยันแล้วด้วย `chrome --headless --dump-dom`)
+ *
+ * เคยหลุดจริง: `Page_Student_Clubs.html` เขียนโค้ดทั้งหน้าไว้ใน `<script>` ท้ายไฟล์
+ * ทุกฟังก์ชันจึงไม่มีอยู่จริง ปุ่มทุกปุ่มเป็น ReferenceError และหน้าไม่โหลดข้อมูลเลย
+ * — โค้ดของหน้าต้องอยู่ใน `Scripts_*.html` (เสิร์ฟผ่าน `/api/assets/script`)
+ * แล้วมาเรียกตัวเริ่มหน้าที่รายการข้างล่างนี้เสมอ
+ */
 function setupPageContent(pageName, html) {
   _setBodyDept(pageName);
   document.getElementById('page-content').innerHTML = html;
@@ -932,7 +956,7 @@ function setupPageContent(pageName, html) {
   if(pageName === 'Page_Dashboard_Admin') initAdminDashboard();
   if(pageName === 'Page_Dashboard_Teacher') initTeacherDashboard();
   if(pageName === 'Page_Dashboard_Student') initStudentDashboard();
-  if(pageName === 'Page_Admin_Users') loadUserData();
+  if(pageName === 'Page_Admin_Users') { loadUserData(); initAdminUsersPage(); }
   if(pageName === 'Page_Admin_Clubs') initAdminClubs();
   if(pageName === 'Page_Admin_Settings') loadCurrentConfig();
   if(pageName === 'Page_Academic') initAcademicPage();
@@ -943,13 +967,15 @@ function setupPageContent(pageName, html) {
   if(pageName === 'Page_Lesson_History') initLessonHistoryPage();
   if(pageName === 'Page_Subject_Config') initSubjectConfigPage();
   if(pageName === 'Page_Score_Entry') initScoreEntryPage();
-  if(pageName === 'Page_Grade_Summary') initGradeSummaryPage();
   if(pageName === 'Page_General') initSarabunPage();
   if(pageName === 'Page_Savings') initSavingsPage();
   if(pageName === 'Page_Calendar') {
       if(typeof initCalendarPage === 'function') initCalendarPage();
   }
   if(pageName === 'Page_Teacher_Clubs') initTeacherClubs();
+  // ⚠️ หน้าไหนที่ต้องเริ่มเอง ต้องมาลงที่นี่ — `<script>` ที่ฝังไว้ในไฟล์หน้าไม่ทำงาน
+  // เพราะหน้าโหลดเข้ามาด้วย `innerHTML` (ดูคอมเมนต์เหนือ `setupPageContent`)
+  if(pageName === 'Page_Student_Clubs') initStudentClubs();
   if(pageName === 'Page_Dashboard_Executive') initExecDashboard();
   if(pageName === 'Page_Admin_Timetable_Overview') { loadPage('Page_Admin_Timetable'); return; }
   if(pageName === 'Page_Teacher_Timetable') initTeacherTimetable();
@@ -1258,6 +1284,32 @@ function setDateValue(id, val) {
   if (el._flatpickr) el._flatpickr.setDate(val || null, false); // false = ไม่ยิง onChange
 }
 
+/**
+ * เซ็ตค่า <select> ด้วยค่าที่มาจาก DB — **ใช้ตัวนี้เสมอ อย่าเซ็ต `.value` ตรง ๆ**
+ *
+ * ⚠️ `select.value = ค่าที่ไม่มีใน options` → `selectedIndex` กลายเป็น `-1` แล้ว `.value`
+ * อ่านได้เป็น `''` เงียบ ๆ ไม่มี error · พอกดบันทึกคือ **เขียนค่าว่างทับของจริง**
+ * โดยที่หน้าจอขึ้น "บันทึกสำเร็จ" ตามปกติ แล้วแถวนั้นหลุดจากทุกหน้าที่ค้นด้วยค่านั้น
+ *
+ * เกิดจริงมาแล้วสองที่: คาบโฮมรูม (`period '0'`) ในโมดัลแก้ตารางสอนที่มีคาบให้เลือกแค่ 1–8
+ * และสีกิจกรรมที่นำเข้ามาด้วยค่านอกจานสี 5 สีของหน้าปฏิทิน
+ *
+ * ค่าที่ไม่มีในลิสต์จะถูกยัดเข้าไปเป็น option แรกให้ (ค่าที่ระบบเคยบันทึกไว้ต้องเลือกคืนได้เสมอ)
+ */
+function setSelectValue(id, val, label) {
+  const el = (typeof id === 'string') ? document.getElementById(id) : id;
+  if (!el) return;
+  const v = String(val == null ? '' : val);
+  const has = Array.prototype.some.call(el.options, function(o) { return o.value === v; });
+  if (!has && v !== '') {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = label ? (v + ' ' + label) : v;
+    el.insertBefore(opt, el.firstChild);
+  }
+  el.value = v;
+}
+
 // ⚠️ flatpickr แบบ altInput **สร้าง input ตัวใหม่** มาโชว์แทนตัวจริง (ตัวจริงถูกซ่อน)
 // ตัวใหม่ได้ class จาก `altInputClass` **เท่านั้น** ไม่ได้ก๊อปจากตัวเดิม และไม่ก๊อป inline style
 //   flatpickr: w.altInput = d(w.input.nodeName, w.config.altInputClass)
@@ -1393,7 +1445,10 @@ window.safeRun = function(maxRetries = 3) {
               if (_onSuccess) _onSuccess(res);
             })
             .withFailureHandler((err) => {
-              if (retriesLeft > 0) {
+              // ⚠️ ยิงซ้ำเฉพาะตอนเชื่อมต่อไม่ได้ — `err.serverError` (ตั้งใน gas-shim.js)
+              // แปลว่าเซิร์ฟเวอร์ตอบมาแล้วว่าไม่ให้ทำ ยิงอีกกี่ครั้งก็ได้คำตอบเดิม
+              // ของเดิมยิงซ้ำ 3 รอบพร้อมขึ้น "สัญญาณขัดข้อง..." ให้ error เรื่องสิทธิ์
+              if (retriesLeft > 0 && !(err && err.serverError)) {
                 console.warn(`⚠️ [Auto-Retry] เชื่อมต่อขัดข้อง กำลังลองใหม่... (เหลืออีก ${retriesLeft} ครั้ง)`);
                 
                 // แจ้งเตือนแบบเนียนๆ ไม่ให้ครูตกใจ
@@ -1406,8 +1461,11 @@ window.safeRun = function(maxRetries = 3) {
               } else {
                 _debugFinish('fail');
                 // ถ้าลองจนครบโควตาแล้วยังพัง ค่อยโยน Error ออกมาให้ครูเห็น
+                // ⚠️ ห้ามใช้ alert() — native dialog บล็อก JS ทั้งหน้าจนกว่าคนจะกดปิด
+                //    และข้อความเดิมโกหก: error สิทธิ์ (403) ก็ขึ้นว่า "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"
                 if (_onFailure) _onFailure(err);
-                else alert("❌ ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง");
+                else if (typeof showToast === 'function') showToast((err && err.message) || 'เรียกข้อมูลไม่สำเร็จ', 'danger', 5000);
+                else console.error('[safeRun]', err);
               }
             })
             [propName](...args); // เรียกใช้ฟังก์ชันเดิม

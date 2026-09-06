@@ -169,7 +169,7 @@ function addIndicatorRow(code = '', name = '', score = 0, description = '') {
       <input type="text" class="form-control form-control-sm border-primary ind-name fw-bold text-primary" value="${name}" placeholder="ชื่อชิ้นงาน (พิมพ์อิสระ)">
     </td>
     <td><textarea class="form-control form-control-sm ind-desc" rows="3" placeholder="ระบุรายละเอียดหรือจุดประสงค์...">${description}</textarea></td>
-    <td><input type="number" class="form-control form-control-sm text-center ind-score text-success fw-bold" value="${score}" onkeyup="calculateTotalConfigScore()"></td>
+    <td><input type="number" class="form-control form-control-sm text-center ind-score text-success fw-bold" value="${score}" oninput="calculateTotalConfigScore()"></td>
     <td class="text-center align-middle"><button class="btn btn-sm btn-outline-danger border-0" onclick="this.closest('tr').remove(); calculateTotalConfigScore(); refreshAllIndicatorDropdowns();"><i class="fas fa-trash"></i></button></td>
   `;
   tbody.appendChild(tr);
@@ -690,7 +690,7 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
       let bgStyle = sgsColumnStates[colKey] ? 'background:transparent;' : 'background:#e9ecef; opacity:0.6;';
 
       bodyHtml += `<td class="p-0 align-middle text-center" title="คลิกขวาเพื่อดูประวัติ">
-                     <input type="number" class="score-cell-input nav-input formative-std-${safeStdId} sgs-col-${colKey}" style="${bgStyle}" value="${val}" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', '${indName}', '${ind.name}'); return false;" ${lockState}>
+                     <input type="number" class="score-cell-input nav-input formative-std-${safeStdId} sgs-col-${colKey}" style="${bgStyle}" value="${val}" data-row="${rowIndex}" data-col="${colIndex++}" oninput="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', '${indName}', '${ind.name}'); return false;" ${lockState}>
                    </td>`;
     });
 
@@ -713,15 +713,15 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
     bodyHtml += `<td class="p-0 align-middle text-center border-start col-highlight-f"><input type="text" class="score-cell-input fw-bold text-primary" style="background:transparent;" id="sum_f_std_${safeStdId}" value="0" readonly tabindex="-1"></td>
       
       <td class="p-0 align-middle text-center col-highlight-m" title="คลิกขวาเพื่อดูประวัติ">
-        <input type="number" class="score-cell-input nav-input midterm-std-${safeStdId} sgs-col-midterm" style="${mBg}" value="${midVal}" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'midterm', 'กลางภาค'); return false;" ${mLock}>
+        <input type="number" class="score-cell-input nav-input midterm-std-${safeStdId} sgs-col-midterm" style="${mBg}" value="${midVal}" data-row="${rowIndex}" data-col="${colIndex++}" oninput="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'midterm', 'กลางภาค'); return false;" ${mLock}>
       </td>
       
       <td class="p-0 align-middle text-center border-start border-white col-highlight-mr" title="คลิกขวาเพื่อดูประวัติ">
-        <input type="number" class="score-cell-input nav-input midterm-re-std-${safeStdId} text-danger fw-bold sgs-col-midterm-re" style="${mrBg}" value="${midReVal}" placeholder="-" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'midterm_re', 'สอบซ่อม'); return false;" ${mrLock}>
+        <input type="number" class="score-cell-input nav-input midterm-re-std-${safeStdId} text-danger fw-bold sgs-col-midterm-re" style="${mrBg}" value="${midReVal}" placeholder="-" data-row="${rowIndex}" data-col="${colIndex++}" oninput="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'midterm_re', 'สอบซ่อม'); return false;" ${mrLock}>
       </td>
       
       <td class="p-0 align-middle text-center border-start col-highlight-e" title="คลิกขวาเพื่อดูประวัติ">
-        <input type="number" class="score-cell-input nav-input final-std-${safeStdId} sgs-col-final" style="${eBg}" value="${finVal}" data-row="${rowIndex}" data-col="${colIndex++}" onkeyup="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'final', 'ปลายภาค'); return false;" ${eLock}>
+        <input type="number" class="score-cell-input nav-input final-std-${safeStdId} sgs-col-final" style="${eBg}" value="${finVal}" data-row="${rowIndex}" data-col="${colIndex++}" oninput="calcRow('${stdId}', '${safeStdId}')" oncontextmenu="viewScoreHistory(event, '${stdId}', '${std[2]}', 'final', 'ปลายภาค'); return false;" ${eLock}>
       </td>
       
       <td class="text-center align-middle text-dark fw-bold border-start col-highlight-total" id="sum_total_std_${safeStdId}" style="font-size: 0.82rem;">0</td>
@@ -902,6 +902,10 @@ function calcRow(stdId, safeStdId) {
       }
   }
 
+  // ⚠️ ช่องคะแนนผูกกับ `oninput` **ห้ามกลับไปใช้ `onkeyup`** — keyup ไม่ยิงเมื่อ
+  // วางค่าด้วยเมาส์ กด stepper ของ input[type=number] undo หรือ autofill
+  // ค่าจะขึ้นในช่องแต่ไม่คำนวณใหม่และ **autosave ไม่ทำงาน** ครูออกจากหน้าไปแล้วคะแนนหาย
+  // (การเลื่อนช่องด้วยลูกศรใช้ keydown คนละ event จึงไม่กระทบ)
   const btn = document.getElementById('btnSaveScores');
   if (typeof isHeaderEditMode !== 'undefined' && !isHeaderEditMode && btn) {
       if (typeof autoSaveTimer !== 'undefined') clearTimeout(autoSaveTimer);
@@ -1701,17 +1705,17 @@ function renderEvalTable(students, existingQuals) {
          <div class="text-muted font-monospace" style="font-size: 0.68rem;">${stdId}</div>
       </td>
       
-      <td class="p-0 eval-grp-char"><input type="number" id="c1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="p-0 eval-grp-char"><input type="number" id="c2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="p-0 eval-grp-char"><input type="number" id="c3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
-      <td class="p-0 eval-grp-char"><input type="number" id="c4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c1}" max="25" oninput="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c2}" max="25" oninput="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c3}" max="25" oninput="calcEvalRow('${safeStdId}', 'c')"></td>
+      <td class="p-0 eval-grp-char"><input type="number" id="c4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${c4}" max="25" oninput="calcEvalRow('${safeStdId}', 'c')"></td>
       <td class="text-center align-middle fw-bold border-start eval-grp-char text-primary" id="cTot_${safeStdId}" style="font-size:0.78rem;">${cTot}</td>
       <td class="text-center align-middle fw-bold eval-grp-char text-success" id="cGrd_${safeStdId}" style="font-size:0.88rem;">${cGrd}</td>
 
-      <td class="p-0 border-start eval-grp-read"><input type="number" id="r1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r1}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="p-0 eval-grp-read"><input type="number" id="r2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r2}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="p-0 eval-grp-read"><input type="number" id="r3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r3}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
-      <td class="p-0 eval-grp-read"><input type="number" id="r4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r4}" max="25" onkeyup="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0 border-start eval-grp-read"><input type="number" id="r1_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r1}" max="25" oninput="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0 eval-grp-read"><input type="number" id="r2_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r2}" max="25" oninput="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0 eval-grp-read"><input type="number" id="r3_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r3}" max="25" oninput="calcEvalRow('${safeStdId}', 'r')"></td>
+      <td class="p-0 eval-grp-read"><input type="number" id="r4_${safeStdId}" class="score-cell-input eval-input nav-input" data-row="${rowIndex}" data-col="${colIndex++}" value="${r4}" max="25" oninput="calcEvalRow('${safeStdId}', 'r')"></td>
       <td class="text-center align-middle fw-bold border-start eval-grp-read text-success" id="rTot_${safeStdId}" style="font-size:0.78rem;">${rTot}</td>
       <td class="text-center align-middle fw-bold eval-grp-read text-success" id="rGrd_${safeStdId}" style="font-size:0.88rem;">${rGrd}</td>
     </tr>`;

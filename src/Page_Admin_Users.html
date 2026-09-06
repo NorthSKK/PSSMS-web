@@ -200,24 +200,6 @@
 
   </div>
 </div>
-
-<script>
-(function() {
-  var hrTab = document.getElementById('homeroom-tab');
-  if (hrTab) {
-    hrTab.addEventListener('shown.bs.tab', function() {
-      initHomeroomPage();
-    });
-  }
-  if (window._usersAutoTab) {
-    var target = window._usersAutoTab;
-    window._usersAutoTab = null;
-    var tabEl = document.getElementById(target + '-tab');
-    if (tabEl) bootstrap.Tab.getOrCreateInstance(tabEl).show();
-  }
-})();
-</script>
-
 <div class="modal fade pssms-modal" id="userModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -317,4 +299,3 @@
     </div>
   </div>
 </div>
-

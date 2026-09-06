@@ -211,7 +211,10 @@
                                <input type="date" class="form-control border-secondary text-center px-1" id="searchStartDate" onchange="filterSarabunData()">
                                <span class="input-group-text bg-white border-secondary text-muted">ถึง</span>
                                <input type="date" class="form-control border-secondary text-center px-1" id="searchEndDate" onchange="filterSarabunData()">
-                               <button class="btn btn-outline-danger" onclick="document.getElementById('searchStartDate').value=''; document.getElementById('searchEndDate').value=''; document.getElementById('filterSarabunType').value='ALL'; filterSarabunData();" title="ล้างตัวกรอง"><i class="fas fa-times"></i></button>
+                               <!-- ⚠️ ช่องวันที่ต้องล้างผ่าน setDateValue — flatpickr ซ่อน input จริงไว้
+                                    แล้วโชว์ช่องข้อความ พ.ศ. แทน เซ็ต .value='' ตรง ๆ ตัวกรองถูกล้างจริง
+                                    แต่ช่องที่ครูเห็นยังค้างวันเดิมอยู่ -->
+                               <button class="btn btn-outline-danger" onclick="setDateValue('searchStartDate',''); setDateValue('searchEndDate',''); document.getElementById('filterSarabunType').value='ALL'; filterSarabunData();" title="ล้างตัวกรอง"><i class="fas fa-times"></i></button>
                             </div>
                          </div>
                      </div>
