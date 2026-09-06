@@ -296,3 +296,29 @@ POST /api/media/upload/:cardId        แก้ — ผูกไฟล์เข�
 
 **ยังไม่ได้ทดสอบด้วยตาบนเบราว์เซอร์** (extension ไม่ได้ต่อ) — ส่วนที่ต้องดูเองคือ
 หน้าตาตัวอ่านบนมือถือ และ PDF ใน iframe บน iOS Safari
+
+---
+
+## ที่พังตอน deploy จริง (7 ก.ย. 2569)
+
+deploy แรกเข้า `production` **ล้มที่ healthcheck** — `runMigrations()` เป็นขั้นเดียวใน
+`server.js` ที่ล้มแล้วบล็อกไม่ให้ `app.listen()` (โดยตั้งใจ) แอปจึงไม่ขึ้นใน 30 วิ
+
+```
+migration 2026-09-06-media-multifile.sql ล้มเหลว:
+new row for relation "media_cards" violates check constraint "media_cards_card_type_check"
+```
+
+**สาเหตุ**: เรียง `UPDATE card_type='files'` ไว้**ก่อน**บรรทัดที่ถอด CHECK เดิม
+ตอน UPDATE ทำงาน constraint เก่ายังบังคับ `IN ('link','pdf')` อยู่
+
+**ทำไมไม่มีเทสต์ไหนจับได้**: เทสต์ทุกตัวรันบน `media_cards` ที่ว่าง — dev ก็ว่างเพราะ
+seed ล้างตารางก่อน · `UPDATE` แมตช์ 0 แถวจึงไม่มีอะไรไปละเมิด constraint
+**DB เปล่ากับ DB ที่มีข้อมูลแบบเดิมเป็นคนละเส้นทาง** และเราเทสต์แค่เส้นทางแรก
+
+**กันไม่ให้เกิดซ้ำ**: `test/migrate.test.js` เพิ่มเคสที่สร้างตารางแบบก่อน multifile
+ใส่การ์ด `card_type='pdf'` จริง แล้วรันไฟล์ migration ทับ · ยืนยันแล้วว่าเทสต์นี้
+**ล้มกับโค้ดเวอร์ชันที่พัง** ไม่ใช่เทสต์ที่ผ่านเปล่า ๆ
+
+**ไม่มีข้อมูลเสียหาย** — `db/migrate.js` ห่อทั้งไฟล์ไว้ใน transaction เดียว ROLLBACK ครบ
+และ Railway ไม่สลับไป deployment ที่ล้ม โรงเรียนยังรันตัวเก่าตลอด

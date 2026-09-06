@@ -37,8 +37,11 @@ SELECT id, file_key, COALESCE(file_name, ''), COALESCE(file_name, ''),
 FROM media_cards
 WHERE file_key IS NOT NULL;
 
-UPDATE media_cards SET card_type = 'files' WHERE card_type = 'pdf';
-
+-- ⚠️ ต้องถอด CHECK เดิมออก **ก่อน** UPDATE เสมอ — ของเดิมบังคับ IN ('link','pdf')
+-- เขียน 'files' ทับตอนที่มันยังอยู่ = "new row violates check constraint" ทันที
+-- (โรงเรียนที่ไม่มีการ์ด pdf เลยจะรอด เพราะ UPDATE แมตช์ 0 แถว — พลาดแบบนี้จึงเงียบ
+--  บน DB ว่าง แล้วไปโผล่เอาที่โรงเรียนจริงที่มีข้อมูล)
+--
 -- CHECK เดิมไม่ได้ตั้งชื่อไว้ Postgres จึงตั้งให้เอง — หาจากนิยามไม่ใช่จากชื่อ
 -- เผื่อ DB ไหนเคยถูกแก้ด้วยมือแล้วชื่อไม่ตรงกับที่ schema.sql คาด
 DO $$
@@ -53,6 +56,8 @@ BEGIN
     EXECUTE format('ALTER TABLE media_cards DROP CONSTRAINT %I', c.conname);
   END LOOP;
 END $$;
+
+UPDATE media_cards SET card_type = 'files' WHERE card_type = 'pdf';
 
 ALTER TABLE media_cards
   ADD CONSTRAINT media_cards_card_type_check CHECK (card_type IN ('link', 'files'));
