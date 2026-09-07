@@ -284,6 +284,8 @@ test('อัปหลายไฟล์เข้าการ์ดเดีย�
     const got = await request(ticket.url);
     assert.equal(got.status, 200);
     assert.match(got.headers['cache-control'], /private/, 'ห้าม proxy/CDN เก็บไปแจกต่อ');
+    const proxied = await request(ticket.proxyUrl);
+    assert.equal(proxied.status, 200, 'ตัวอ่าน PDF ต้องอ่านผ่าน origin ของเว็บได้ แม้ S3 ไม่มี CORS');
   }
 
   const card = await cardByTitle('ชุดสื่อจากเทส', 'teacher1');

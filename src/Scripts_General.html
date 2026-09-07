@@ -2308,7 +2308,7 @@ function openMediaReader(card) {
 
       // urls: cache ตั๋วต่อรอบการเปิดอ่าน — ตั๋วอยู่ได้ 1 ชม. สลับกลับมาไฟล์เดิมจึงไม่ต้องขอใหม่
       _mediaState.reader = { card: card, files: files, index: 0, urls: {}, cleanups: [] };
-      if (res.url && res.fileId != null) _mediaState.reader.urls[res.fileId] = res.url;
+      if (res.url && res.fileId != null) _mediaState.reader.urls[res.fileId] = { url: res.url, proxyUrl: res.proxyUrl || '' };
       _mediaPreconnect(res.url);
 
       var start = 0;
@@ -2429,8 +2429,9 @@ function _mediaReaderShow(i) {
   r.cleanups = [];
   _mediaSetZoomVisible(false);
 
-  var render = function(url) {
+  var render = function(ticket) {
     if (_mediaState.reader !== r || r.index !== i) return;   // กดสลับเร็วกว่าตั๋วมาถึง
+    var url = ticket.url;
     // ทางหนีตอนทุกอย่างล้มเหลว — ห้ามเอาปุ่มนี้ออก
     document.getElementById('mrOpenTab').href = url;
     _mediaPrefetchNeighbours(r, i);
@@ -2445,7 +2446,8 @@ function _mediaReaderShow(i) {
     }
 
     var token = _mediaRenderToken(r, i);
-    _mediaRenderPdf(stage, url, token).catch(function(err) {
+    // PDF ผ่าน proxy origin เดียวกันเสมอ — S3/R2 ไม่ต้องตั้ง CORS ให้ pdf.js
+    _mediaRenderPdf(stage, ticket.proxyUrl || url, token).catch(function(err) {
       if (!token.alive()) return;
       token.dispose();
       _mediaPdfFallback(stage, url, f, err);
@@ -2453,7 +2455,7 @@ function _mediaReaderShow(i) {
   };
 
   // มีตั๋วอยู่แล้ว = เริ่มโหลดไฟล์ทันที ไม่ต้องรอ round-trip
-  if (r.urls[f.id]) { render(r.urls[f.id]); return; }   // ค่าว่าง = prefetch ยังไม่กลับ ตกไปขอปกติ
+  if (r.urls[f.id] && r.urls[f.id].url) { render(r.urls[f.id]); return; }
 
   stage.innerHTML = '';
   var loading = document.createElement('div');
@@ -2466,8 +2468,8 @@ function _mediaReaderShow(i) {
 
   google.script.run
     .withSuccessHandler(function(res) {
-      r.urls[f.id] = res.url;
-      render(res.url);
+      r.urls[f.id] = res;
+      render(res);
     })
     .withFailureHandler(function(err) {
       if (_mediaState.reader !== r || r.index !== i) return;
@@ -2493,16 +2495,22 @@ function _mediaPdfFallback(stage, url, f, err) {
   var note = document.createElement('div');
   note.className = 'small px-3 py-2';
   note.style.cssText = 'background:#fffbeb;color:#92400e;border-bottom:1px solid #fde68a;';
-  note.textContent = 'แสดงด้วยตัวอ่านของเบราว์เซอร์ (' + (err && err.message ? err.message : 'ไม่ทราบสาเหตุ')
-    + ') — ถ้าเลื่อนดูหน้าถัดไปไม่ได้ ให้กด "เปิดแท็บใหม่"';
+  var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  note.textContent = ios
+    ? 'ตัวอ่านในหน้าเปิดไฟล์นี้ไม่ได้ — เปิดด้วยตัวอ่าน PDF ของโทรศัพท์เพื่อเลื่อนอ่านทุกหน้า'
+    : 'แสดงด้วยตัวอ่านของเบราว์เซอร์ (' + (err && err.message ? err.message : 'ไม่ทราบสาเหตุ') + ')';
   var open = document.createElement('a');
   open.className = 'btn btn-sm btn-outline-secondary ms-2';
   open.target = '_blank';
   open.rel = 'noopener';
   open.href = url;
-  open.textContent = 'เปิดแท็บใหม่';
+  open.textContent = ios ? 'เปิดด้วยตัวอ่าน PDF ของโทรศัพท์' : 'เปิดแท็บใหม่';
   note.appendChild(open);
   stage.appendChild(note);
+
+  // WebKit ใน iPhone/iPad เปิด PDF ใน iframe ได้เพียงหน้าแรก จึงไม่แสดงกรอบที่เลื่อนไม่ได้
+  if (ios) return;
 
   var frame = document.createElement('iframe');
   frame.title = f.label;
@@ -2519,9 +2527,9 @@ function _mediaPrefetchNeighbours(r, i) {
   [i + 1, i - 1].forEach(function(n) {
     var f = r.files[n];
     if (!f || r.urls[f.id]) return;
-    r.urls[f.id] = '';   // จองไว้กัน prefetch ซ้ำระหว่างรอ
+    r.urls[f.id] = { loading: true };   // จองไว้กัน prefetch ซ้ำระหว่างรอ
     google.script.run
-      .withSuccessHandler(function(res) { if (_mediaState.reader === r) r.urls[f.id] = res.url; })
+      .withSuccessHandler(function(res) { if (_mediaState.reader === r) r.urls[f.id] = res; })
       .withFailureHandler(function() { if (_mediaState.reader === r) delete r.urls[f.id]; })
       .getMediaFileTicket(f.id);
   });

@@ -24,6 +24,7 @@
  * ไม่ใช่พึ่ง escape ฝั่ง client อย่างเดียว — โดยเฉพาะ url ที่ escape ช่วยอะไรไม่ได้กับ javascript:
  */
 const { query } = require('../lib/db');
+const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const { finished } = require('stream/promises');
 const { isAdmin } = require('../lib/permissions');
@@ -94,6 +95,14 @@ const MAX_FILES_PER_CARD = 50;
  * ราคาที่ยอมจ่าย: URL ที่หลุดออกไปใช้ได้ 1 ชม.
  */
 const MEDIA_URL_TTL_SECONDS = 3600;
+
+// pdf.js ต้อง fetch ด้วย XHR/fetch ซึ่ง S3/R2 อาจไม่ได้เปิด CORS ให้ทุกโรงเรียน
+// ตั๋วนี้ให้ route เดียวกันกับเว็บ stream ไฟล์แทน; สิทธิ์ตรวจเรียบร้อยก่อนออกตั๋ว
+function _readerProxyUrl(fileId) {
+  const ticket = jwt.sign({ kind: 'media', id: Number(fileId), reader: true }, process.env.JWT_SECRET,
+    { expiresIn: MEDIA_URL_TTL_SECONDS });
+  return '/api/media/proxy/media/' + Number(fileId) + '?t=' + encodeURIComponent(ticket);
+}
 
 // ถังขยะ — ลบแล้วกู้คืนได้กี่วันก่อนหายถาวร (ทั้งแถวและไฟล์)
 const TRASH_DAYS = 30;
@@ -450,7 +459,7 @@ async function getMediaCardFiles([cardId, wantFileId], user) {
     filename: opening.file_name, user, ttlSeconds: MEDIA_URL_TTL_SECONDS,
   }) : '';
 
-  return { files: files.map(_fileToClient), url, fileId: opening ? opening.id : null };
+  return { files: files.map(_fileToClient), url, proxyUrl: opening ? _readerProxyUrl(opening.id) : '', fileId: opening ? opening.id : null };
 }
 
 /**
@@ -480,7 +489,7 @@ async function getMediaFileTicket([fileId], user) {
     kind: 'media', id, key: file.file_key, filename: file.file_name, user,
     ttlSeconds: MEDIA_URL_TTL_SECONDS,
   });
-  return { url };
+  return { url, proxyUrl: _readerProxyUrl(id) };
 }
 
 /** โหลดไฟล์พร้อมตรวจว่าคนเรียกแก้การ์ดแม่ได้ — ใช้ร่วมกันทั้งลบและเปลี่ยนชื่อ */

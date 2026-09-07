@@ -242,6 +242,36 @@ const SOURCES = {
   project: `SELECT file_key, file_name FROM project_files WHERE id=$1`,
 };
 
+// ตัวอ่าน PDF ใช้ route นี้เพื่อให้ pdf.js อ่านผ่าน origin เดียวกับเว็บ — แก้ CORS ของ
+// presigned S3/R2 โดยไม่ต้องเปิด bucket เป็นสาธารณะ. ตั๋วออกหลังตรวจสิทธิ์ใน GAS แล้ว.
+router.get('/proxy/:kind/:id', async (req, res) => {
+  const sql = SOURCES[req.params.kind];
+  const id = parseInt(req.params.id, 10);
+  if (!sql || !Number.isInteger(id)) return res.status(400).send('คำขอไม่ถูกต้อง');
+  let ticket;
+  try { ticket = jwt.verify(String(req.query.t || ''), process.env.JWT_SECRET); }
+  catch { return res.status(401).send('ลิงก์หมดอายุ — กลับไปกดเปิดไฟล์อีกครั้ง'); }
+  if (ticket.id !== id || ticket.kind !== req.params.kind || !ticket.reader) {
+    return res.status(403).send('ไม่มีสิทธิ์เปิดไฟล์นี้');
+  }
+  const { rows } = await query(sql, [id]);
+  const row = rows[0];
+  if (!row || !row.file_key) return res.status(404).send('ไม่พบไฟล์');
+  try {
+    const file = await storage.getStream(row.file_key);
+    const type = types.byExt(types.extOf(row.file_key));
+    res.setHeader('Content-Type', type.mime);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Content-Disposition', `${type.disposition}; filename*=UTF-8''${encodeURIComponent(row.file_name || 'file.' + type.ext)}`);
+    if (file.size) res.setHeader('Content-Length', file.size);
+    file.stream.on('error', function() { if (!res.headersSent) res.status(502).end(); else res.destroy(); });
+    file.stream.pipe(res);
+  } catch (err) {
+    console.error('[media:proxy]', err.message);
+    if (!res.headersSent) res.status(502).send('อ่านไฟล์ไม่สำเร็จ');
+  }
+});
+
 /**
  * production ใช้ driver `s3` ซึ่งคืน presigned URL ให้เบราว์เซอร์โหลดจาก object storage ตรง
  * route นี้จึงไม่ถูก mount เลย
