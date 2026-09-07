@@ -1107,11 +1107,109 @@ body.dark-mode .pssms-dept-general {
     .grid-wrapper { overflow: visible; }
 }
 
+/* ── Shared small-screen shell ──────────────────────────────────────────
+   iPad ใช้เมนูแบบแผ่นทับเหมือนมือถือ เพื่อให้พื้นที่เนื้อหากว้างเต็มจอ
+   (desktop เท่านั้นที่คง sidebar ไว้ข้างเนื้อหา) */
+#sidebarBackdrop { display: none; }
+@media (max-width: 1024px) {
+  #sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    height: 100dvh;
+    margin-left: -250px;
+    z-index: 1045;
+    box-shadow: 8px 0 24px rgba(15, 23, 42, .18) !important;
+  }
+  #sidebar.active { margin-left: 0; }
+  #sidebarBackdrop {
+    display: none; position: fixed; inset: 0; z-index: 1040;
+    border: 0; background: rgba(15, 23, 42, .32); cursor: default;
+  }
+  #sidebar.active ~ #sidebarBackdrop { display: block; }
+  #content { width: 100%; }
+
+  #main-app #content > .navbar {
+    padding-inline: 1rem !important;
+    min-height: 56px;
+  }
+  #page-content { padding: 1.25rem !important; }
+  .pssms-page { padding: 1.25rem; }
+
+  /* ชื่อล็อกอินยาวต้องไม่เบียดปุ่มเมนูหรือปุ่มสลับธีม */
+  #user-display { min-width: 0; }
+  #user-display > .d-flex { gap: .75rem !important; }
+  #user-display .text-end { min-width: 0; }
+  #user-display .fw-bold {
+    max-width: min(42vw, 320px);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ตารางกว้างยังเลื่อนดูได้ด้วยนิ้ว โดยไม่ทำให้ทั้งหน้าลื่นออกด้านข้าง */
+  #page-content .table-responsive {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+  }
+}
+
+@media (max-width: 767.98px) {
+  #main-app #content > .navbar { padding-inline: .75rem !important; }
+  #sidebarCollapse {
+    width: 40px; height: 40px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-right: .65rem !important;
+  }
+  #page-content { padding: .75rem !important; }
+  .pssms-page { padding: 1rem; }
+  .pssms-page-header { gap: .75rem; }
+  .pssms-page-header .pssms-actions { width: 100%; }
+
+  #user-display > .d-flex { gap: .5rem !important; }
+  #user-display .fw-bold { max-width: 43vw; font-size: .86rem !important; }
+  #user-display .text-muted { font-size: .72rem !important; }
+  #user-display #term-badge-wrap { display: none; }
+
+  /* ทุกแท็บใช้การปัดแนวนอน แท็บไม่ห่อเป็นหลายบรรทัดจนกินพื้นที่เนื้อหา */
+  #page-content .nav-tabs,
+  #page-content .pssms-tabs,
+  #page-content .sw-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+  #page-content .nav-tabs .nav-link,
+  #page-content .pssms-tabs .nav-link,
+  #page-content .sw-tabs .nav-link {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    white-space: nowrap;
+  }
+
+  /* เป้ากดหลักสูงพอสำหรับนิ้ว โดยปุ่มเล็กยังคงกระชับสำหรับตาราง */
+  #page-content .btn:not(.btn-close),
+  .modal .btn:not(.btn-close) { min-height: 40px; }
+  #page-content .btn-sm,
+  .modal .btn-sm { min-height: 36px; }
+  #page-content .form-control:not([type="checkbox"]):not([type="radio"]),
+  #page-content .form-select { min-height: 40px; }
+
+  .modal-dialog { margin: .5rem; }
+  .modal-dialog-scrollable { max-height: calc(100dvh - 1rem); }
+  .modal-dialog-scrollable .modal-content { max-height: calc(100dvh - 1rem); }
+  .modal-header, .modal-footer { padding: .75rem 1rem; }
+  .modal-footer { gap: .5rem; }
+  .modal-footer .btn { flex: 1 1 auto; }
+}
+
 /* Safe Area บนมือถือ — iOS บางรุ่นไม่ match `(display-mode: standalone)`
    แม้เปิดจากไอคอน Home Screen แล้ว จึงใช้ env() ตรง ๆ: ในเบราว์เซอร์ทั่วไป
    ค่านี้เป็น 0 แต่ใน PWA จะดันปุ่มลงใต้ Dynamic Island / แถบสถานะพอดี */
 @supports (padding-top: env(safe-area-inset-top)) {
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     #main-app #content > .navbar {
       padding-top: calc(.5rem + env(safe-area-inset-top)) !important;
       min-height: calc(56px + env(safe-area-inset-top));

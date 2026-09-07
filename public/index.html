@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="PSSMS">
@@ -128,10 +128,11 @@
         </button>
       </div>
     </nav>
+    <button type="button" id="sidebarBackdrop" aria-label="ปิดเมนู"></button>
 
     <div id="content" class="w-100">
       <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm px-4">
-        <button type="button" id="sidebarCollapse" class="btn btn-primary btn-sm me-3">
+        <button type="button" id="sidebarCollapse" class="btn btn-primary btn-sm me-3" aria-label="เปิดเมนู" aria-controls="sidebar" aria-expanded="false">
           <i class="fas fa-bars"></i>
         </button>
         <div class="ms-auto" id="user-display"></div>

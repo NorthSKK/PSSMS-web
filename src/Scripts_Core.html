@@ -137,9 +137,16 @@ function formatThaiDate(dateString) {
 
 const sidebar = document.getElementById('sidebar');
 const collapseBtn = document.getElementById('sidebarCollapse');
-if (collapseBtn) {
-  collapseBtn.onclick = () => sidebar.classList.toggle('active');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+function setSidebarOpen(open) {
+  if (!sidebar) return;
+  sidebar.classList.toggle('active', open);
+  if (collapseBtn) collapseBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
+if (collapseBtn && sidebar) {
+  collapseBtn.onclick = () => setSidebarOpen(!sidebar.classList.contains('active'));
+}
+if (sidebarBackdrop) sidebarBackdrop.onclick = () => setSidebarOpen(false);
 
 function showLoader(status) {
   const loader = document.getElementById('loader');
@@ -976,7 +983,7 @@ function setupPageContent(pageName, html) {
   _setBodyDept(pageName);
   document.getElementById('page-content').innerHTML = html;
   showLoader(false); 
-  if (window.innerWidth <= 768) { const sidebar = document.getElementById('sidebar'); if(sidebar) sidebar.classList.remove('active'); }
+  if (window.innerWidth <= 1024) setSidebarOpen(false);
   setTimeout(applyThaiDatePickers, 100);
   
   if(pageName === 'Page_Dashboard_Admin') initAdminDashboard();
