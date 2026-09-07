@@ -2729,7 +2729,7 @@ function _mediaSetupType(card, opts) {
   fileInput.onchange = _mediaRenderQueue;
   document.getElementById('mcFileHint').textContent =
     'ไฟล์ ' + ((opts && opts.allowedLabel) || 'PDF') + ' ไม่เกิน '
-    + ((opts && opts.maxUploadMB) || 25) + ' MB ต่อไฟล์ · การ์ดหนึ่งใบไม่เกิน '
+    + ((opts && opts.maxUploadMB) || 100) + ' MB ต่อไฟล์ · การ์ดหนึ่งใบไม่เกิน '
     + ((opts && opts.maxFilesPerCard) || 50) + ' ไฟล์ · เลือกทีเดียวหลายไฟล์ได้';
 
   document.getElementById('mcFileCurrentWrap').classList.toggle('d-none', !isFiles);

@@ -9,7 +9,7 @@
  *
  * เส้นแบ่งจึงเป็น: **binary ไป REST, ที่เหลือไป /api/gas**
  *
- *   POST /api/media/upload/:cardId  แนบไฟล์เข้าการ์ดสื่อการสอน — PDF/JPEG/PNG 25MB ต่อไฟล์
+ *   POST /api/media/upload/:cardId  แนบไฟล์เข้าการ์ดสื่อการสอน — PDF/JPEG/PNG 100MB ต่อไฟล์
  *   POST /api/media/sarabun/:id     ไฟล์แนบงานสารบรรณ — PDF/JPEG/PNG/DOCX 10MB
  *   GET  /api/media/file/:kind/:id  เสิร์ฟไฟล์เอง — **เฉพาะ driver disk (dev)**
  *
@@ -43,7 +43,10 @@ const types = require('../lib/storage/types');
  * ตอนที่การ์ดหนึ่งใบ = ไฟล์หนึ่งใบ นับครั้งก็ได้ผลเท่ากัน แต่พอการ์ดใบเดียวมีได้ 30 ไฟล์
  * เพดาน 20 ครั้ง/ชม. จะชนตั้งแต่ใบที่ 21 = อัปหนังสือทั้งเล่มไม่ได้เลย
  */
-const RATE_LIMIT = { maxBytes: 500 * 1024 * 1024, windowSec: 3600 };
+// ⚠️ ผูกกับ MAX_UPLOAD_MB — เป็นไบต์ ไม่ใช่จำนวนครั้ง เพดานไฟล์โตแล้วจำนวนไฟล์
+//    ที่อัปได้ต่อชั่วโมงจะลดตามเงียบ ๆ · 2GB ที่ไฟล์ละ 100MB = ~20 ไฟล์/ชม.
+//    เท่ากับตอนไฟล์ละ 25MB ใน 500MB ซึ่งเป็นอัตราที่ใช้มาแล้วโดยไม่มีใครชน
+const RATE_LIMIT = { maxBytes: 2 * 1024 * 1024 * 1024, windowSec: 3600 };
 
 function budgetKey(req) {
   return `media_upload_${String(req.user?.id || '').toLowerCase()}`;

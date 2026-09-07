@@ -16,6 +16,7 @@ const http = require('http');
 const fsp = require('fs').promises;
 const { ok, denied, stop, TOKENS, baseURL, token } = require('./helpers/api');
 const { decodeFilename } = require('../routes/media');
+const mediaCards = require('../functions/mediaCards');
 const types = require('../lib/storage/types');
 const store = require('../lib/storage/disk');
 const storage = require('../lib/storage');
@@ -138,11 +139,13 @@ test('ไฟล์พักถูกลบหลังอัปสำเร็�
       assert.equal((await uploadRaw({ cardId, ...opts })).status, 400);
       await assertClean();
     }
-    const oversized = Buffer.alloc(25 * 1024 * 1024 + 1);
+    // ผูกกับค่าคงที่ ไม่ใช่เลข 25 ที่เคยเขียนไว้ตายตัว — ขยับเพดานแล้วเทสต์ต้องขยับตาม
+    // ไม่ใช่ผ่านต่อไปเพราะไฟล์ที่ยิงยังใหญ่เกินเพดานเก่าอยู่ดี
+    const oversized = Buffer.alloc(mediaCards.MAX_UPLOAD_MB * 1024 * 1024 + 1);
     oversized.write('%PDF-1.4');
     const tooBig = await uploadRaw({ token: TOKENS.teacher1, cardId, content: oversized });
     assert.equal(tooBig.status, 400);
-    assert.match(tooBig.body.__error, /25 MB/);
+    assert.match(tooBig.body.__error, new RegExp(`${mediaCards.MAX_UPLOAD_MB} MB`));
     await assertClean();
     t.mock.method(storage, 'putStream', async ({ stream, size }) => {
       assert.equal(size, Buffer.byteLength(PDF));

@@ -601,7 +601,7 @@ until curl -s https://pw.pssms.app/api/assets/script/Scripts_General \
 ทำไมไม่ใช้ Google Drive: publish OAuth เป็น production ต้องยืนยันโดเมน ซึ่ง
 `*.up.railway.app` เป็นของ Railway และถ้าค้างโหมด Testing token หมดอายุทุก 7 วัน
 ทำไมไม่ใช้ Postgres `bytea`: ระบบนี้ขายหลายโรงเรียน ไฟล์ใน DB ทำให้ restore ช้า
-ตอนที่อยากให้เร็วที่สุด และ blob 25MB จองการเชื่อมต่อจาก pool ที่มีแค่ 20 ตัว
+ตอนที่อยากให้เร็วที่สุด และ blob 100MB จองการเชื่อมต่อจาก pool ที่มีแค่ 20 ตัว
 
 **ไม่ตั้งค่าให้ครบ = ปิดฟีเจอร์อัปโหลด** (ฟอร์มปิดตัวเลือก, endpoint ตอบ 503,
 Admin เห็นแถบ "อัปโหลด: ปิดอยู่") — การ์ดแบบลิงก์ใช้ได้ตามปกติเสมอ
@@ -660,7 +660,7 @@ S3_REGION=auto
 
 | จุด | ชนิดไฟล์ | ขนาด | เพดานอื่น |
 |---|---|---|---|
-| การ์ดสื่อการสอน (`POST /api/media/upload/:cardId`) | PDF / JPEG / PNG | 25MB ต่อไฟล์ | 50 ไฟล์/การ์ด · โควตาโรงเรียน |
+| การ์ดสื่อการสอน (`POST /api/media/upload/:cardId`) | PDF / JPEG / PNG | 100MB ต่อไฟล์ | 50 ไฟล์/การ์ด · โควตาโรงเรียน |
 | ไฟล์แนบสารบรรณ (`POST /api/media/sarabun/:id`) | PDF / JPEG / PNG / DOCX | 10MB | — |
 
 ชนิดไฟล์ตัดสินจาก magic bytes ใน `lib/storage/types.js` — เพิ่มชนิดใหม่แก้ที่ไฟล์เดียว
