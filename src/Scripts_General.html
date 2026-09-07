@@ -30,6 +30,7 @@ window.initSarabunPage = function() {
 // 🌟 2. ฟังก์ชันซ่อน/โชว์ ฟิลด์ตามประเภทเอกสาร
 window.toggleSarabunFields = function() {
     const docType = document.getElementById('docType').value;
+    const user = getSessionUser();
 
     // เลือกประเภทในฟอร์มซ้าย = กรองทะเบียนฝั่งขวาให้เหลือประเภทนั้น
     // ครูขอเลขประเภทไหนก็มักอยากดูของประเภทเดียวกันเพื่อเทียบเลขล่าสุด
@@ -42,6 +43,7 @@ window.toggleSarabunFields = function() {
     const divFromTo = document.getElementById('divFromTo');
     const divDates = document.getElementById('divDates');
     const divAssignee = document.getElementById('divAssignee');
+    const docAssignee = document.getElementById('docAssignee');
     const btnRequestNumber = document.getElementById('btnRequestNumber');
     
     // ปิดทั้งหมดก่อน
@@ -51,6 +53,7 @@ window.toggleSarabunFields = function() {
     divFromTo.style.display = 'none';
     divDates.style.display = 'none';
     divAssignee.style.display = 'none';
+    docAssignee.required = false;
     btnRequestNumber.style.display = 'none';
 
     // เซ็ตข้อความและสีปุ่ม
@@ -88,6 +91,9 @@ window.toggleSarabunFields = function() {
         divSubject.style.display = 'block';
         divDates.style.display = 'flex';
         document.getElementById('divDocTime').style.display = 'none';
+        divAssignee.style.display = 'block';
+        docAssignee.required = true;
+        if (!docAssignee.value && user) docAssignee.value = user.name || '';
         btnRequestNumber.style.display = 'block';
         btnRequestNumber.className = "btn btn-primary w-100 rounded-pill fw-bold py-2 shadow-sm";
         btnRequestNumber.style.backgroundColor = ""; // เคลียร์สีที่ถูกบังคับ
@@ -101,6 +107,8 @@ window.toggleSarabunFields = function() {
         divDates.style.display = 'flex';
         document.getElementById('divDocTime').style.display = 'block';
         divAssignee.style.display = 'block';
+        docAssignee.required = true;
+        if (!docAssignee.value && user) docAssignee.value = user.name || '';
         btnRequestNumber.style.display = 'block';
         btnRequestNumber.style.backgroundColor = "";
         
@@ -153,7 +161,7 @@ window.requestNewDocNumber = function() {
         docTime: document.getElementById('docTime').value || "-",
         actionDate: document.getElementById('docActionDate').value || "-",
         assignee: document.getElementById('docAssignee').value.trim() || "-",
-        requester: user ? user.name : "Unknown"
+        requester: document.getElementById('docAssignee').value.trim() || (user ? user.name : "")
     };
 
     const btn = document.getElementById('btnRequestNumber');

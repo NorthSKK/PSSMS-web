@@ -356,6 +356,19 @@ test('requestSarabunNumber ปั๊ม requester_id ให้ผู้ขอ', 
   await query(`DELETE FROM sarabun WHERE doc_type='ทดสอบเจ้าของ'`);
 });
 
+test('Admin ขอเลขคำสั่งแทนครูได้ และตั้งเจ้าของเอกสารให้ครูคนนั้น', async () => {
+  const res = await ok('requestSarabunNumber',
+    [{ docType: 'ทดสอบผู้รับผิดชอบ', subject: 'คำสั่งทดสอบ', requester: 'ครูสมชาย ใจดี', year: '2569' }],
+    'admin');
+
+  const { rows } = await query(
+    `SELECT requester, requester_id FROM sarabun WHERE doc_number=$1`, [res.docNumber]);
+  assert.equal(rows[0].requester, 'ครูสมชาย ใจดี');
+  assert.equal(rows[0].requester_id, 'teacher1');
+
+  await query(`DELETE FROM sarabun WHERE doc_number=$1`, [res.docNumber]);
+});
+
 test('Admin ระบุชื่อเต็มที่มีใน users → แถวนั้นได้เจ้าของติดไปเลย', async () => {
   // นี่คือทางแก้แถวเก่า 34 แถวบน production: Admin แก้ทะเบียนแล้วเลือกชื่อเต็มให้ถูก
   const id = await makeDoc('รอ Admin ระบุเจ้าของ', 'ครูสมชาย', null);
