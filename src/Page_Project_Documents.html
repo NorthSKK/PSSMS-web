@@ -14,9 +14,11 @@
   <div class="modal-body"><input type="hidden" id="projectDocumentId">
    <div class="mb-3"><label class="form-label small">ชื่อโครงการ <span class="text-danger">*</span></label><input class="form-control" id="projectDocumentTitle" maxlength="160"></div>
    <div class="mb-3"><label class="form-label small">รายละเอียด</label><textarea class="form-control" id="projectDocumentDescription" rows="4" maxlength="2000"></textarea></div>
-   <div class="mb-1"><label class="form-label small">แนบไฟล์เพิ่ม</label><input class="form-control" id="projectDocumentFiles" type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" multiple></div>
-   <div class="form-text">PDF, JPG, PNG หรือ Word (.docx) ขนาดไม่เกิน 100 MB ต่อไฟล์</div>
+   <div class="mb-1"><label class="form-label small fw-bold">แนบไฟล์เพิ่ม</label><input class="form-control" id="projectDocumentFiles" type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" multiple onchange="previewProjectFiles()"></div>
+   <div class="form-text">เลือกได้หลายไฟล์ · PDF, JPG, PNG หรือ Word (.docx) ขนาดไม่เกิน 100 MB ต่อไฟล์</div>
+   <ul id="projectFilePreview" class="list-group list-group-flush small mt-2 d-none"></ul>
+   <div id="projectUploadProgress" class="mt-3 d-none"><div class="d-flex justify-content-between small mb-1"><span id="projectUploadText">กำลังเตรียมไฟล์...</span><span id="projectUploadCount"></span></div><div class="progress" style="height:8px"><div id="projectUploadBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div></div></div>
   </div>
-  <div class="modal-footer border-0"><button class="btn btn-soft" data-bs-dismiss="modal">ยกเลิก</button><button class="btn btn-accent fw-bold" onclick="saveProjectDocumentForm()"><i class="fas fa-save me-1"></i>บันทึก</button></div>
+  <div class="modal-footer border-0"><button id="projectCancelButton" class="btn btn-soft" data-bs-dismiss="modal">ยกเลิก</button><button id="projectSaveButton" class="btn btn-accent fw-bold" onclick="saveProjectDocumentForm()"><i class="fas fa-save me-1"></i><span>บันทึกและอัปโหลด</span></button></div>
  </div></div>
 </div>
