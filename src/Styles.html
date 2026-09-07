@@ -116,6 +116,11 @@
 .btn-soft:hover { background: var(--p-hover); border-color: var(--p-border-strong); color: var(--p-text); }
 .btn-soft i { color: var(--p-text-muted); }
 
+/* ไอคอน Font Awesome มี baseline ของตัวอักษร จึงดูเอียงเมื่ออยู่ในปุ่มกลม
+   บังคับให้ปุ่มสลับโหมดจัดกึ่งกลางแบบ flex ทั้งแนวตั้งและแนวนอน */
+.theme-toggle { display:inline-flex !important; align-items:center; justify-content:center; padding:0 !important; line-height:1; }
+.theme-toggle #darkModeIcon { display:block; line-height:1; }
+
 /* Forms */
 .form-control, .form-select, .input-group-text, .form-check-label {
   font-size: 0.82rem;
