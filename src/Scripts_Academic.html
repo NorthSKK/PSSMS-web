@@ -179,6 +179,7 @@ function loadStudentList(forceRefresh = false) {
               const historyMap = {};
               if (historyArray) { historyArray.forEach(h => { historyMap[h.cleanId] = h.status; historyMap[String(h.studentId).trim()] = h.status; }); }
               renderAttendanceTable(studentsData, historyMap);
+              loadDailyAttendanceSignals(item, fullClassName);
               document.getElementById('studentListSection')?.classList.remove('d-none');
               
               if(btn) {
@@ -256,7 +257,7 @@ function renderAttendanceTable(students, historyMap = {}) {
         if (historyMap[cleanId]) { currentStatus = historyMap[cleanId]; isMatched = true; } 
         else if (historyMap[rawId]) { currentStatus = historyMap[rawId]; isMatched = true; }
         
-        html += `<tr><td class="text-center fw-bold text-muted">${index + 1}</td><td><div class="fw-bold">${stdName}</div><div class="small text-muted">ID: ${rawId} ${isMatched ? '<i class="fas fa-check-circle text-success ms-1"></i>' : ''}</div></td><td><div class="btn-group w-100" role="group"><input type="radio" class="btn-check" name="status_${rawId}" id="present_${rawId}" value="มา" ${currentStatus === 'มา' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-success btn-sm" for="present_${rawId}">มา</label><input type="radio" class="btn-check" name="status_${rawId}" id="late_${rawId}" value="สาย" ${currentStatus === 'สาย' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-warning btn-sm" for="late_${rawId}">สาย</label><input type="radio" class="btn-check" name="status_${rawId}" id="leave_${rawId}" value="ลา" ${currentStatus === 'ลา' || currentStatus === 'leave' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-info btn-sm" for="leave_${rawId}">ลา</label><input type="radio" class="btn-check" name="status_${rawId}" id="absent_${rawId}" value="ขาด" ${currentStatus === 'ขาด' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-danger btn-sm" for="absent_${rawId}">ขาด</label><input type="radio" class="btn-check" name="status_${rawId}" id="skip_${rawId}" value="โดด" ${currentStatus === 'โดด' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-skip btn-sm" for="skip_${rawId}" title="มาโรงเรียนแต่ไม่เข้าคาบนี้ — นับเป็นขาดเต็มจำนวน">โดด</label></div></td></tr>`;
+        html += `<tr data-student-id="${rawId}"><td class="text-center fw-bold text-muted">${index + 1}</td><td><div class="fw-bold">${stdName}</div><div class="small text-muted">ID: ${rawId} ${isMatched ? '<i class="fas fa-check-circle text-success ms-1"></i>' : ''}</div></td><td><div class="btn-group w-100" role="group"><input type="radio" class="btn-check" name="status_${rawId}" id="present_${rawId}" value="มา" ${currentStatus === 'มา' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-success btn-sm" for="present_${rawId}">มา</label><input type="radio" class="btn-check" name="status_${rawId}" id="late_${rawId}" value="สาย" ${currentStatus === 'สาย' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-warning btn-sm" for="late_${rawId}">สาย</label><input type="radio" class="btn-check" name="status_${rawId}" id="leave_${rawId}" value="ลา" ${currentStatus === 'ลา' || currentStatus === 'leave' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-info btn-sm" for="leave_${rawId}">ลา</label><input type="radio" class="btn-check" name="status_${rawId}" id="absent_${rawId}" value="ขาด" ${currentStatus === 'ขาด' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-danger btn-sm" for="absent_${rawId}">ขาด</label><input type="radio" class="btn-check" name="status_${rawId}" id="skip_${rawId}" value="โดด" ${currentStatus === 'โดด' ? 'checked' : ''} onchange="updateSummary()"><label class="btn btn-outline-skip btn-sm" for="skip_${rawId}" title="มาโรงเรียนแต่ไม่เข้าคาบนี้ — นับเป็นขาดเต็มจำนวน">โดด</label></div></td></tr>`;
       });
       
       tbody.innerHTML = html;
@@ -1561,6 +1562,22 @@ function _arSignals(s, sessions, remainingQuota) {
   return labels.length ? `<div class="small mt-1 text-danger">⚠️ ${labels.join(' · ')}</div>` : '';
 }
 
+function loadDailyAttendanceSignals(item, className) {
+  const user = getSessionUser();
+  if (!user) return;
+  google.script.run.withSuccessHandler(function(res) {
+    const sessions = res && res.meta && res.meta.sessionsList;
+    (res && res.students || []).forEach(function(s) {
+      const quota = res.meta.maxAbsenceQuota - ((s.leave || 0) + (s.absent || 0));
+      const row = document.querySelector(`#studentRows tr[data-student-id="${CSS.escape(String(s.id))}"]`);
+      if (!row) return;
+      const cell = row.children[1];
+      const signal = _arSignals(s, sessions, quota);
+      if (signal) cell.insertAdjacentHTML('beforeend', signal);
+    });
+  }).getSemesterReport(item[0], className, user.currentTerm, user.currentYear);
+}
+
 // เตือนตอนโควตาใกล้หมด ไม่ใช่รอจนเกินแล้วค่อยแดง
 const AR_QUOTA_LOW = 3;
 
@@ -1580,7 +1597,6 @@ function _arRow(s, index, remainingQuota, sessions) {
     <td class="ar-col-name">
       <div class="ar-name text-truncate" style="max-width:200px;">${s.name}</div>
       <div class="ar-sid">${s.id}</div>
-      ${_arSignals(s, sessions, remainingQuota)}
     </td>
     <td class="ar-num">${_arNum(s.present, 'ar-present')}${_arNum(s.late, 'ar-late')}</td>
     <td class="ar-num">${_arNum(s.leave, 'ar-leave')}${_arNum(s.absent, 'ar-miss')}</td>
