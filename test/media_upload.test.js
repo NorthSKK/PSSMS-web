@@ -18,6 +18,7 @@ const { ok, denied, stop, TOKENS, baseURL, token } = require('./helpers/api');
 const { decodeFilename } = require('../routes/media');
 const types = require('../lib/storage/types');
 const store = require('../lib/storage/disk');
+const storage = require('../lib/storage');
 const { query } = require('../lib/db');
 
 after(stop);
@@ -106,6 +107,91 @@ const ticketToken = (url) => new URL('http://x' + url).searchParams.get('t');
 /** getMediaCardFiles คืน { files, url, fileId } — เทสต์ส่วนใหญ่สนใจแค่สารบัญ */
 const filesOf = async (cardId, as, want) =>
   (await ok('getMediaCardFiles', want === undefined ? [cardId] : [cardId, want], as)).files;
+
+test('ไฟล์พักถูกลบหลังอัปสำเร็จ ไฟล์ปลอม ไม่มีสิทธิ์ และที่เก็บล้มเหลว', async (t) => {
+  const tempDir = require('path').join(require('os').tmpdir(), 'pssms-upload');
+  const tempFiles = async () => (await fsp.readdir(tempDir).catch(e => {
+    if (e.code === 'ENOENT') return [];
+    throw e;
+  })).sort();
+  const before = await tempFiles();
+  const assertClean = async () => {
+    // HTTP response อาจมาถึงก่อน finally ของ route ลบไฟล์เสร็จ
+    for (let i = 0; i < 100; i++) {
+      if (JSON.stringify(await tempFiles()) === JSON.stringify(before)) return;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.deepEqual(await tempFiles(), before, 'ต้องไม่เหลือไฟล์พักหลัง request จบ');
+  };
+  const cardId = await newFileCard('ตรวจไฟล์พัก');
+  try {
+    const uploaded = await uploadRaw({ token: TOKENS.teacher1, cardId });
+    assert.equal(uploaded.status, 200, JSON.stringify(uploaded.body));
+    await assertClean();
+    const files = await filesOf(cardId, 'teacher1');
+    const ticket = await ok('getMediaFileTicket', [files[0].id], 'teacher1');
+    assert.deepEqual((await request(ticket.url)).raw, Buffer.from(PDF), 'ไฟล์ต้องครบทุกไบต์');
+    for (const opts of [
+      { token: TOKENS.teacher1, content: 'ไม่ใช่ PDF' },
+      { token: TOKENS.teacher2 },
+    ]) {
+      assert.equal((await uploadRaw({ cardId, ...opts })).status, 400);
+      await assertClean();
+    }
+    const oversized = Buffer.alloc(25 * 1024 * 1024 + 1);
+    oversized.write('%PDF-1.4');
+    const tooBig = await uploadRaw({ token: TOKENS.teacher1, cardId, content: oversized });
+    assert.equal(tooBig.status, 400);
+    assert.match(tooBig.body.__error, /25 MB/);
+    await assertClean();
+    t.mock.method(storage, 'putStream', async ({ stream, size }) => {
+      assert.equal(size, Buffer.byteLength(PDF));
+      assert.equal(typeof stream.pipe, 'function', 'ต้องส่ง stream ไปที่เก็บ');
+      throw new Error('ที่เก็บทดสอบล้มเหลว');
+    });
+    const failed = await uploadRaw({ token: TOKENS.teacher1, cardId });
+    assert.equal(failed.status, 400);
+    assert.match(failed.body.__error, /ที่เก็บทดสอบล้มเหลว/);
+    await assertClean();
+    assert.equal((await filesOf(cardId, 'teacher1')).length, 1, 'อัปไม่สำเร็จต้องไม่เพิ่มแถวไฟล์');
+  } finally {
+    await ok('deleteMediaCard', [cardId], 'teacher1');
+  }
+});
+
+test('ตัดการเชื่อมต่อกลาง multipart ต้องลบไฟล์พักและไม่เพิ่มแถวไฟล์', { timeout: 5000 }, async () => {
+  const tempDir = require('path').join(require('os').tmpdir(), 'pssms-upload');
+  await fsp.mkdir(tempDir, { recursive: true });
+  const before = (await fsp.readdir(tempDir)).sort();
+  const cardId = await newFileCard('อัปโหลดขาดกลางทาง');
+  const boundary = '----pssms-aborted-upload';
+  const req = http.request(`${await baseURL()}/api/media/upload/${cardId}`, {
+    method: 'POST', headers: {
+      Authorization: `Bearer ${TOKENS.teacher1}`,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+    },
+  });
+  req.on('error', () => {}); // ECONNRESET เป็นผลที่ตั้งใจจากการตัดสาย
+  try {
+    req.write(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="partial.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4\n`);
+    let started = false;
+    for (let i = 0; i < 100; i++) {
+      if ((await fsp.readdir(tempDir)).some(f => !before.includes(f))) { started = true; break; }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.ok(started, 'ต้องเริ่มพักไฟล์จริงก่อนตัดสาย');
+    req.destroy();
+    for (let i = 0; i < 100; i++) {
+      if (JSON.stringify((await fsp.readdir(tempDir)).sort()) === JSON.stringify(before)) break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.deepEqual((await fsp.readdir(tempDir)).sort(), before);
+    assert.equal((await filesOf(cardId, 'teacher1')).length, 0);
+  } finally {
+    req.destroy();
+    await ok('deleteMediaCard', [cardId], 'teacher1');
+  }
+});
 
 // ---------------------------------------------------------------- ด่านตรวจขาเข้า
 

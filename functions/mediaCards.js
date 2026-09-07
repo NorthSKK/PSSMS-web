@@ -24,6 +24,8 @@
  * ไม่ใช่พึ่ง escape ฝั่ง client อย่างเดียว — โดยเฉพาะ url ที่ escape ช่วยอะไรไม่ได้กับ javascript:
  */
 const { query } = require('../lib/db');
+const fs = require('fs');
+const { finished } = require('stream/promises');
 const { isAdmin } = require('../lib/permissions');
 const { SUBJECT_GROUP_BY_PREFIX } = require('../lib/subjectGroup');
 const storage = require('../lib/storage');
@@ -334,9 +336,8 @@ async function _usedBytes() {
 /**
  * เพิ่มไฟล์เข้าการ์ดที่มีอยู่แล้ว — เรียกจาก routes/media.js เท่านั้น (multipart ไม่ผ่าน /api/gas)
  *
- * ยิงทีละไฟล์ ไม่ใช่ request เดียวหลายไฟล์: multer ใช้ memoryStorage() ไฟล์อยู่ใน RAM
- * ทั้งก้อน 30 ไฟล์ × 25MB = 750MB เข้า memory ครั้งเดียว Railway ตาย
- * แถมล้มใบเดียวไม่ล้มทั้งชุด retry เฉพาะใบที่พลาดได้
+ * ยิงทีละไฟล์และพักบนดิสก์ก่อน stream ไปที่เก็บ ไม่ถือไฟล์ทั้งก้อนใน RAM
+ * ล้มใบเดียวไม่ล้มทั้งชุด retry เฉพาะใบที่พลาดได้ · route เป็นผู้ลบไฟล์พัก
  *
  * ตรวจให้ครบ *ก่อน* เอาไฟล์ขึ้นที่เก็บเสมอ ไม่งั้นไฟล์ขึ้นไปกองโดยไม่มีแถวชี้ถึง
  * = ไฟล์กำพร้าที่กินโควตาเงียบ ๆ
@@ -345,7 +346,13 @@ async function addCardFile({ cardId, file }, user) {
   const card = await _loadOwned(cardId, user);
   if (card.card_type !== 'files') throw new Error('การ์ดนี้เป็นแบบลิงก์ แนบไฟล์ไม่ได้');
   if (card.deleted_at) throw new Error('การ์ดนี้อยู่ในถังขยะ กู้คืนก่อนจึงจะเพิ่มไฟล์ได้');
-  if (!file || !file.buffer || !file.buffer.length) throw new Error('ไม่พบไฟล์ที่อัปโหลด');
+  if (!file || (!file.path && !Buffer.isBuffer(file.buffer))) {
+    throw new Error('ไม่พบไฟล์ที่อัปโหลด');
+  }
+  // path มาจาก multer เท่านั้น ไม่รับจาก JSON/API; stat ขนาดจริงก่อนคิดโควตา
+  const size = file.path ? (await fs.promises.stat(file.path)).size : file.buffer.length;
+  if (!size) throw new Error('ไม่พบไฟล์ที่อัปโหลด');
+  if (size > MAX_UPLOAD_MB * 1024 * 1024) throw new Error(`ไฟล์ใหญ่เกิน ${MAX_UPLOAD_MB} MB`);
 
   const { rows: agg } = await query(
     `SELECT count(*)::int AS n, COALESCE(max(sort_order), -1)::int AS last
@@ -359,7 +366,7 @@ async function addCardFile({ cardId, file }, user) {
   // ด่านนั้นหายไป ถ้าไม่กั้นตรงนี้จะรู้ตัวว่าเต็มตอนบิลมา หรือตอนอัปพังแบบไม่มีคำอธิบาย
   const used = await _usedBytes();
   const quota = quotaBytes();
-  if (used + file.buffer.length > quota) {
+  if (used + size > quota) {
     const err = new Error(
       `พื้นที่เก็บไฟล์ของโรงเรียนเต็ม (โควตา ${(quota / 1024 ** 3).toFixed(0)} GB) — ` +
       'ลบสื่อเก่าที่ไม่ใช้แล้วออกจากถังขยะก่อน'
@@ -368,7 +375,22 @@ async function addCardFile({ cardId, file }, user) {
     throw err;
   }
 
-  const saved = await storage.put({ buffer: file.buffer, ext: file.detectedExt });
+  // เปิด stream หลังตรวจสิทธิ์/โควตาครบแล้ว; driver รับผิดชอบปิด stream แม้อัปโหลดล้ม
+  let saved;
+  if (file.path) {
+    const stream = fs.createReadStream(file.path);
+    const sourceDone = finished(stream, { cleanup: true });
+    sourceDone.catch(() => {});
+    try {
+      saved = await storage.putStream({ stream, size, ext: file.detectedExt });
+    } finally {
+      // รวมกรณี driver เลือกไม่ได้/ปฏิเสธก่อนเริ่มอ่านไฟล์ด้วย
+      stream.destroy();
+      await sourceDone.catch(() => {});
+    }
+  } else {
+    saved = await storage.put({ buffer: file.buffer, ext: file.detectedExt });
+  }
   const name = file.originalname || `file.${file.detectedExt}`;
   try {
     // label ว่างไว้ก่อน = ใช้ชื่อไฟล์เดิมไปพลาง ครูมาตั้งชื่อในสารบัญทีหลังได้

@@ -14,12 +14,17 @@
  *   GET  /api/media/file/:kind/:id  เสิร์ฟไฟล์เอง — **เฉพาะ driver disk (dev)**
  *
  * การ์ดสื่อรับ **ทีละไฟล์** ถึงจะอัปหลายใบพร้อมกันในหน้าเดียว — client ยิงเรียงกันเอง
- * multer ใช้ memoryStorage() ไฟล์อยู่ใน RAM ทั้งก้อน รับ 30 ไฟล์ใน request เดียว
- * = 750MB เข้า memory ครั้งเดียว Railway ตาย · แถมล้มใบเดียวไม่ล้มทั้งชุด
+ * พักไฟล์ลงดิสก์ชั่วคราว แล้ว stream ไปที่เก็บ ไม่ถือทั้งไฟล์ใน RAM
+ * ล้มใบเดียวไม่ล้มทั้งชุด และไฟล์พักถูกลบหลังบันทึกหรือเมื่อเกิดข้อผิดพลาด
  */
 const express = require('express');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const fsp = fs.promises;
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
 const router = express.Router();
 
 const requireAuth = require('../middleware/auth');
@@ -77,6 +82,17 @@ function decodeFilename(name) {
   }
 }
 
+/**
+ * ที่พักไฟล์ระหว่างอัป — **ไม่ใช่ที่เก็บถาวร** ลบทิ้งทุกเส้นทางที่ออกจาก request
+ * อยู่บนดิสก์ชั่วคราวของ container ซึ่งหายทุก deploy อยู่แล้ว จึงไม่มีอะไรตกค้างข้ามรอบ
+ */
+const TMP_DIR = path.join(os.tmpdir(), 'pssms-upload');
+
+/** ลบไฟล์พักให้ครบทุกทางออก — ลืมที่เดียวคือดิสก์เต็มเงียบ ๆ ในอีกหลายเดือน */
+async function dropTemp(file) {
+  if (file && file.path) await fsp.unlink(file.path).catch(() => {});
+}
+
 function guardTeacher(req, res, next) {
   try {
     teacherOrAdmin(req.user);
@@ -88,14 +104,37 @@ function guardTeacher(req, res, next) {
 
 /**
  * ตัวรับไฟล์ร่วมของทุก endpoint — ด่านตรวจอยู่ที่เดียวจะได้ไม่หลุดจุดใดจุดหนึ่ง
- * `allowed` คือรายการนามสกุลที่จุดนั้นยอมรับ (สื่อการสอนรับแค่ pdf)
+ * `allowed` คือรายการนามสกุลที่จุดนั้นยอมรับ (สื่อการสอนรับ PDF/JPEG/PNG)
  */
-function receive({ maxMB, allowed }) {
+function receive({ maxMB, allowed, toDisk }) {
   const upload = multer({
-    // memoryStorage: ไฟล์ไม่แตะดิสก์ของ Railway ซึ่งเป็น filesystem ชั่วคราวอยู่แล้ว
-    storage: multer.memoryStorage(),
+    // สื่อการสอน (toDisk) เขียนลงไฟล์พักก่อน แล้ว stream ต่อไปที่เก็บ —
+    // memoryStorage ถือไฟล์ทั้งก้อน ครูหลายคนอัปพร้อมกันทำให้ RAM เพิ่มตามจำนวนคน
+    // งานสารบรรณยังใช้ memory เพราะเพดานแค่ 10MB และไม่คุ้มที่จะเพิ่มเส้นทางลบไฟล์พัก
+    storage: toDisk
+      ? multer.diskStorage({
+          destination: (req, file, cb) => {
+            fsp.mkdir(TMP_DIR, { recursive: true }).then(() => cb(null, TMP_DIR), cb);
+          },
+          // ชื่อสุ่มล้วน ไม่เอาชื่อที่ผู้ใช้ส่งมาประกอบ — กัน path traversal ตั้งแต่ไฟล์พัก
+          filename: (req, file, cb) => cb(null, crypto.randomBytes(16).toString('hex')),
+        })
+      : multer.memoryStorage(),
     limits: { fileSize: maxMB * 1024 * 1024, files: 1, fields: 20 },
   }).single('file');
+
+  // ตรวจ magic bytes จากหัวไฟล์ — อ่านแค่ไม่กี่ไบต์แรก ไม่ต้องโหลดทั้งไฟล์เข้ามา
+  const headOf = async (file) => {
+    if (file.buffer) return file.buffer;
+    const fh = await fsp.open(file.path, 'r');
+    try {
+      const buf = Buffer.alloc(16);
+      const { bytesRead } = await fh.read(buf, 0, 16, 0);
+      return buf.subarray(0, bytesRead);
+    } finally {
+      await fh.close();
+    }
+  };
 
   return (req, res, next) => {
     // ไม่มีที่เก็บถาวร = ไม่รับไฟล์ ดีกว่ารับแล้วหายตอน deploy รอบหน้า
@@ -105,20 +144,29 @@ function receive({ maxMB, allowed }) {
       });
     }
     underBudget(req, res, () => {
-      upload(req, res, (err) => {
+      upload(req, res, async (err) => {
         if (err) {
+          // multer ลบไฟล์ที่เขียนค้างเมื่อชนเพดาน/ตัดการเชื่อมต่อ; เก็บซ้ำเผื่อ req.file ยังอยู่
+          await dropTemp(req.file);
           const msg = err.code === 'LIMIT_FILE_SIZE' ? `ไฟล์ใหญ่เกิน ${maxMB} MB` : err.message;
           return res.status(400).json({ __error: msg });
         }
         if (!req.file) return res.status(400).json({ __error: 'ไม่พบไฟล์ที่อัปโหลด' });
 
         // คิดโควตาทันทีที่อ่านไฟล์จบ ไม่รอว่าจะบันทึกสำเร็จไหม — ไม่งั้นยิงไฟล์ที่ถูกปฏิเสธ
-        // รัว ๆ ก็กินแบนด์วิดท์กับ RAM ได้ฟรีไม่จำกัด
+        // รัว ๆ ก็กินแบนด์วิดท์ได้ฟรีไม่จำกัด
         chargeBudget(req, req.file.size);
 
         // ตัดสินชนิดจาก magic bytes เท่านั้น — MIME กับนามสกุลที่ client ส่งมาเชื่อไม่ได้
-        const type = types.detect(req.file.buffer, allowed);
+        let type;
+        try {
+          type = types.detect(await headOf(req.file), allowed);
+        } catch (e) {
+          await dropTemp(req.file);
+          return res.status(400).json({ __error: 'อ่านไฟล์ที่อัปโหลดไม่ได้' });
+        }
         if (!type) {
+          await dropTemp(req.file);
           return res.status(400).json({
             __error: `รองรับเฉพาะไฟล์ ${types.labels(allowed)} — ไฟล์นี้ไม่ใช่`,
           });
@@ -136,7 +184,7 @@ function receive({ maxMB, allowed }) {
 // การ์ดถูกสร้างไว้ก่อนด้วย saveMediaCard (ผ่าน /api/gas) — ที่นี่แค่แนบไฟล์เข้าการ์ดนั้น
 // แยกกันเพราะ metadata เป็น JSON ธรรมดาที่ไม่มีเหตุผลต้องมาปนกับ multipart
 router.post('/upload/:cardId', requireAuth, guardTeacher,
-  receive({ maxMB: mediaCards.MAX_UPLOAD_MB, allowed: mediaCards.ALLOWED_EXTS }),
+  receive({ maxMB: mediaCards.MAX_UPLOAD_MB, allowed: mediaCards.ALLOWED_EXTS, toDisk: true }),
   async (req, res) => {
     try {
       res.json({
@@ -148,6 +196,9 @@ router.post('/upload/:cardId', requireAuth, guardTeacher,
       console.error('[media:upload]', e.message);
       // 507 = พื้นที่ของโรงเรียนเต็ม ซึ่งครูแก้เองได้ (ไปลบของเก่า) ต่างจาก 400 ที่แปลว่าคำขอผิด
       res.status(e.status || 400).json({ __error: e.message });
+    } finally {
+      // ทุกเส้นทาง — สำเร็จ ล้มเพราะโควตา ล้มเพราะเขียน DB ไม่ได้ — ไฟล์พักต้องไม่ค้าง
+      await dropTemp(req.file);
     }
   });
 

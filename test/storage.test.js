@@ -13,8 +13,62 @@ const storage = require('../lib/storage');
 const disk = require('../lib/storage/disk');
 const s3 = require('../lib/storage/s3');
 const mediaCards = require('../functions/mediaCards');
+const { Readable } = require('stream');
+const fs = require('fs').promises;
 
 after(stop);
+
+test('disk stream เก็บไบต์ครบและลบไฟล์ที่เขียนค้างเมื่อ stream พัง', async () => {
+  const content = Buffer.from('%PDF-1.4 stream test');
+  const saved = await disk.putStream({ stream: Readable.from([content]), ext: 'pdf' });
+  try {
+    assert.equal(saved.size, content.length);
+    assert.deepEqual(await fs.readFile(disk.safePath(saved.key)), content);
+  } finally {
+    await disk.remove(saved.key);
+  }
+  const before = (await fs.readdir(disk.ROOT)).sort();
+  const broken = Readable.from((async function* () {
+    yield content;
+    throw new Error('source stream failed');
+  })());
+  await assert.rejects(disk.putStream({ stream: broken, ext: 'pdf' }), /source stream failed/);
+  assert.deepEqual((await fs.readdir(disk.ROOT)).sort(), before);
+});
+
+test('s3 stream ส่ง signed request พร้อมขนาดจริง และไม่ retry stream ที่ใช้ไปแล้ว', async (t) => {
+  const keys = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_REGION'];
+  const before = Object.fromEntries(keys.map(k => [k, process.env[k]]));
+  Object.assign(process.env, {
+    S3_ENDPOINT: 'https://acct.r2.cloudflarestorage.com', S3_BUCKET: 'pssms-test',
+    S3_ACCESS_KEY_ID: 'testkey', S3_SECRET_ACCESS_KEY: 'testsecret', S3_REGION: 'auto',
+  });
+  const content = Buffer.from('%PDF-1.4 streaming upload');
+  let status = 200;
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (input, init) => {
+    const req = input instanceof Request ? input : new Request(input, init);
+    assert.equal(req.method, 'PUT');
+    assert.equal(req.headers.get('content-length'), String(content.length));
+    assert.equal(req.headers.get('x-amz-content-sha256'), 'UNSIGNED-PAYLOAD');
+    assert.match(req.headers.get('authorization'), /^AWS4-HMAC-SHA256 /);
+    assert.deepEqual(Buffer.from(await req.arrayBuffer()), content);
+    return new Response(status === 200 ? '' : 'temporary storage failure', { status });
+  });
+  try {
+    const saved = await s3.putStream({ stream: Readable.from([content]), size: content.length, ext: 'pdf' });
+    assert.equal(saved.size, content.length);
+    assert.match(saved.key, /^[a-f0-9]{32}\.pdf$/);
+    status = 503;
+    await assert.rejects(s3.putStream({
+      stream: Readable.from([content]), size: content.length, ext: 'pdf',
+    }), /503/);
+    assert.equal(fetchMock.mock.callCount(), 2, 'แต่ละอัปโหลดส่งครั้งเดียว แม้ปลายทางตอบ 503');
+  } finally {
+    for (const k of keys) {
+      if (before[k] === undefined) delete process.env[k]; else process.env[k] = before[k];
+    }
+  }
+});
 
 test('driver เริ่มต้นเป็น disk และเทสต์ทั้งชุดวิ่งบนตัวนี้', () => {
   assert.equal(storage.driverName(), 'disk');
