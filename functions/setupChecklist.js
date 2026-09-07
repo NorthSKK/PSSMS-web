@@ -47,8 +47,7 @@ async function getSetupChecklist() {
       (SELECT count(*)::int FROM users WHERE UPPER(role)='TEACHER')                       AS teachers,
       (SELECT count(*)::int FROM users WHERE UPPER(role)='STUDENT' AND status='ปกติ')      AS students,
       -- ⚠️ ต้องนับเฉพาะ "คาบรายวิชาจริง" ให้ตรงกับ subjectPrefixOf() — ไม่ใช่แค่ตัด 'HR'
-      --    setAllHomeroomTeachers ใส่แถวแนะแนว/วิถีพุทธด้วยรหัส '-' มาให้ทุกห้อง
-      --    ตั้งครูที่ปรึกษาเสร็จข้อ "นำเข้าตารางสอน" จะติ๊กเองทันทีทั้งที่ยังไม่มีคาบสอนสักคาบ
+      --    ตั้งครูที่ปรึกษาเสร็จข้อ "นำเข้าตารางสอน" ต้องไม่ติ๊กเองทั้งที่ยังไม่มีคาบสอนสักคาบ
       (SELECT count(*)::int FROM timetable
          WHERE term=$1 AND year=$2
            AND UPPER(coalesce(subject_code,'')) NOT IN ('HR','-')
@@ -74,6 +73,10 @@ async function getSetupChecklist() {
     { key: 'schoolName', label: 'ตั้งชื่อโรงเรียน', page: 'Page_Admin_Settings',
       done: !!String(cfg.schoolName || '').trim(),
       hint: 'ชื่อนี้ขึ้นบนหัวเว็บและบนเอกสาร ปพ.5 ที่พิมพ์ออกมา' },
+
+    { key: 'pp5Header', label: 'กรอกหัวกระดาษ ปพ.5', page: 'Page_Score_Entry',
+      done: c.pp5head > 0,
+      hint: 'ตั้งที่อยู่โรงเรียนและชื่อ ผอ. ก่อนเริ่มใช้งาน เพื่อให้เอกสารที่พิมพ์ส่งเขตถูกต้อง' },
 
     { key: 'schoolLogo', label: 'อัปโหลดโลโก้โรงเรียน', page: 'Page_Admin_Settings',
       done: !!String(cfg.schoolLogo || '').trim(),
@@ -110,10 +113,6 @@ async function getSetupChecklist() {
     { key: 'homeroom', label: 'ตั้งครูที่ปรึกษาประจำชั้น', page: 'Page_Admin_Users',
       done: c.homeroom > 0, count: c.homeroom,
       hint: 'ขาดข้อนี้ จะไม่มีโฮมรูมและกิจกรรมหน้าเสาธง' },
-
-    { key: 'pp5Header', label: 'กรอกหัวกระดาษ ปพ.5', page: 'Page_Score_Entry',
-      done: c.pp5head > 0,
-      hint: 'ที่ตั้งโรงเรียนและชื่อ ผอ. — ขึ้นบนเอกสารที่พิมพ์ส่งเขตจริง' },
 
     { key: 'adminPassword', label: 'เปลี่ยนรหัสผ่านผู้ดูแลระบบ', page: 'Page_Admin_Users',
       done: !issuedPassword,

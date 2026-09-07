@@ -33,6 +33,7 @@ const cache = require('../lib/cache');
 const { query } = require('../lib/db');
 const mediaCards = require('../functions/mediaCards');
 const sarabun = require('../functions/sarabun');
+const projects = require('../functions/projectDocuments');
 const storage = require('../lib/storage');
 const types = require('../lib/storage/types');
 
@@ -218,6 +219,17 @@ router.post('/sarabun/:id', requireAuth, guardTeacher,
     }
   });
 
+router.post('/project/:id', requireAuth, guardTeacher,
+  receive({ maxMB: projects.MAX_ATTACH_MB, allowed: types.EXTENSIONS }),
+  async (req, res) => {
+    try {
+      res.json({ __result: await projects.attachProjectFile(req.params.id, req.file, req.user) });
+    } catch (e) {
+      console.error('[project:attach]', e.message);
+      res.status(400).json({ __error: e.message });
+    }
+  });
+
 // ---------- เสิร์ฟไฟล์เอง (driver disk เท่านั้น) ----------
 
 // media: id ในตั๋วคือ **media_files.id ไม่ใช่ card id** — สิทธิ์อยู่ที่การ์ดแม่จึงต้อง join
@@ -227,6 +239,7 @@ const SOURCES = {
           FROM media_files f JOIN media_cards c ON c.id = f.card_id
           WHERE f.id=$1 AND c.deleted_at IS NULL`,
   sarabun: `SELECT file_key, file_name FROM sarabun WHERE id=$1`,
+  project: `SELECT file_key, file_name FROM project_files WHERE id=$1`,
 };
 
 /**

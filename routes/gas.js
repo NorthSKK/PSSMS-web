@@ -57,6 +57,7 @@ const TEACHER_OR_ADMIN = new Set([
   'getClubAttendanceSummary',
   'saveSavingsTransaction',
   'saveMediaCard', 'deleteMediaCard',
+  'saveProjectDocument', 'deleteProjectDocument', 'deleteProjectFile',
   // ไฟล์ในการ์ดสื่อ — ตัวฟังก์ชันเช็คต่ออีกชั้นว่าเป็นการ์ดของครูคนนั้นจริง (_loadOwned)
   'deleteMediaFile', 'renameMediaFile', 'reorderMediaFiles',
 ]);
@@ -67,7 +68,7 @@ const TEACHER_OR_ADMIN = new Set([
 // ของ ผอ. มีหน้างานสารบรรณอยู่จริง — กดจากเมนูตัวเองแล้วเจอ "สงวนสิทธิ์เฉพาะครู
 // หรือผู้ดูแลระบบ" · **การเขียนยังเป็น TEACHER_OR_ADMIN เหมือนเดิม** ผอ. อ่านอย่างเดียว
 const STAFF_ONLY = new Set([
-  'getSarabunHistory', 'getSarabunFileTicket',
+  'getSarabunHistory', 'getSarabunFileTicket', 'getProjectDocuments', 'getProjectFileTicket',
 ]);
 
 // อ่านได้ทั้งโรงเรียน แก้ไม่ได้ — Executive คือ ผอ./รอง ไม่ใช่หัวหน้ากลุ่มสาระ
@@ -107,7 +108,7 @@ const READONLY_ALLOWED = new Set([
     'getMediaFileTicket', 'getMediaStorageStatus', 'getMorningActivityData',
     'getMyClub', 'getMyClubs', 'getPage',
     'getPendingLeaves', 'getPendingSubstitutes', 'getPrintConfigData',
-    'getSarabunFileTicket', 'getSarabunHistory', 'getSavingsBalance',
+    'getSarabunFileTicket', 'getSarabunHistory', 'getProjectDocuments', 'getProjectFileTicket', 'getSavingsBalance',
     'getSavingsHistory', 'getSavingsSummary', 'getSemesterReport',
     'getStudentDashboardBundle', 'getStudentSummaryStats', 'getStudentsByClass',
     'getStudentsByClub', 'getSubjectConfig', 'getSystemConfig',
@@ -138,6 +139,7 @@ const progressBoard = require('../functions/teacherProgressBoard');
 const studentWatch = require('../functions/studentWatch');
 const clubsWrite = require('../functions/clubs_write');
 const sarabun = require('../functions/sarabun');
+const projects = require('../functions/projectDocuments');
 const budget = require('../functions/budget');
 const missing = require('../functions/missing');
 const pp5 = require('../functions/generatePP5Template');
@@ -289,6 +291,11 @@ const handlers = {
   deleteSarabun:                   (args) => sarabun.deleteSarabun(args),
   requestSarabunNumber:            (args, user) => sarabun.requestSarabunNumber(args, user),
   getSarabunFileTicket:            (args, user) => sarabun.getSarabunFileTicket(args, user),
+  getProjectDocuments:             (args, user) => projects.getProjectDocuments(args, user),
+  saveProjectDocument:             (args, user) => projects.saveProjectDocument(args, user),
+  deleteProjectDocument:           (args, user) => projects.deleteProjectDocument(args, user),
+  deleteProjectFile:               (args, user) => projects.deleteProjectFile(args, user),
+  getProjectFileTicket:            (args, user) => projects.getProjectFileTicket(args, user),
 
   // Budget
   getBudgets:                      (args) => budget.getBudgets(args),

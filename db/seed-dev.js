@@ -159,7 +159,7 @@ async function main() {
     'score_history', 'score_database', 'qualitative_assess', 'grade_summary', 'subject_config',
     'attendance', 'academic_records', 'detailed_lesson_records', 'morning_activity',
     'club_members', 'club_advisors', 'clubs',
-    'substitute_assignments', 'leave_records', 'sarabun', 'budgets',
+    'substitute_assignments', 'leave_records', 'project_files', 'project_documents', 'sarabun', 'budgets',
     'calendar_events', 'timetable', 'media_cards', 'user_history', 'users',
   ];
   for (const t of wipe) {
