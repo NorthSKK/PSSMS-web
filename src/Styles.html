@@ -493,6 +493,49 @@ div.dept-btn { cursor: default; pointer-events: none; }
 }
 .pssms-tabs .nav-link:hover:not(.active) { background: var(--p-hover) !important; color: var(--p-text) !important; }
 
+/* Application navigation standard — every content tab uses this rhythm.
+   Some older pages used Bootstrap nav-tabs (tall boxed tabs), while newer ones
+   used pssms-tabs (small underline tabs). Keep one compact, touch-friendly bar. */
+.pssms-page .nav-tabs,
+.pssms-page .pssms-tabs {
+  display: flex; flex-wrap: wrap; gap: .25rem;
+  border-bottom: 1px solid var(--p-border);
+}
+.pssms-page .nav-tabs .nav-link,
+.pssms-page .pssms-tabs .nav-link {
+  min-height: 38px; display: inline-flex; align-items: center; gap: .2rem;
+  padding: .45rem .8rem !important; margin: 0 !important;
+  border: 0 !important; border-bottom: 2px solid transparent !important;
+  border-radius: var(--p-radius-sm) var(--p-radius-sm) 0 0 !important;
+  background: transparent !important; color: var(--p-text-muted) !important;
+  font-size: .82rem; font-weight: 600; line-height: 1.2;
+}
+.pssms-page .nav-tabs .nav-link:hover,
+.pssms-page .pssms-tabs .nav-link:hover { background: var(--p-hover) !important; color: var(--p-text) !important; }
+.pssms-page .nav-tabs .nav-link.active,
+.pssms-page .pssms-tabs .nav-link.active {
+  color: var(--p-accent) !important; border-bottom-color: var(--p-accent) !important;
+  background: var(--p-accent-soft) !important;
+}
+
+/* Primary actions use the same pill geometry and the colour of the current department.
+   Button groups remain joined controls, so they deliberately keep Bootstrap geometry. */
+.pssms-page .btn-primary,
+.pssms-modal .btn-primary,
+.pssms-page .btn-accent,
+.pssms-modal .btn-accent {
+  min-height: 36px; padding-inline: 1rem; border-radius: 999px;
+  background: var(--p-accent); border-color: var(--p-accent); color: #fff;
+}
+.pssms-page .btn-primary:hover,
+.pssms-page .btn-accent:hover,
+.pssms-modal .btn-primary:hover,
+.pssms-modal .btn-accent:hover { background: var(--p-accent-hover); border-color: var(--p-accent-hover); color:#fff; }
+.pssms-page .btn-soft,
+.pssms-modal .btn-soft { min-height: 36px; border-radius: 999px; padding-inline: .9rem; }
+.pssms-page .btn-sm,
+.pssms-modal .btn-sm { min-height: 30px; padding-block: .28rem; }
+
 /* ==========================================
    📦 3. UI COMPONENTS (การ์ด & ปุ่ม & อื่นๆ)
 ========================================== */
