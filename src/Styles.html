@@ -541,6 +541,13 @@ div.dept-btn { cursor: default; pointer-events: none; }
 .pssms-page .btn-sm,
 .pssms-modal .btn-sm { min-height: 30px; padding-block: .28rem; }
 
+/* ปุ่มจัดการบนการ์ดเอกสารโครงการเป็นไอคอนพอดีมือ ไม่รับความกว้างของ .btn-soft ทั่วหน้า */
+.pssms-page .project-document-actions { display: inline-flex; gap: .25rem; }
+.pssms-page .project-document-action {
+  width: 30px; min-width: 30px; height: 30px; min-height: 30px;
+  padding: 0; display: inline-flex; align-items: center; justify-content: center;
+}
+
 /* ==========================================
    📦 3. UI COMPONENTS (การ์ด & ปุ่ม & อื่นๆ)
 ========================================== */
