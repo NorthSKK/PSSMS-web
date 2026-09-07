@@ -2716,6 +2716,27 @@ function _mediaBindReader() {
 
 // ---------- ฟอร์มเพิ่ม/แก้การ์ด ----------
 
+var mediaCardSaving = false;
+function _mediaSetSaving(saving) {
+  mediaCardSaving = saving;
+  var save = document.getElementById('mcSaveBtn');
+  if (save) save.innerHTML = saving
+    ? '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...'
+    : '<i class="fas fa-floppy-disk me-1"></i>บันทึก';
+  if (save) save.disabled = saving;
+  ['mcCancelBtn', 'mcCloseBtn'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.disabled = saving;
+  });
+}
+function _mediaSetUploadProgress(done, total, fileName) {
+  var box = document.getElementById('mcUploadProgress');
+  if (!box) return;
+  box.classList.remove('d-none');
+  document.getElementById('mcUploadText').textContent = fileName ? 'กำลังอัปโหลด: ' + fileName : 'กำลังเตรียมไฟล์...';
+  document.getElementById('mcUploadCount').textContent = done + ' / ' + total;
+  document.getElementById('mcUploadBar').style.width = (total ? Math.round(done * 100 / total) : 100) + '%';
+}
+
 function openMediaCardForm(id) {
   var opts = _mediaState.options;
   if (!opts) { _mediaLoadOptions(function() { openMediaCardForm(id); }); return; }
@@ -2727,6 +2748,8 @@ function openMediaCardForm(id) {
   }
 
   document.getElementById('mcId').value = card ? card.id : '';
+  _mediaSetSaving(false);
+  document.getElementById('mcUploadProgress').classList.add('d-none');
   _mediaSetupType(card, opts);
   document.getElementById('mcModalTitle').textContent = card ? 'แก้ไขการ์ดสื่อ' : 'เพิ่มการ์ดสื่อ';
   document.getElementById('mcTitle').value = card ? card.title : '';
@@ -2755,6 +2778,12 @@ function openMediaCardForm(id) {
   if (!card) _mediaApplyGroupDefaults('');
 
   var el = document.getElementById('mediaCardModal');
+  if (!el.dataset.uploadGuard) {
+    el.addEventListener('hide.bs.modal', function(e) {
+      if (mediaCardSaving) e.preventDefault();
+    });
+    el.dataset.uploadGuard = 'true';
+  }
   _mediaState.modal = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
   _mediaState.modal.show();
 }
@@ -2889,6 +2918,7 @@ function _mediaBuildLevels(levels, picked) {
 }
 
 function saveMediaCardForm() {
+  if (mediaCardSaving) return;
   var levels = [];
   Array.prototype.forEach.call(
     document.querySelectorAll('#mcLevels input:checked'),
@@ -2923,9 +2953,8 @@ function saveMediaCardForm() {
   var failed = function(msg) { Swal.fire('บันทึกไม่สำเร็จ', msg, 'error'); };
 
   var send = function() {
-    var btn = document.getElementById('mcSaveBtn');
-    if (btn) btn.disabled = true;
-    var release = function() { if (btn) btn.disabled = false; };
+    _mediaSetSaving(true);
+    var release = function() { _mediaSetSaving(false); };
 
     // บันทึกการ์ดก่อนเสมอ แล้วค่อยแนบไฟล์ — ไฟล์ต้องมี card id ให้ผูกก่อนถึงจะอัปได้
     google.script.run
@@ -2963,17 +2992,6 @@ function _mediaUploadAll(cardId, files, done, failed) {
   var uploaded = 0;
   var errors = [];
 
-  Swal.fire({
-    title: 'กำลังอัปโหลด...',
-    html: '<div id="mcUpProgress" class="small"></div>',
-    allowOutsideClick: false,
-    didOpen: function() { Swal.showLoading(); }
-  });
-  var progress = function(text) {
-    var el = document.getElementById('mcUpProgress');
-    if (el) el.textContent = text;
-  };
-
   var step = function(i) {
     if (i >= files.length) {
       if (!errors.length) { done(); return; }
@@ -2983,7 +3001,7 @@ function _mediaUploadAll(cardId, files, done, failed) {
       return;
     }
     var f = files[i];
-    progress('(' + (i + 1) + '/' + files.length + ') ' + f.name);
+    _mediaSetUploadProgress(i, files.length, f.name);
 
     _mediaShrinkImage(f).then(function(body) {
       var fd = new FormData();
@@ -3000,6 +3018,7 @@ function _mediaUploadAll(cardId, files, done, failed) {
       .then(function(res) {
         if (res.__error) errors.push(f.name + ' — ' + res.__error);
         else uploaded++;
+        _mediaSetUploadProgress(i + 1, files.length, f.name);
         step(i + 1);
       })
       .catch(function(err) {
