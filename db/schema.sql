@@ -429,7 +429,7 @@ CREATE INDEX IF NOT EXISTS idx_sarabun_year ON sarabun(year);
 -- PROJECT DOCUMENTS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS project_documents (
-  id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+  id SERIAL PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'โครงการ', description TEXT NOT NULL DEFAULT '',
   owner_id TEXT NOT NULL, owner_name TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -439,6 +439,7 @@ CREATE TABLE IF NOT EXISTS project_files (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_project_documents_updated ON project_documents(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_project_documents_category ON project_documents(category, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files(project_id,id);
 
 -- ============================================================

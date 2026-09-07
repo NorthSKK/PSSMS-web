@@ -4,6 +4,7 @@ const { isAdmin } = require('../lib/permissions');
 const storage = require('../lib/storage');
 
 const MAX_ATTACH_MB = 100;
+const CATEGORIES = ['โครงการ', 'แผนงาน', 'รายงาน', 'เอกสารประกอบ'];
 const idOf = user => String(user?.id || '').trim();
 function assertOwner(user, row, message) {
   if (!isAdmin(user) && (!row || String(row.owner_id || '') !== idOf(user))) throw new Error(message);
@@ -11,30 +12,31 @@ function assertOwner(user, row, message) {
 function clean(value, max) { return String(value || '').trim().slice(0, max); }
 
 async function getProjectDocuments(_args, user) {
-  const { rows } = await query(`SELECT p.id,p.title,p.description,p.owner_id,p.owner_name,
+  const { rows } = await query(`SELECT p.id,p.title,p.category,p.description,p.owner_id,p.owner_name,
       to_char(p.updated_at,'YYYY-MM-DD HH24:MI') updated_at,
       COALESCE(json_agg(json_build_object('id',f.id,'name',f.file_name,'size',f.file_size)
         ORDER BY f.id) FILTER (WHERE f.id IS NOT NULL),'[]'::json) files
     FROM project_documents p LEFT JOIN project_files f ON f.project_id=p.id
     GROUP BY p.id ORDER BY p.updated_at DESC,p.id DESC`);
-  return rows.map(r => ({ id:r.id, title:r.title, description:r.description || '', ownerName:r.owner_name,
+  return rows.map(r => ({ id:r.id, title:r.title, category:r.category || 'โครงการ', description:r.description || '', ownerName:r.owner_name,
     updatedAt:r.updated_at, files:r.files || [], mine:isAdmin(user) || String(r.owner_id) === idOf(user) }));
 }
 
 async function saveProjectDocument([data], user) {
   const d = data || {}, title = clean(d.title, 160), description = clean(d.description, 2000), id = Number(d.id);
+  const category = CATEGORIES.includes(d.category) ? d.category : 'โครงการ';
   if (!title) throw new Error('กรุณาระบุชื่อโครงการ');
   if (Number.isInteger(id) && id > 0) {
     const { rows } = await query('SELECT owner_id FROM project_documents WHERE id=$1', [id]);
     if (!rows[0]) throw new Error('ไม่พบโครงการนี้');
     assertOwner(user, rows[0], 'แก้ไขได้เฉพาะโครงการของคุณ');
-    await query('UPDATE project_documents SET title=$1,description=$2,updated_at=NOW() WHERE id=$3', [title,description,id]);
+    await query('UPDATE project_documents SET title=$1,category=$2,description=$3,updated_at=NOW() WHERE id=$4', [title,category,description,id]);
     return { status:'success', message:'บันทึกโครงการแล้ว', id };
   }
   const owner = await query('SELECT full_name FROM users WHERE username=$1', [idOf(user)]);
   const ownerName = String((owner.rows[0] && owner.rows[0].full_name) || user?.name || '');
-  const { rows } = await query(`INSERT INTO project_documents(title,description,owner_id,owner_name)
-    VALUES($1,$2,$3,$4) RETURNING id`, [title,description,idOf(user),ownerName]);
+  const { rows } = await query(`INSERT INTO project_documents(title,category,description,owner_id,owner_name)
+    VALUES($1,$2,$3,$4,$5) RETURNING id`, [title,category,description,idOf(user),ownerName]);
   return { status:'success', message:'สร้างโครงการแล้ว', id:rows[0].id };
 }
 async function project(id) { return (await query('SELECT id,owner_id FROM project_documents WHERE id=$1',[id])).rows[0]; }
@@ -74,4 +76,4 @@ async function getProjectFileTicket([id], user) {
   const file=rows[0]; if (!file) throw new Error('ไม่พบไฟล์นี้');
   return { url:await storage.getFileUrl({kind:'project',id:file.id,key:file.file_key,filename:file.file_name,user}) };
 }
-module.exports={MAX_ATTACH_MB,getProjectDocuments,saveProjectDocument,attachProjectFile,deleteProjectDocument,deleteProjectFile,getProjectFileTicket};
+module.exports={MAX_ATTACH_MB,CATEGORIES,getProjectDocuments,saveProjectDocument,attachProjectFile,deleteProjectDocument,deleteProjectFile,getProjectFileTicket};

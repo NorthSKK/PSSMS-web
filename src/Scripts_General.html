@@ -3214,6 +3214,13 @@ function restoreMediaCardById(id) {
 // ── เอกสารโครงการ ──────────────────────────────────────────────────────
 var projectDocumentsData = [];
 var projectSaving = false;
+var projectCategoryFilter = 'ทั้งหมด';
+var PROJECT_CATEGORY_STYLE = {
+  'โครงการ': { icon:'fa-diagram-project', color:'#6f42c1' },
+  'แผนงาน': { icon:'fa-calendar-check', color:'#0d6efd' },
+  'รายงาน': { icon:'fa-chart-column', color:'#198754' },
+  'เอกสารประกอบ': { icon:'fa-paperclip', color:'#e67e22' }
+};
 function _projectEsc(value) {
   return String(value == null ? '' : value).replace(/[&<>"']/g, function(c) {
     return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
@@ -3232,18 +3239,27 @@ window.loadProjectDocuments = function() {
     document.getElementById('projectDocumentsList').innerHTML = '<div class="col-12 text-danger text-center py-4">โหลดเอกสารโครงการไม่สำเร็จ: ' + _projectEsc(err.message) + '</div>';
   }).withSuccessHandler(function(rows) {
     projectDocumentsData = rows || [];
-    var target = document.getElementById('projectDocumentsList');
-    if (!projectDocumentsData.length) { target.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-2x mb-3 d-block"></i>ยังไม่มีเอกสารโครงการ</div>'; return; }
-    target.innerHTML = projectDocumentsData.map(function(p) {
-      var files = (p.files || []).map(function(f) { return '<li class="d-flex align-items-center gap-2 py-1"><i class="fas fa-paperclip text-muted"></i><a href="javascript:void(0)" class="text-decoration-none text-break" onclick="openProjectFile(' + Number(f.id) + ')">' + _projectEsc(f.name) + '</a><small class="text-muted ms-auto text-nowrap">' + _projectSize(f.size) + '</small>' + (p.mine ? '<button class="btn btn-link text-danger p-0" onclick="deleteProjectFile(' + Number(f.id) + ')"><i class="fas fa-times"></i></button>' : '') + '</li>'; }).join('');
-      return '<div class="col-md-6 col-xl-4"><div class="pssms-card h-100"><div class="pssms-card-header d-flex justify-content-between gap-2"><span class="text-truncate"><i class="fas fa-folder me-2" style="color:#6f42c1"></i>' + _projectEsc(p.title) + '</span>' + (p.mine ? '<span class="text-nowrap"><button class="btn btn-sm btn-soft" onclick="openProjectDocumentForm(' + Number(p.id) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-soft text-danger" onclick="deleteProjectDocument(' + Number(p.id) + ')"><i class="fas fa-trash"></i></button></span>' : '') + '</div><div class="p-3"><p class="small text-muted mb-2" style="white-space:pre-wrap">' + _projectEsc(p.description || 'ไม่มีรายละเอียด') + '</p><div class="small mb-2"><i class="fas fa-user me-1"></i>' + _projectEsc(p.ownerName) + '<span class="text-muted"> · ' + _projectEsc(p.updatedAt) + '</span></div><ul class="list-unstyled small mb-0">' + (files || '<li class="text-muted">ยังไม่มีไฟล์แนบ</li>') + '</ul></div></div></div>';
-    }).join('');
+    renderProjectDocuments();
   }).getProjectDocuments();
 };
+window.setProjectCategoryFilter = function(category) { projectCategoryFilter = category; renderProjectDocuments(); };
+function renderProjectDocuments() {
+  var target = document.getElementById('projectDocumentsList'), filter = document.getElementById('projectCategoryFilters');
+  var categories = ['ทั้งหมด', 'โครงการ', 'แผนงาน', 'รายงาน', 'เอกสารประกอบ'];
+  filter.innerHTML = categories.map(function(c) { var active = c === projectCategoryFilter; return '<button class="btn btn-sm rounded-pill ' + (active ? 'btn-accent' : 'btn-soft') + '" onclick="setProjectCategoryFilter(\'' + c + '\')">' + c + ' <span class="opacity-75">' + (c === 'ทั้งหมด' ? projectDocumentsData.length : projectDocumentsData.filter(function(p){return p.category === c;}).length) + '</span></button>'; }).join('');
+  var rows = projectCategoryFilter === 'ทั้งหมด' ? projectDocumentsData : projectDocumentsData.filter(function(p) { return p.category === projectCategoryFilter; });
+  if (!rows.length) { target.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="fas fa-folder-open fa-2x mb-3 d-block"></i>ยังไม่มีเอกสารในประเภทนี้</div>'; return; }
+  target.innerHTML = rows.map(function(p) {
+    var style = PROJECT_CATEGORY_STYLE[p.category] || PROJECT_CATEGORY_STYLE['โครงการ'];
+    var files = (p.files || []).map(function(f) { return '<li class="d-flex align-items-center gap-2 py-1"><i class="fas fa-paperclip text-muted"></i><a href="javascript:void(0)" class="text-decoration-none text-break" onclick="openProjectFile(' + Number(f.id) + ')">' + _projectEsc(f.name) + '</a><small class="text-muted ms-auto text-nowrap">' + _projectSize(f.size) + '</small>' + (p.mine ? '<button class="btn btn-link text-danger p-0" onclick="deleteProjectFile(' + Number(f.id) + ')"><i class="fas fa-times"></i></button>' : '') + '</li>'; }).join('');
+    return '<div class="col-sm-6 col-lg-4 col-xxl-3"><div class="pssms-card h-100 overflow-hidden" style="border-top:3px solid ' + style.color + '"><div class="p-3"><div class="d-flex justify-content-between align-items-start gap-2 mb-2"><span class="badge rounded-pill" style="background:' + style.color + '18;color:' + style.color + '"><i class="fas ' + style.icon + ' me-1"></i>' + _projectEsc(p.category) + '</span>' + (p.mine ? '<span class="text-nowrap"><button class="btn btn-sm btn-soft py-0 px-1" title="แก้ไข" onclick="openProjectDocumentForm(' + Number(p.id) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-soft text-danger py-0 px-1" title="ลบ" onclick="deleteProjectDocument(' + Number(p.id) + ')"><i class="fas fa-trash"></i></button></span>' : '') + '</div><div class="fw-bold text-truncate mb-1" title="' + _projectEsc(p.title) + '">' + _projectEsc(p.title) + '</div><p class="small text-muted mb-2" style="height:2.5em;overflow:hidden">' + _projectEsc(p.description || 'ไม่มีรายละเอียด') + '</p><div class="d-flex justify-content-between align-items-center small text-muted"><span class="text-truncate"><i class="fas fa-user me-1"></i>' + _projectEsc(p.ownerName) + '</span><span class="ms-2 text-nowrap">' + (p.files || []).length + ' ไฟล์</span></div>' + (files ? '<details class="small mt-2"><summary class="text-primary" style="cursor:pointer">เปิดรายการไฟล์</summary><ul class="list-unstyled mb-0 mt-1">' + files + '</ul></details>' : '') + '</div></div></div>';
+  }).join('');
+}
 window.openProjectDocumentForm = function(id) {
   var p = (projectDocumentsData || []).find(function(row) { return Number(row.id) === Number(id); }) || {};
   document.getElementById('projectDocumentId').value = p.id || '';
   document.getElementById('projectDocumentTitle').value = p.title || '';
+  document.getElementById('projectDocumentCategory').value = p.category || 'โครงการ';
   document.getElementById('projectDocumentDescription').value = p.description || '';
   document.getElementById('projectDocumentFiles').value = '';
   document.getElementById('projectFilePreview').innerHTML = '';
@@ -3275,7 +3291,7 @@ window.saveProjectDocumentForm = function() {
   if (projectSaving) return;
   var title = document.getElementById('projectDocumentTitle').value.trim();
   if (!title) { showToast('กรุณาระบุชื่อโครงการ', 'danger'); return; }
-  var payload = { id:document.getElementById('projectDocumentId').value, title:title, description:document.getElementById('projectDocumentDescription').value };
+  var payload = { id:document.getElementById('projectDocumentId').value, title:title, category:document.getElementById('projectDocumentCategory').value, description:document.getElementById('projectDocumentDescription').value };
   var files = Array.prototype.slice.call(document.getElementById('projectDocumentFiles').files || []);
   _setProjectSaving(true);
   google.script.run.withFailureHandler(function(err) { _setProjectSaving(false); showToast(err.message || 'บันทึกโครงการไม่สำเร็จ', 'danger'); }).withSuccessHandler(async function(res) {

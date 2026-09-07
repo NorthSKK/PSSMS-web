@@ -5,6 +5,7 @@
     <button id="projectNewButton" class="btn btn-accent fw-bold" onclick="openProjectDocumentForm()"><i class="fas fa-plus me-1"></i>เพิ่มโครงการ</button>
   </div>
   <div class="alert alert-light border small mb-3"><i class="fas fa-users me-1 text-primary"></i>บุคลากรทุกคนเปิดดูและดาวน์โหลดได้ · แก้ไขหรืออัปโหลดได้เฉพาะเจ้าของโครงการและผู้ดูแลระบบ</div>
+  <div id="projectCategoryFilters" class="d-flex flex-wrap gap-2 mb-3"></div>
   <div id="projectDocumentsList" class="row g-3"><div class="col-12 text-center text-muted py-5"><div class="spinner-border spinner-border-sm me-2"></div>กำลังโหลดเอกสารโครงการ...</div></div>
 </div>
 
@@ -13,6 +14,7 @@
   <div class="modal-header"><h6 class="modal-title fw-bold">ข้อมูลโครงการ</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body"><input type="hidden" id="projectDocumentId">
    <div class="mb-3"><label class="form-label small">ชื่อโครงการ <span class="text-danger">*</span></label><input class="form-control" id="projectDocumentTitle" maxlength="160"></div>
+   <div class="mb-3"><label class="form-label small">ประเภทเอกสาร</label><select class="form-select" id="projectDocumentCategory"><option value="โครงการ">โครงการ</option><option value="แผนงาน">แผนงาน</option><option value="รายงาน">รายงาน</option><option value="เอกสารประกอบ">เอกสารประกอบ</option></select></div>
    <div class="mb-3"><label class="form-label small">รายละเอียด</label><textarea class="form-control" id="projectDocumentDescription" rows="4" maxlength="2000"></textarea></div>
    <div class="mb-1"><label class="form-label small fw-bold">แนบไฟล์เพิ่ม</label><input class="form-control" id="projectDocumentFiles" type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" multiple onchange="previewProjectFiles()"></div>
    <div class="form-text">เลือกได้หลายไฟล์ · PDF, JPG, PNG หรือ Word (.docx) ขนาดไม่เกิน 100 MB ต่อไฟล์</div>
