@@ -95,7 +95,7 @@ function renderTodoList(todos) {
     html += `<li class="list-group-item d-flex justify-content-between align-items-center ${bgStyle} border-0 border-bottom px-2 py-1 mb-0 w-100 ${animationClass}" style="border-color: #f5f5f5 !important; border-radius: 0;">
       <div class="form-check d-flex align-items-center mb-0" style="flex-grow: 1; min-width: 0;">
         <input class="form-check-input me-3 rounded-circle border-secondary" type="checkbox" id="todo_${index}" ${isDone ? 'checked' : ''} onchange="toggleTodoByObject('${encodeURIComponent(JSON.stringify(todo))}')" style="cursor:pointer; width:1rem; height:1rem; margin-top: 0; flex-shrink: 0; opacity: 0.7;">
-        <label class="form-check-label text-truncate ${textStyle}" for="todo_${index}" style="font-size: 0.85rem; cursor:pointer; line-height: 1.4; width: 100%;">${todo.text}</label>
+        <label class="form-check-label ${textStyle}" for="todo_${index}" style="font-size: 0.85rem; cursor:pointer; line-height: 1.4; width: 100%; white-space: normal; overflow-wrap: anywhere;">${todo.text}</label>
       </div>
       <button class="btn btn-link btn-sm text-danger p-0 ms-2" onclick="deleteTodoByText('${encodeURIComponent(todo.text)}')" style="border: none; text-decoration: none; opacity: 0.3; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.3'" title="ลบ"><i class="fas fa-times" style="font-size: 0.8rem;"></i></button>
     </li>`;
