@@ -1100,12 +1100,23 @@ body.dark-mode .pssms-dept-general {
     .grid-wrapper { overflow: visible; }
 }
 
-/* iOS PWA standalone — safe area for notch / Dynamic Island */
-@media (display-mode: standalone) {
-  #sidebar { padding-top: env(safe-area-inset-top); }
-  .navbar { padding-top: calc(0.5rem + env(safe-area-inset-top)); }
-  #page-content { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
-  button, .btn, a { touch-action: manipulation; }
+/* Safe Area บนมือถือ — iOS บางรุ่นไม่ match `(display-mode: standalone)`
+   แม้เปิดจากไอคอน Home Screen แล้ว จึงใช้ env() ตรง ๆ: ในเบราว์เซอร์ทั่วไป
+   ค่านี้เป็น 0 แต่ใน PWA จะดันปุ่มลงใต้ Dynamic Island / แถบสถานะพอดี */
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (max-width: 768px) {
+    #main-app #content > .navbar {
+      padding-top: calc(.5rem + env(safe-area-inset-top)) !important;
+      min-height: calc(56px + env(safe-area-inset-top));
+    }
+    #sidebar {
+      padding-top: env(safe-area-inset-top);
+      height: 100dvh;
+      box-sizing: border-box;
+    }
+    #page-content { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+    button, .btn, a { touch-action: manipulation; }
+  }
 }
 
 /* ==========================================
