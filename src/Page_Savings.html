@@ -2,7 +2,7 @@
   <div class="pssms-page-header">
     <div>
       <h4><i class="fas fa-piggy-bank me-2" style="color:var(--p-accent);"></i>ระบบออมเงินนักเรียน</h4>
-      <p class="pssms-subtitle">บันทึกการออมเงิน · ยอดคงเหลือ · นำเข้าข้อมูล</p>
+      <p class="pssms-subtitle">บันทึกการออมเงิน ตรวจสอบยอด และนำเข้าข้อมูลได้ในที่เดียว</p>
     </div>
   </div>
 
@@ -27,26 +27,26 @@
 
   <!-- ── TAB: บันทึก ── -->
   <div id="savings-tab-record">
-    <div class="pssms-card mb-3">
+    <div class="pssms-card savings-context-card mb-3">
       <div class="pssms-card-header">
         <span><i class="fas fa-sliders-h me-2" style="color:#6f42c1;"></i>เลือกข้อมูล</span>
       </div>
       <div class="p-3">
         <div class="row g-2 align-items-end">
-          <div class="col-sm-4">
+          <div class="col-md-5 col-sm-4">
             <label class="form-label small text-muted mb-1">ห้องเรียน</label>
             <select class="form-select" id="recordClass" onchange="loadRecordRoster()">
               <option value="">-- เลือกห้อง --</option>
             </select>
           </div>
-          <div class="col-sm-3">
+          <div class="col-md-3 col-sm-3">
             <label class="form-label small text-muted mb-1">เทอม</label>
             <select class="form-select" id="recordTerm">
               <option value="1">1</option>
               <option value="2">2</option>
             </select>
           </div>
-          <div class="col-sm-3">
+          <div class="col-md-3 col-sm-3">
             <label class="form-label small text-muted mb-1">ปีการศึกษา</label>
             <select class="form-select" id="recordYear"></select>
           </div>
@@ -55,9 +55,12 @@
     </div>
 
     <div id="recordPanel" style="display:none;">
-      <div class="pssms-card mb-3">
+      <div class="pssms-card savings-workspace mb-3">
         <div class="pssms-card-header" style="justify-content:space-between;">
-          <span><i class="fas fa-edit me-2" style="color:#6f42c1;"></i>บันทึกการออม</span>
+          <div>
+            <span><i class="fas fa-edit me-2" style="color:#6f42c1;"></i>บันทึกการออม</span>
+            <small id="recordContext" class="savings-context-label">เลือกห้องเพื่อเริ่มบันทึก</small>
+          </div>
           <div class="d-flex align-items-center gap-2">
             <!-- Mode toggle -->
             <div class="btn-group btn-group-sm" role="group">
@@ -74,23 +77,28 @@
         </div>
         <div class="p-3">
           <!-- Fill all row -->
-          <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded-3" style="background:var(--p-accent-soft);">
-            <i class="fas fa-fill-drip" style="color:#6f42c1;"></i>
-            <span class="small fw-medium">กรอกทุกคนที่เลือก</span>
+          <div class="savings-bulk-bar">
+            <div class="savings-bulk-title"><i class="fas fa-fill-drip"></i><span>กรอกยอดพร้อมกัน</span></div>
+            <div class="savings-bulk-controls">
             <input type="number" class="form-control form-control-sm" id="fillAllAmount"
                    placeholder="จำนวนเงิน" min="1" style="max-width:130px;">
             <button class="btn btn-sm btn-soft" onclick="fillAllSavings()">
               <i class="fas fa-magic me-1"></i>กรอก
             </button>
-            <div class="ms-auto form-check mb-0">
+            </div>
+            <div class="form-check mb-0">
               <input class="form-check-input" type="checkbox" id="checkAll" onchange="toggleAllSavings(this.checked)">
               <label class="form-check-label small" for="checkAll">เลือกทั้งหมด</label>
             </div>
           </div>
 
           <!-- Student table -->
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" style="font-size:0.9rem;">
+          <div class="savings-selection-summary" aria-live="polite">
+            <span id="savingsSelectedCount">เลือก 0 คน</span>
+            <strong id="savingsEntryTotal">รวม 0.00 บาท</strong>
+          </div>
+          <div class="table-responsive savings-record-table-wrap">
+            <table class="table table-hover align-middle mb-0 savings-record-table" style="font-size:0.9rem;">
               <thead class="table-light">
                 <tr>
                   <th style="width:36px;"></th>
@@ -104,8 +112,9 @@
             </table>
           </div>
 
-          <div class="d-flex justify-content-end mt-3">
-            <button class="btn btn-accent fw-bold px-4" onclick="submitSavings()">
+          <div class="savings-save-bar">
+            <span class="small text-muted" id="savingsSaveHint">กรอกยอดแล้วบันทึกรายการที่เลือก</span>
+            <button class="btn btn-accent fw-bold px-4" id="savingsSubmitBtn" onclick="submitSavings()">
               <i class="fas fa-save me-2"></i>บันทึกทั้งหมด
             </button>
           </div>
@@ -116,7 +125,7 @@
 
   <!-- ── TAB: ยอดคงเหลือ ── -->
   <div id="savings-tab-summary" style="display:none;">
-    <div class="pssms-card mb-3">
+    <div class="pssms-card savings-context-card mb-3">
       <div class="pssms-card-header">
         <span><i class="fas fa-search me-2" style="color:#6f42c1;"></i>เลือกห้องเรียน</span>
       </div>
@@ -138,6 +147,7 @@
     </div>
 
     <div id="summaryPanel" style="display:none;">
+      <div class="row g-2 mb-3" id="savingsSummaryKpis" aria-live="polite"></div>
       <div class="pssms-card">
         <div class="pssms-card-header" style="justify-content:space-between;">
           <span><i class="fas fa-chart-bar me-2" style="color:#6f42c1;"></i>ยอดคงเหลือ</span>
@@ -152,7 +162,7 @@
                 <th class="text-end" style="width:110px;">ฝากรวม</th>
                 <th class="text-end" style="width:110px;">ถอนรวม</th>
                 <th class="text-end" style="width:120px;">คงเหลือ</th>
-                <th style="width:36px;"></th>
+                <th class="text-end" style="width:105px;">รายละเอียด</th>
               </tr>
             </thead>
             <tbody id="summaryTableBody"></tbody>
@@ -165,7 +175,7 @@
 
   <!-- ── TAB: นำเข้า CSV ── -->
   <div id="savings-tab-import" style="display:none;">
-    <div class="pssms-card mb-3">
+    <div class="pssms-card savings-import-card mb-3">
       <div class="pssms-card-header">
         <span><i class="fas fa-file-import me-2" style="color:#6f42c1;"></i>นำเข้าข้อมูลจาก CSV</span>
       </div>
@@ -184,7 +194,7 @@
           </div>
         </div>
 
-        <div class="mb-3 p-3 rounded-3" style="background:#f8f9fa;border:1.5px dashed #dee2e6;">
+        <div class="savings-csv-format mb-3">
           <p class="small text-muted mb-2"><strong>Format ที่รองรับ (header บรรทัดแรก):</strong></p>
           <code style="font-size:0.78rem;">timestamp,student_id,student_name,type,amount,balance_after,teacher_name</code>
           <p class="small text-muted mt-2 mb-0">type: ฝาก / ถอน / deposit / withdraw</p>
@@ -192,10 +202,16 @@
 
         <input type="file" id="savingsCSVFile" accept=".csv,.txt" style="display:none;"
                onchange="previewSavingsCSV(event)">
-        <button class="btn btn-soft" onclick="document.getElementById('savingsCSVFile').click()">
-          <i class="fas fa-folder-open me-2"></i>เลือกไฟล์ CSV
-        </button>
-        <span id="csvFileName" class="ms-2 small text-muted"></span>
+        <div class="savings-file-picker">
+          <div class="savings-file-icon"><i class="fas fa-file-csv"></i></div>
+          <div class="flex-grow-1">
+            <div class="fw-semibold">เลือกไฟล์รายการออมเงิน</div>
+            <div id="csvFileName" class="small text-muted">รองรับไฟล์ .csv หรือ .txt</div>
+          </div>
+          <button class="btn btn-soft" onclick="document.getElementById('savingsCSVFile').click()">
+            <i class="fas fa-folder-open me-2"></i>เลือกไฟล์
+          </button>
+        </div>
       </div>
     </div>
 

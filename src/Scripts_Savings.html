@@ -3,6 +3,7 @@
 let _savingsRoster = [];       // [{ studentId, studentName, class }]
 let _csvRawText = '';
 let _csvParsedRows = [];
+let _savingsSubmitting = false;
 
 // ── Init (called by loadPage) ──────────────────────────────────────────────
 function initSavingsPage() {
@@ -72,7 +73,8 @@ function switchSavingsTab(tab) {
 function loadRecordRoster() {
   const cls = document.getElementById('recordClass').value;
   if (!cls) return;
-  document.getElementById('recordPanel').style.display = 'none';
+  document.getElementById('recordPanel').style.display = '';
+  document.getElementById('recordContext').textContent = 'กำลังโหลดรายชื่อนักเรียน…';
   document.getElementById('recordTableBody').innerHTML =
     '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin me-2"></i>กำลังโหลด...</td></tr>';
 
@@ -80,9 +82,13 @@ function loadRecordRoster() {
     .withSuccessHandler(function(students) {
       _savingsRoster = students || [];
       renderRecordTable();
+      document.getElementById('recordContext').textContent = `${cls} · ${_savingsRoster.length} คน`;
       document.getElementById('recordPanel').style.display = '';
     })
     .withFailureHandler(function(e) {
+      document.getElementById('recordContext').textContent = 'โหลดรายชื่อไม่สำเร็จ';
+      document.getElementById('recordTableBody').innerHTML =
+        '<tr><td colspan="5" class="text-center text-danger py-4"><i class="fas fa-circle-exclamation d-block mb-2"></i>โหลดรายชื่อไม่สำเร็จ กรุณาเลือกห้องอีกครั้ง</td></tr>';
       showToast('โหลดรายชื่อไม่สำเร็จ: ' + e.message, 'danger');
     })
     // ⚠️ ส่งเป็น arg ทีละตัว ไม่ใช่ array ก้อนเดียว — gas-shim ห่อ args ให้อยู่แล้ว
@@ -100,29 +106,36 @@ function updateSavingsTableColor() {
 function renderRecordTable() {
   const tbody = document.getElementById('recordTableBody');
   if (_savingsRoster.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">ไม่พบนักเรียน</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-user-slash d-block mb-2"></i>ไม่พบนักเรียนในห้องนี้</td></tr>';
+    updateSavingsSelectionSummary();
     return;
   }
   tbody.innerHTML = _savingsRoster.map((s, i) => `
     <tr>
-      <td><input class="form-check-input student-check" type="checkbox" data-idx="${i}" checked></td>
-      <td class="text-muted small">${escHtml(s[0] || '')}</td>
-      <td>${escHtml(s[2] || '')}</td>
-      <td>
+      <td data-label="เลือก"><input class="form-check-input student-check" type="checkbox" data-idx="${i}" checked aria-label="เลือกรายการ ${escHtml(s[2] || '')}"></td>
+      <td class="text-muted small" data-label="รหัส">${escHtml(s[0] || '')}</td>
+      <td data-label="ชื่อ-สกุล" class="savings-student-name">${escHtml(s[2] || '')}</td>
+      <td data-label="จำนวนเงิน">
         <input type="number" class="form-control form-control-sm savings-amount"
-               data-idx="${i}" min="0" placeholder="0" style="max-width:130px;">
+               data-idx="${i}" min="0" placeholder="0.00" inputmode="decimal" style="max-width:130px;">
       </td>
-      <td>
+      <td data-label="หมายเหตุ">
         <input type="text" class="form-control form-control-sm savings-note"
                data-idx="${i}" placeholder="หมายเหตุ">
       </td>
     </tr>
   `).join('');
+  document.querySelectorAll('.student-check, .savings-amount').forEach(function(el) {
+    el.addEventListener('input', updateSavingsSelectionSummary);
+    el.addEventListener('change', updateSavingsSelectionSummary);
+  });
   updateSavingsTableColor();
+  updateSavingsSelectionSummary();
 }
 
 function toggleAllSavings(checked) {
   document.querySelectorAll('.student-check').forEach(cb => { cb.checked = checked; });
+  updateSavingsSelectionSummary();
 }
 
 function fillAllSavings() {
@@ -133,9 +146,35 @@ function fillAllSavings() {
     const inp = document.querySelector(`.savings-amount[data-idx="${idx}"]`);
     if (inp) inp.value = val;
   });
+  updateSavingsSelectionSummary();
+}
+
+function updateSavingsSelectionSummary() {
+  const checked = Array.from(document.querySelectorAll('.student-check:checked'));
+  const total = checked.reduce(function(sum, cb) {
+    const field = document.querySelector('.savings-amount[data-idx="' + cb.dataset.idx + '"]');
+    return sum + (parseFloat(field && field.value) || 0);
+  }, 0);
+  const count = document.getElementById('savingsSelectedCount');
+  const entry = document.getElementById('savingsEntryTotal');
+  const hint = document.getElementById('savingsSaveHint');
+  if (count) count.textContent = `เลือก ${checked.length} คน`;
+  if (entry) entry.textContent = `รวม ${fmtMoney(total)} บาท`;
+  if (hint) hint.textContent = total > 0 ? `พร้อมบันทึก ${checked.length} รายการ` : 'กรอกยอดแล้วบันทึกรายการที่เลือก';
+}
+
+function setSavingsSubmitting(saving) {
+  _savingsSubmitting = saving;
+  const button = document.getElementById('savingsSubmitBtn');
+  if (!button) return;
+  button.disabled = saving;
+  button.innerHTML = saving
+    ? '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...'
+    : '<i class="fas fa-save me-2"></i>บันทึกทั้งหมด';
 }
 
 async function submitSavings() {
+  if (_savingsSubmitting) return;
   const cls   = document.getElementById('recordClass').value;
   const term  = document.getElementById('recordTerm').value;
   const year  = document.getElementById('recordYear').value;
@@ -201,6 +240,8 @@ async function submitSavings() {
   });
   if (!isConfirmed) return;
 
+  setSavingsSubmitting(true);
+
   google.script.run
     .withSuccessHandler(function(res) {
       showToast(res.message, 'success');
@@ -208,8 +249,10 @@ async function submitSavings() {
       document.querySelectorAll('.savings-amount').forEach(i => { i.value = ''; });
       document.querySelectorAll('.savings-note').forEach(i => { i.value = ''; });
       document.getElementById('fillAllAmount').value = '';
+      updateSavingsSelectionSummary();
+      setSavingsSubmitting(false);
     })
-    .withFailureHandler(function(e) { showToast('บันทึกไม่สำเร็จ: ' + e.message, 'danger'); })
+    .withFailureHandler(function(e) { setSavingsSubmitting(false); showToast('บันทึกไม่สำเร็จ: ' + e.message, 'danger'); })
     .saveSavingsTransaction(rows, term, year);
 }
 
@@ -218,7 +261,11 @@ function loadSavingsSummary() {
   const cls = document.getElementById('summaryClass').value;
   if (!cls) return showToast('เลือกห้องก่อน', 'warning');
 
-  document.getElementById('summaryPanel').style.display = 'none';
+  document.getElementById('summaryPanel').style.display = '';
+  document.getElementById('savingsSummaryKpis').innerHTML = '';
+  document.getElementById('summaryClassName').textContent = cls;
+  document.getElementById('summaryTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>กำลังคำนวณยอดคงเหลือ...</td></tr>';
+  document.getElementById('summaryTableFoot').innerHTML = '';
 
   google.script.run
     .withSuccessHandler(function(data) {
@@ -238,19 +285,26 @@ function renderSummaryTable(cls, data) {
   const tfoot = document.getElementById('summaryTableFoot');
 
   if (!data || data.students.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">ไม่มีข้อมูล</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-piggy-bank d-block mb-2"></i>ยังไม่มีรายการออมเงินของห้องนี้</td></tr>';
     tfoot.innerHTML = '';
     return;
   }
 
+  const t = data.classTotal;
+  document.getElementById('savingsSummaryKpis').innerHTML = [
+    ['ฝากสะสม', fmtMoney(t.totalDeposit), 'text-success', 'fa-arrow-down'],
+    ['ถอนสะสม', fmtMoney(t.totalWithdraw), 'text-danger', 'fa-arrow-up'],
+    ['คงเหลือ', fmtMoney(t.balance), '', 'fa-wallet']
+  ].map(function(kpi) { return `<div class="col-12 col-sm-4"><div class="savings-kpi ${kpi[2]}"><i class="fas ${kpi[3]}"></i><div><small>${kpi[0]}</small><strong>${kpi[1]} <em>บาท</em></strong></div></div></div>`; }).join('');
+
   tbody.innerHTML = data.students.map(s => `
     <tr style="cursor:pointer;" onclick="toggleSavingsHistory('${escHtml(s.studentId)}','${escHtml(s.studentName)}',this)">
-      <td class="text-muted small">${escHtml(s.studentId)}</td>
-      <td>${escHtml(s.studentName)}</td>
-      <td class="text-end text-success">${fmtMoney(s.totalDeposit)}</td>
-      <td class="text-end text-danger">${fmtMoney(s.totalWithdraw)}</td>
-      <td class="text-end fw-bold ${s.balance < 0 ? 'text-danger' : ''}">${fmtMoney(s.balance)}</td>
-      <td><i class="fas fa-chevron-down text-muted" style="font-size:0.75rem;"></i></td>
+      <td class="text-muted small" data-label="รหัส">${escHtml(s.studentId)}</td>
+      <td data-label="ชื่อ-สกุล" class="savings-student-name">${escHtml(s.studentName)}</td>
+      <td class="text-end text-success" data-label="ฝากรวม">${fmtMoney(s.totalDeposit)}</td>
+      <td class="text-end text-danger" data-label="ถอนรวม">${fmtMoney(s.totalWithdraw)}</td>
+      <td class="text-end fw-bold ${s.balance < 0 ? 'text-danger' : ''}" data-label="คงเหลือ">${fmtMoney(s.balance)}</td>
+      <td class="text-end" data-label=""><button type="button" class="btn btn-sm btn-soft savings-history-btn" aria-label="ดูประวัติ ${escHtml(s.studentName)}" onclick="event.stopPropagation();toggleSavingsHistory('${escHtml(s.studentId)}','${escHtml(s.studentName)}',this.closest('tr'))"><i class="fas fa-chevron-down text-muted"></i><span>ประวัติ</span></button></td>
     </tr>
     <tr class="history-row" id="hist-${escHtml(s.studentId)}" style="display:none;">
       <td colspan="6" class="p-0">
@@ -263,7 +317,6 @@ function renderSummaryTable(cls, data) {
     </tr>
   `).join('');
 
-  const t = data.classTotal;
   tfoot.innerHTML = `
     <tr>
       <td colspan="2">รวมทั้งห้อง</td>
@@ -370,13 +423,14 @@ async function deleteSavingsTxn(id, studentId, e) {
 function previewSavingsCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
-  document.getElementById('csvFileName').textContent = file.name;
+  document.getElementById('csvFileName').textContent = `${file.name} · ${formatSavingsFileSize(file.size)} · กำลังอ่านไฟล์…`;
 
   const reader = new FileReader();
   reader.onload = function(e) {
     _csvRawText = e.target.result;
     const lines = _csvRawText.split(/\r?\n/).filter(Boolean);
     _csvParsedRows = lines;
+    document.getElementById('csvFileName').textContent = `${file.name} · ${formatSavingsFileSize(file.size)} · พร้อมตรวจสอบ`;
     document.getElementById('csvTotalRows').textContent = `ทั้งหมด ${lines.length - 1} แถว`;
 
     const header = lines[0] ? lines[0].split(',') : [];
@@ -394,9 +448,15 @@ function previewSavingsCSV(event) {
   reader.readAsText(file, 'UTF-8');
 }
 
+function formatSavingsFileSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024 * 1024) return Math.ceil(bytes / 1024) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 function cancelCSVImport() {
   document.getElementById('savingsCSVFile').value = '';
-  document.getElementById('csvFileName').textContent = '';
+  document.getElementById('csvFileName').textContent = 'รองรับไฟล์ .csv หรือ .txt';
   document.getElementById('csvPreviewPanel').style.display = 'none';
   _csvRawText = '';
   _csvParsedRows = [];
