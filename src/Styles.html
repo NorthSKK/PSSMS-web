@@ -186,8 +186,15 @@ select.form-select {
    ที่กดปุ่มเปิด เพราะ sidebar ตายตัวบนจอ 390px กินที่ครึ่งหน้า */
 .mr-body { display: flex; min-height: 0; height: 100%; position: relative; }
 .mr-sidebar {
-  width: 260px; flex-shrink: 0; overflow-y: auto;
+  width: 288px; flex-shrink: 0; overflow-y: auto;
   border-right: 1px solid var(--p-border); background: var(--p-card-bg, #fff);
+}
+/* หัวสารบัญ — ค้างไว้ตอนเลื่อน ต้องทึบ ไม่งั้นชื่อไฟล์วิ่งทะลุขึ้นมาซ้อน */
+.mr-toc-head {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--p-card-bg, #fff); border-bottom: 1px solid var(--p-border);
+  padding: 10px 14px; font-size: .75rem; font-weight: 600; letter-spacing: .02em;
+  color: var(--p-text-muted);
 }
 .mr-stage {
   flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
@@ -196,8 +203,43 @@ select.form-select {
 /* iframe/img กินพื้นที่ที่เหลือทั้งหมด — ตัว PDF viewer ของเบราว์เซอร์จัดการ scroll เอง */
 .mr-stage iframe, .mr-stage img { flex: 1 1 auto; width: 100%; border: 0; min-height: 0; }
 .mr-stage img { object-fit: contain; background: #111; }
-.mr-item { border: 0; border-bottom: 1px solid var(--p-border); border-radius: 0; text-align: left; }
-.mr-item.active { background: var(--p-accent-soft); color: var(--p-accent); font-weight: 600; }
+/* แถวสารบัญ — ชื่อบนสองบรรทัด ขนาดไฟล์ลงบรรทัดล่าง
+   ⚠️ ของเดิมวางชื่อกับขนาดไว้บรรทัดเดียวกัน พอชื่อไทยยาวกว่าช่อง 260px
+      "17.3 MB" เลยตกบรรทัดของตัวเอง ทำให้ความสูงแต่ละแถวไม่เท่ากันทั้งสารบัญ */
+.mr-item {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  border: 0; border-bottom: 1px solid var(--p-border); border-radius: 0;
+  background: transparent; text-align: left; padding: 10px 14px 10px 11px;
+  border-left: 3px solid transparent;      /* จองที่แถบซ้ายไว้ตั้งแต่แรก */
+  transition: background .12s;
+}
+.mr-item:hover { background: var(--p-hover); }
+.mr-item:focus-visible { outline: 2px solid var(--p-accent); outline-offset: -2px; }
+
+/* เลขลำดับ — ครูพูดกันว่า "ไฟล์ที่ 7" ไม่ใช่ชื่อเต็ม · ตรงกับเลขบนแถบล่าง (7 / 30) */
+.mr-num {
+  flex-shrink: 0; min-width: 22px; height: 22px; margin-top: 1px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: transparent;
+  font-size: .72rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--p-text-muted);
+}
+.mr-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* สองบรรทัดแล้วค่อยตัด — ชื่อบทภาษาไทยตัดบรรทัดเดียวแล้วเหลือแต่ "3-1 แรงและกฎการเคลื่อ…" */
+.mr-name {
+  font-size: .82rem; line-height: 1.35; color: var(--p-text, #212529);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.mr-meta {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: .7rem; color: var(--p-text-muted); font-variant-numeric: tabular-nums;
+}
+.mr-meta i { opacity: .55; }
+
+.mr-item.active { background: var(--p-accent-soft); border-left-color: var(--p-accent); }
+.mr-item.active .mr-name { color: var(--p-accent); font-weight: 600; }
+.mr-item.active .mr-num { background: var(--p-accent); color: #fff; }
 
 /* ── ตัวเรนเดอร์ PDF (pdf.js) ────────────────────────────────────────
    ทำไมไม่ใช้ <iframe> เป็นทางหลัก: **iOS Safari เรนเดอร์ PDF ใน iframe ได้แค่หน้าแรก

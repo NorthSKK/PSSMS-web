@@ -2340,26 +2340,54 @@ function _mediaPreconnect(url) {
   } catch (e) { /* URL แปลก ๆ ก็แค่ไม่ได้ preconnect */ }
 }
 
+/**
+ * ตัดนามสกุลท้ายชื่อออกจาก**ที่แสดง**อย่างเดียว — ไอคอนบอกชนิดไฟล์อยู่แล้ว
+ * ".pdf" ต่อท้ายทุกบรรทัดกินที่ของชื่อจริงซึ่งเป็นภาษาไทยยาว ๆ ที่ครูต้องอ่าน
+ * ⚠️ ชื่อเต็มยังอยู่ใน title ของปุ่ม ครูที่อยากเห็นนามสกุลชี้ค้างไว้ได้
+ */
+function _mediaTocLabel(label) {
+  return String(label || '').replace(/\.(pdf|jpe?g|png)$/i, '');
+}
+
 function _mediaRenderToc() {
   var box = document.getElementById('mrSidebar');
   var r = _mediaState.reader;
   box.innerHTML = '';
+
+  // หัวสารบัญค้างไว้ตอนเลื่อน — การ์ด 50 ไฟล์เลื่อนไปกลางทางแล้วไม่รู้ว่าอยู่ในอะไร
+  var head = document.createElement('div');
+  head.className = 'mr-toc-head';
+  head.textContent = 'สารบัญ · ' + r.files.length + ' ไฟล์';
+  box.appendChild(head);
+
   r.files.forEach(function(f, i) {
     var b = document.createElement('button');
     b.type = 'button';
-    b.className = 'btn w-100 mr-item d-flex align-items-center gap-2 py-2 px-3';
+    b.className = 'mr-item';
     b.dataset.index = String(i);
+    b.title = f.label;                       // ชื่อเต็มรวมนามสกุล ไว้ชี้ค้างดู
+
+    var num = document.createElement('span');
+    num.className = 'mr-num';
+    num.textContent = String(i + 1);
+
+    var info = document.createElement('span');
+    info.className = 'mr-info';
+
+    var name = document.createElement('span');
+    name.className = 'mr-name';
+    name.textContent = _mediaTocLabel(f.label);   // textContent — ชื่อไฟล์มาจากที่ครูอัป
+
+    var meta = document.createElement('span');
+    meta.className = 'mr-meta';
     var ic = document.createElement('i');
     ic.className = 'fas ' + (f.ext === 'pdf' ? 'fa-file-pdf' : 'fa-image');
-    ic.style.opacity = '.6';
-    var text = document.createElement('span');
-    text.className = 'flex-grow-1 text-truncate small';
-    text.textContent = f.label;              // textContent — ชื่อไฟล์มาจากที่ครูอัป
     var size = document.createElement('span');
-    size.className = 'small';
-    size.style.color = 'var(--p-text-muted)';
     size.textContent = _mediaSizeLabel(f.size);
-    b.appendChild(ic); b.appendChild(text); b.appendChild(size);
+    meta.appendChild(ic); meta.appendChild(size);
+
+    info.appendChild(name); info.appendChild(meta);
+    b.appendChild(num); b.appendChild(info);
     b.addEventListener('click', function() {
       _mediaReaderShow(i);
       document.getElementById('mrBody').classList.remove('mr-open');
@@ -2375,7 +2403,11 @@ function _mediaReaderShow(i) {
   var f = r.files[i];
 
   Array.prototype.forEach.call(document.getElementById('mrSidebar').children, function(b) {
-    b.classList.toggle('active', Number(b.dataset.index) === i);
+    var on = Number(b.dataset.index) === i;
+    b.classList.toggle('active', on);
+    // เลื่อนสารบัญตามด้วย — กด "ถัดไป"/ลูกศรไปเรื่อย ๆ แล้วแถบที่ไฮไลต์อยู่นอกจอ
+    // ครูจะไม่รู้ว่าอ่านถึงไหนของชุด · 'nearest' = ไม่ขยับถ้ามันอยู่ในจออยู่แล้ว
+    if (on && b.scrollIntoView) b.scrollIntoView({ block: 'nearest' });
   });
   document.getElementById('mrPos').textContent = (i + 1) + ' / ' + r.files.length + ' · ' + f.label;
   document.getElementById('mrPrev').disabled = (i === 0);
