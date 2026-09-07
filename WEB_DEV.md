@@ -1,7 +1,7 @@
 # PSSMS Web — Developer Guide
 
 คู่มือพัฒนา Web Prototype สำหรับโครงการ PSSMS  
-Stack: **Node.js 24 + Express 4 + PostgreSQL (Railway)**
+Stack: **Node.js 20 ขึ้นไป + Express 4 + PostgreSQL (Railway)**
 
 ---
 
@@ -15,7 +15,7 @@ node server.js           # one-shot
 # Kill & restart
 kill $(lsof -ti :3000) 2>/dev/null; node server.js &
 
-# เทส — TZ=UTC คือตัวที่จับบั๊กวันที่ที่เครื่อง dev มองไม่เห็น
+# เทส — รันทั้งสองคำสั่งก่อนขึ้นระบบจริง
 npm test
 TZ=UTC npm test
 
@@ -37,7 +37,7 @@ require('./lib/db').query(\`ALTER TABLE foo ADD COLUMN IF NOT EXISTS bar TEXT\`)
 
 | Tool | Version | ติดตั้ง |
 |---|---|---|
-| Node.js | 24+ | https://nodejs.org |
+| Node.js | 20+ | https://nodejs.org |
 | npm | 10+ | มากับ Node |
 | PostgreSQL client | any | `brew install postgresql` (สำหรับ psql) |
 
@@ -46,8 +46,6 @@ require('./lib/db').query(\`ALTER TABLE foo ADD COLUMN IF NOT EXISTS bar TEXT\`)
 ## 2. Setup (ครั้งแรก)
 
 ```bash
-cd web/
-
 # 1. ติดตั้ง dependencies
 npm install
 
@@ -258,7 +256,7 @@ saveMyData:  (args, user) => myDomain.saveMyData(args, user),   // write ที�
 เลยครอบ JWT verify, role check, ownership check ไปด้วยในตัว
 
 ```bash
-npm test                          # 174 ตัว · pretest reseed dev DB → รันทุกไฟล์ใน test/
+npm test                          # pretest reseed dev DB → รันทุกไฟล์ใน test/
 TZ=UTC npm test                   # ⭐ อย่างน้อยหนึ่งรอบก่อน push — production รันเป็น UTC
 npm run test:only test/scores.test.js
 ```
@@ -560,8 +558,8 @@ renderTermProgressBar('myTermProgress', cfg);   // มี systemConfig จาก
 > ส่วนที่ส่งให้โรงเรียนคือ [`docs/school-onboarding.md`](docs/school-onboarding.md)
 
 
-**push ขึ้น `main` = deploy production ทันที** — Railway auto-deploy จาก GitHub
-https://pw.pssms.app · ครูใช้จริง ไม่มี staging
+`main` ขึ้น **เดโม** (`demo.pssms.app`) และ `production` ขึ้น **โรงเรียนจริง**
+(`pw.pssms.app`) เพื่อให้ตรวจเดโมก่อนแตะข้อมูลจริง
 
 **โครงโดเมน** (จดไว้แล้ว ยังไม่ได้ชี้ทั้งหมด):
 
@@ -578,7 +576,23 @@ https://pw.pssms.app · ครูใช้จริง ไม่มี staging
 **URL เดิม `pssms-web-production.up.railway.app` ยังใช้ได้อยู่** เข้าได้ทั้งสองทาง
 ไม่ต้องรีบให้ครูเปลี่ยน bookmark
 
-รอ build ~1-2 นาที แล้วเช็คว่าโค้ดใหม่ขึ้นจริงด้วยการ grep asset ที่เสิร์ฟอยู่:
+หลัง push `main` ให้ตรวจเดโมด้วยบทบาทและงานที่แก้จริงก่อน จากนั้นจึง merge ไป
+`production` และตรวจเว็บโรงเรียนจริงอีกครั้ง:
+
+```bash
+TZ=UTC npm test
+git add <files>
+git commit -m "..."
+git push origin main
+
+# ตรวจ demo.pssms.app แล้วจึงขึ้นโรงเรียนจริง
+git checkout production
+git merge main
+git push origin production
+git checkout main
+```
+
+รอ build ~1–2 นาที แล้วเช็คว่าโค้ดใหม่ขึ้นจริงด้วยการ grep asset ที่เสิร์ฟอยู่:
 
 ```bash
 until curl -s https://pw.pssms.app/api/assets/script/Scripts_General \
@@ -633,24 +647,9 @@ S3_REGION=auto
 
 `<account_id>` อยู่ที่หน้า R2 Overview มุมขวา
 
-3.5 **R2 → bucket นั้น → Settings → CORS Policy** → วางค่านี้ (แก้โดเมนให้ตรงโรงเรียน):
-
-```json
-[
-  {
-    "AllowedOrigins": ["https://<ชื่อย่อ>.pssms.app"],
-    "AllowedMethods": ["GET"],
-    "AllowedHeaders": ["range"],
-    "ExposeHeaders": ["content-range", "content-length", "accept-ranges"],
-    "MaxAgeSeconds": 3600
-  }
-]
-```
-
-   ⚠️ **ข้อนี้ลืมไม่ได้** — ตัวอ่านสื่อใช้ pdf.js ซึ่ง `fetch` ไฟล์ข้าม origin
-   ไม่ตั้ง CORS = ตกไปใช้ตัวอ่านของเบราว์เซอร์ ซึ่ง **บน iPad เลื่อนดูหน้าถัดไปไม่ได้**
-   `AllowedHeaders: range` กับ `ExposeHeaders` จำเป็นเพราะ pdf.js ขอไฟล์ทีละช่วง
-   ไม่ได้ดึงทั้งก้อน · โรงเรียนที่ยังไม่ตั้งจะเห็นแถบเหลืองในตัวอ่าน ไม่ใช่จอว่าง
+3.5 **ไม่ต้องตั้ง CORS หรือเปิด bucket เป็นสาธารณะ** — ตัวอ่าน PDF ใช้
+`/api/media/proxy/...` ผ่านโดเมนเดียวกับเว็บ แล้วระบบดึงจาก R2 แบบ private ให้
+จึงเปิดอ่านและเลื่อนหน้าได้บน iPad โดยไม่พึ่งตัวอ่าน PDF ของเบราว์เซอร์
 
 4. Redeploy → ล็อกอินเป็น Admin → หน้าสื่อการสอน แถบสถานะต้องขึ้น
    `ที่เก็บไฟล์: ปกติ (s3) · N ไฟล์ · ใช้ไป X MB จากโควตา 15 GB`
@@ -662,6 +661,7 @@ S3_REGION=auto
 |---|---|---|---|
 | การ์ดสื่อการสอน (`POST /api/media/upload/:cardId`) | PDF / JPEG / PNG | 100MB ต่อไฟล์ | 50 ไฟล์/การ์ด · โควตาโรงเรียน |
 | ไฟล์แนบสารบรรณ (`POST /api/media/sarabun/:id`) | PDF / JPEG / PNG / DOCX | 10MB | — |
+| เอกสารโครงการ (`POST /api/media/project/:id`) | PDF / JPEG / PNG / DOCX | 100MB ต่อไฟล์ | โควตาโรงเรียน |
 
 ชนิดไฟล์ตัดสินจาก magic bytes ใน `lib/storage/types.js` — เพิ่มชนิดใหม่แก้ที่ไฟล์เดียว
 **การ์ดสื่อไม่รับ docx** ทั้งที่ `types.js` รองรับ เพราะเสิร์ฟเป็น attachment (บังคับดาวน์โหลด)
@@ -674,10 +674,9 @@ S3_REGION=auto
 
 - **1 การ์ด = หลายไฟล์** แถวไฟล์อยู่ตาราง `media_files` ไม่ใช่บน `media_cards`
   หน้ารวมได้แค่ `fileCount`/`totalSize` · สารบัญขอทีหลังด้วย `getMediaCardFiles`
-- **เปิดไฟล์**: `getMediaFileTicket(fileId)` ตรวจ `visible_levels` **ของการ์ดแม่**
-  แล้วคืน URL อายุสั้น — driver `s3` คืน presigned URL ให้เบราว์เซอร์โหลดจาก R2 ตรง
-  **Railway ไม่แตะไฟล์เลย** · driver `disk` คืนตั๋ว JWT ชี้
-  `GET /api/media/file/media/:fileId?t=...` ซึ่ง **mount เฉพาะ driver disk**
+- **เปิดไฟล์**: `getMediaFileTicket(fileId)` ตรวจ `visible_levels` ของการ์ดแม่แล้วคืน
+  URL อายุสั้นสำหรับเปิด/ดาวน์โหลด และคืน URL proxy เพิ่มสำหรับ PDF reader. Proxy ใช้
+  ticket แยกและ stream จาก storage ผ่านโดเมนของแอป จึงไม่ต้องตั้ง CORS ที่ R2.
   ⚠️ id คือ `media_files.id` ไม่ใช่ card id และ SQL ต้อง join กลับหาการ์ดเพื่อเช็ค `deleted_at`
 - **อายุตั๋วของสื่อการสอนคือ 1 ชม.** ไม่ใช่ 5 นาทีเหมือนสารบรรณ (`ttlSeconds` ที่ `getFileUrl`)
   เพราะ PDF viewer ของเบราว์เซอร์ขอไฟล์ใหญ่แบบ **Range request ทยอยตอนเลื่อน** —
@@ -695,6 +694,23 @@ S3_REGION=auto
 - ⚠️ **ลบไฟล์เดี่ยว = ลบจริงทันที ไม่มีถังขยะระดับไฟล์** — ถังขยะมีที่เดียวคือ
   `media_cards.deleted_at` · สถานะ 2 ที่เคยพังมาแล้ว
 - **เปลี่ยนผู้ให้บริการ** (B2 / MinIO / S3 จริง) = แก้ `S3_ENDPOINT` กับ key ไม่ต้องแตะโค้ด
+
+### เอกสารโครงการ
+
+หน้า **ฝ่ายบริหารงานทั่วไป → เอกสารโครงการ** เป็นคลังกลางของโรงเรียน แยกประเภท
+โครงการ · แผนงาน · รายงาน · เอกสารประกอบ. บุคลากรทุกคนอ่านและดาวน์โหลดได้;
+ครูแก้ไข อัปโหลด หรือลบได้เฉพาะรายการของตนเอง ส่วน Admin จัดการได้ทุกรายการ.
+
+ไฟล์อัปโหลดผ่าน `POST /api/media/project/:id` ทีละไฟล์ ฟอร์มจะแสดงรายการไฟล์และ
+ความคืบหน้า พร้อมปิดปุ่มระหว่างบันทึกเพื่อกันสร้างรายการซ้ำ. ใช้ที่เก็บและชนิดไฟล์
+เดียวกับไฟล์แนบสารบรรณ แต่ขนาดได้ถึง 100 MB ต่อไฟล์.
+
+### มือถือและ iPad
+
+SPA ตั้ง `viewport-fit=cover` และใช้ Safe Area กับแถบด้านบนและขอบล่างบนจอไม่เกิน
+1024px. แท็บและตารางกว้างต้องเลื่อนแนวนอนด้วยนิ้วได้; iPad ใช้เมนูด้านข้างแบบแผงลอย
+เพื่อคงพื้นที่เนื้อหา. อย่าลบ `env(safe-area-inset-*)`, `100dvh` หรือกติกา
+`overflow-x: auto` ของแท็บ/ตารางโดยไม่ได้ทดสอบ iPhone และ iPad.
 
 ### Environment Variables ที่ต้องตั้งใน Railway
 | Key | หมาย |
