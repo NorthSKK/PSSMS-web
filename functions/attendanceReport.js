@@ -107,7 +107,12 @@ async function getSemesterReport([subjectCode, className, term, year]) {
   const totalCoursePeriods = periodsPerWeek * WEEKS_PER_TERM;
   const maxAbsenceQuota = Math.floor(totalCoursePeriods * 0.2);
 
-  const attRows = await loadAttendance(term, year);
+  const [attRows, gradeResult] = await Promise.all([
+    loadAttendance(term, year),
+    query(`SELECT student_id, total_score FROM grade_summary WHERE subject_code=$1 AND term=$2 AND year=$3`,
+      [subjectCode, String(term), String(year)]),
+  ]);
+  const scores = new Map(gradeResult.rows.map(r => [normID(r.student_id), Number(r.total_score)]));
   const studentDataMap = {};
   const studentInfo = {};
   const sessionDetails = {};
@@ -162,6 +167,7 @@ async function getSemesterReport([subjectCode, className, term, year]) {
       percent: percent.toFixed(2),
       currentTotalTaught,
       records: studentDataMap[stdKey],
+      totalScore: scores.has(stdKey) ? scores.get(stdKey) : null,
     };
   }).sort((a, b) => String(a.id).localeCompare(String(b.id)));
 

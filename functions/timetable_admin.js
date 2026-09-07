@@ -299,19 +299,6 @@ async function setAllHomeroomTeachers([assignments, term, year]) {
           );
         }
       }
-      const t1 = teacherIds[0];
-      if (t1) {
-        await client.query(
-          `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year,location)
-           VALUES('-','แนะแนว',$1,$2,$3,'จันทร์','7',$4,$5,$6)`,
-          [level, room, t1, term, year, opts.advisoryLoc || '']
-        );
-        await client.query(
-          `INSERT INTO timetable(subject_code,subject_name,level,room,teacher_id,day,period,term,year,location)
-           VALUES('-','วิถีพุทธ',$1,$2,$3,'ศุกร์','7',$4,$5,$6)`,
-          [level, room, t1, term, year, opts.buddhistLoc || '']
-        );
-      }
     }
     await client.query('COMMIT');
   } catch (e) {

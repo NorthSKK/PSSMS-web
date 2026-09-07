@@ -1548,11 +1548,24 @@ function _arNum(n, cls) {
   return `<span class="ar-slot">${inner}</span>`;
 }
 
+function _arSignals(s, sessions, remainingQuota) {
+  const ordered = (sessions || []).map(x => x.id).filter(id => s.records && s.records[id]);
+  const missed = id => ['ขาด', 'โดด', 'absent', 'skip'].includes(s.records[id]);
+  let streak = 0;
+  for (let i = ordered.length - 1; i >= 0 && missed(ordered[i]); i--) streak++;
+  const labels = [];
+  if (streak >= 2) labels.push(`ขาดติดกัน ${streak} คาบ`);
+  else if (ordered.length && missed(ordered[ordered.length - 1])) labels.push('คาบล่าสุดขาด');
+  if (remainingQuota <= 2) labels.push(remainingQuota < 0 ? 'เกินโควตา มส.' : `เสี่ยง มส. เหลือ ${remainingQuota}`);
+  if (s.totalScore !== null && s.totalScore < 50) labels.push(`คะแนน ${s.totalScore}/100`);
+  return labels.length ? `<div class="small mt-1 text-danger">⚠️ ${labels.join(' · ')}</div>` : '';
+}
+
 // เตือนตอนโควตาใกล้หมด ไม่ใช่รอจนเกินแล้วค่อยแดง
 const AR_QUOTA_LOW = 3;
 
 // 1 แถว = 1 นักเรียน — % เป็นตัวบอกสถานะในตัว เลยไม่ต้องมีคอลัมน์ badge แยก
-function _arRow(s, index, remainingQuota) {
+function _arRow(s, index, remainingQuota, sessions) {
   const p = parseFloat(s.percent);
   const b = _arBucket(p);
   const rowCls = (b === 'ms' || b === 'out') ? ` ar-row-${b}` : '';
@@ -1567,6 +1580,7 @@ function _arRow(s, index, remainingQuota) {
     <td class="ar-col-name">
       <div class="ar-name text-truncate" style="max-width:200px;">${s.name}</div>
       <div class="ar-sid">${s.id}</div>
+      ${_arSignals(s, sessions, remainingQuota)}
     </td>
     <td class="ar-num">${_arNum(s.present, 'ar-present')}${_arNum(s.late, 'ar-late')}</td>
     <td class="ar-num">${_arNum(s.leave, 'ar-leave')}${_arNum(s.absent, 'ar-miss')}</td>
@@ -1708,7 +1722,7 @@ function renderReportTable(res, subjectCode, subjectName, className) {
     remainingQuota: meta.maxAbsenceQuota - ((s.leave || 0) + (s.absent || 0)),
   }));
 
-  tbody.innerHTML = _arRows.map((s, i) => _arRow(s, i + 1, s.remainingQuota)).join('');
+  tbody.innerHTML = _arRows.map((s, i) => _arRow(s, i + 1, s.remainingQuota, meta.sessionsList)).join('');
 }
 
 function renderAllSubjectsReportTable(data) {

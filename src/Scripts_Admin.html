@@ -20,6 +20,7 @@ function initAdminDashboard() {
   // ฝั่ง server แคชไว้ 10 นาที หน้าเต็มกับการ์ดนี้จึงใช้ผลการคำนวณชุดเดียวกัน
   _loadAdminProgressSummary();
   _loadSetupChecklist();
+  setTimeout(loadTodoList, 300);
 }
 
 // ==========================================
