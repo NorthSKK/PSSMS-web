@@ -17,7 +17,7 @@ const vm = require('node:vm');
 const { importSpec, prepareRows } = require('../lib/importSpec');
 
 const SRC = path.join(__dirname, '../src/Scripts_Admin.html');
-const WANTED = ['_csvCells', '_headerKey', '_gridToRows', '_validateImportRows', '_normalizeDayClient', '_decodeCsv'];
+const WANTED = ['_csvCells', '_headerKey', '_gridToRows', '_validateImportRows', '_normalizeDayClient', '_decodeCsv', '_sheetName'];
 
 /** ตัดตัวฟังก์ชันออกมาด้วยการนับวงเล็บปีกกา ไม่ใช่ regex — body มี `}` อยู่เต็มไปหมด */
 function extractFunction(src, name) {
@@ -200,4 +200,23 @@ test('คลังตัวชี้วัด: คำอธิบายที่
   );
   assert.strictEqual(p.rows[0].description, 'วัด, รายงานผล และสรุป');
   assert.strictEqual(p.rows[0].evalType, 'ปลายทาง');
+});
+
+// ── ชื่อ sheet ในไฟล์แม่แบบ ────────────────────────────────────────────────
+
+test('ชื่อชนิดไฟล์นำเข้าทุกตัวใช้เป็นชื่อ sheet ของ Excel ได้', () => {
+  // เจอตอนกดจริง: `ตัวชี้วัด/ผลการเรียนรู้` มี `/` → SheetJS โยน
+  // "Sheet name cannot contain : \\ / ? * [ ]" แล้วปุ่มดาวน์โหลดแม่แบบพังทั้งปุ่ม
+  const spec = importSpec();
+  for (const kind of spec.kinds) {
+    const name = sandbox._sheetName(spec.specs[kind].title);
+    assert.ok(name.length > 0 && name.length <= 31, `${kind}: ชื่อ sheet ยาว ${name.length} ตัว`);
+    assert.doesNotMatch(name, /[:\\/?*[\]]/, `${kind}: ชื่อ sheet ยังมีอักขระที่ Excel ห้าม`);
+  }
+});
+
+test('ชื่อยาวเกิน 31 ตัวถูกตัด ไม่ใช่ปล่อยให้ Excel ปฏิเสธทั้งไฟล์', () => {
+  assert.strictEqual(sandbox._sheetName('ก'.repeat(50)).length, 31);
+  assert.strictEqual(sandbox._sheetName('a/b:c*d'), 'a b c d');
+  assert.strictEqual(sandbox._sheetName('///'), 'แม่แบบ');
 });

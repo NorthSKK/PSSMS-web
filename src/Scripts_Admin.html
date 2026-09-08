@@ -1145,6 +1145,17 @@ function handleFileUpload(input, type) {
     .catch(function(err) { reset(); showAlert('❌ ' + err.message); });
 }
 
+/**
+ * ชื่อ sheet ที่ Excel ยอมรับ — ห้ามมี : \ / ? * [ ] และยาวเกิน 31 ตัวไม่ได้
+ * ⚠️ ชื่อชนิดไฟล์นำเข้ามาจาก `spec.title` ซึ่งเป็นข้อความที่คนอ่าน ไม่ได้ถูกจำกัดรูป —
+ * `ตัวชี้วัด/ผลการเรียนรู้` มี `/` แล้ว SheetJS โยน
+ * "Sheet name cannot contain : \ / ? * [ ]" ตอนกดดาวน์โหลดแม่แบบ
+ */
+function _sheetName(title) {
+  var t = String(title || '').replace(/[:\\\/?*\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.slice(0, 31) || 'แม่แบบ';
+}
+
 /** สร้างไฟล์แม่แบบสดจาก spec — หัวตารางจึงตรงกับตัวตรวจเสมอ ไม่มีทาง drift */
 function downloadImportTemplate(kind) {
   _loadImportSpec()
@@ -1167,8 +1178,10 @@ function downloadImportTemplate(kind) {
       });
       ws['!cols'] = cols.map(function(c) { return { wch: Math.max(12, c.label.length + 4) }; });
       var wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, spec.title);
-      XLSX.writeFile(wb, 'แม่แบบนำเข้า-' + spec.title + '.xlsx');
+      var name = _sheetName(spec.title);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+      // ชื่อไฟล์ใช้ตัวเดียวกัน — `/` ในชื่อไฟล์เป็นตัวคั่นเส้นทาง เบราว์เซอร์จะตัดทิ้งเอง
+      XLSX.writeFile(wb, 'แม่แบบนำเข้า-' + name + '.xlsx');
       if (typeof showToast === 'function') showToast('ดาวน์โหลดแม่แบบ' + spec.title + 'แล้ว', 'success');
     })
     .catch(function(err) { showAlert('❌ สร้างแม่แบบไม่สำเร็จ: ' + err.message); });

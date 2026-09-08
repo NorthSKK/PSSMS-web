@@ -167,3 +167,19 @@ test('บัญชีที่ไม่มีอยู่จริงต้อ�
   );
   assert.equal(rows.length, list.length, 'ทุกบัญชีที่เสนอต้องมีอยู่ใน users จริง');
 });
+
+// ── คลังตัวชี้วัดของเดโม ──────────────────────────────────────────────────────
+// อ่านจากซอร์ส ไม่ใช่จาก DB — DB ของ dev ไม่ใช่เดโม จึงไม่มีข้อมูลชุดนี้อยู่
+
+test('ทุกวิชาในเดโมมีตัวชี้วัดในคลัง — ไม่งั้นปุ่ม "ดึงจากคลัง" ขึ้น "ไม่พบตัวชี้วัด"', () => {
+  const src = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '../db/demo-content.js'), 'utf8');
+  const subjects = [...src.matchAll(/^\s*\['([^']+)',\s*'[^']*',\s*'teacher/gm)].map((m) => m[1]);
+  const bank = [...src.matchAll(/^  '([^']+)': \['(?:พื้นฐาน|เพิ่มเติม)'/gm)].map((m) => m[1]);
+
+  assert.ok(subjects.length >= 10, `หา SUBJECTS ไม่เจอ (ได้ ${subjects.length} วิชา)`);
+  assert.deepEqual(subjects.filter((c) => !bank.includes(c)), [],
+    'วิชาที่เปิดสอนบนเดโมแต่ไม่มีตัวชี้วัดในคลัง');
+  assert.deepEqual(bank.filter((c) => !subjects.includes(c)), [],
+    'ตัวชี้วัดที่ผูกกับรหัสวิชาที่ไม่มีใครสอน — พิมพ์รหัสผิดจะไม่มีใครสังเกต');
+});
