@@ -70,7 +70,8 @@ kill $(lsof -ti :3000) 2>/dev/null
 
 ### ขึ้นเดโม
 ```bash
-npm test                        # 174 ตัว ต้องเขียวก่อน (เช็ค TZ=UTC npm test ด้วย)
+npm test                        # ต้องเขียวทุกตัวก่อน (เช็ค TZ=UTC npm test ด้วย)
+                                # ⚠️ อย่าเขียนจำนวนเทสลงเอกสาร มันล้าสมัยทุกครั้งที่เพิ่มเทส
 git commit -m "..."
 git push origin main            # ขึ้น demo.pssms.app ใน ~45 วินาที
 ```
@@ -266,7 +267,7 @@ token หมดอายุ, สลับบัญชีจาก dropdown บ�
 
 ```
 web/
-├── server.js                    Express bootstrap
+├── server.js                    Express bootstrap + route `/manual` (คู่มือโรงเรียน)
 ├── .env                         secrets (gitignored)
 ├── lib/
 │   ├── db.js                    PostgreSQL pool + query() helper (max:20, idleTimeout:30s)
@@ -277,6 +278,8 @@ web/
 │   ├── importSpec.js            ⭐ คอลัมน์ไฟล์นำเข้า (ไม่แตะ DB) — backend ตรวจ +
 │   │                              หน้าเว็บ parse + สร้างแม่แบบ ผ่าน getImportSpec
 │   ├── subjectGroup.js          subject_code → กลุ่มสาระ · isHomeroomSubject()
+│   ├── manual.js                คู่มือโรงเรียน — เรนเดอร์ docs/school-onboarding.md
+│   │                              เป็นหน้าเว็บที่ GET /manual (ไม่แตะ DB · เปิดสาธารณะ)
 │   ├── storage/                 ที่เก็บไฟล์ เลือก driver ด้วย STORAGE_DRIVER
 │   │   ├── index.js             เลือก driver + interface ที่ทั้งสองต้องมี
 │   │   ├── disk.js              เขียนดิสก์ (dev/เทสต์)
@@ -451,7 +454,7 @@ async function fnName([arg1, arg2, arg3]) { ... }
 
 ### นำเข้าข้อมูล (import) — `lib/importSpec.js`
 
-คอลัมน์ของไฟล์นำเข้าทั้งสามชนิด (`student` / `teacher` / `timetable`) นิยามไว้**ที่เดียว**
+คอลัมน์ของไฟล์นำเข้าทั้งสี่ชนิด (`student` / `teacher` / `timetable` / `curriculum`) นิยามไว้**ที่เดียว**
 ใน `lib/importSpec.js` (ไม่แตะ DB) แล้วมีผู้ใช้สามราย — ตัวตรวจฝั่ง backend,
 ตัว parse หัวตารางฝั่งหน้าเว็บ, และตัวสร้างไฟล์แม่แบบ
 สองรายหลังรับ spec ไปเป็น **ข้อมูล** ผ่าน RPC `getImportSpec` (`ADMIN_ONLY` +
@@ -493,7 +496,7 @@ async function fnName([arg1, arg2, arg3]) { ... }
   ตอนใช้ (`_loadXLSX`, pin 0.18.5) · `.csv` ผ่าน `_decodeCsv` ซึ่งลอง UTF-8 แบบ
   `fatal:true` ก่อนแล้วตกไป `windows-874` — **Excel ภาษาไทยบันทึก CSV เป็น TIS-620
   ไม่ใช่ UTF-8** อ่านด้วย UTF-8 ตรง ๆ ได้ภาษาต่างดาวทั้งไฟล์
-- โมดัล preview (`_impOpen`) ใช้ร่วมทั้งสามไฟล์ **สร้าง DOM เองแปะที่ `body`**
+- โมดัล preview (`_impOpen`) ใช้ร่วมทุกชนิดไฟล์ **สร้าง DOM เองแปะที่ `body`**
   ไม่ฝัง markup ไว้ในไฟล์หน้า เพราะสองหน้าใช้ตัวเดียวกันและ SPA สลับหน้าแล้ว markup หายไปด้วย
 - ⚠️ **จำนวนแถวที่จะโดนลบต้องถามจาก server สด** — เคยคิดจะนับจาก `_ttoAllRows` แต่ตัวแปรนั้น
   มีค่าเฉพาะตอนแท็บภาพรวมโหลดแล้ว เปิดหน้ามากดนำเข้าเลยจะขึ้น "ลบ 0 แถว" ทั้งที่กำลังจะลบทั้งเทอม
@@ -1992,6 +1995,8 @@ test/
 ├── license.test.js      สถานะ licence + READONLY_ALLOWED (พิมพ์ ปพ.5 ต้องได้เสมอ)
 ├── media_cards.test.js / media_upload.test.js / storage.test.js
 ├── sarabun.test.js      สิทธิ์ทะเบียนสารบรรณ + ไฟล์แนบ
+├── manual.test.js       หน้าคู่มือ /manual — ตัวเรนเดอร์ markdown + คู่มือจริงต้องไม่มี
+│                        markdown หลุดออกมาเป็นข้อความ และต้องไม่มีค่า env/คีย์/คำสั่ง
 ├── migrate.test.js      schema.sql ต้องตรงกับ db/migrations/
 └── demo.test.js         เครื่องหมายเดโม + ตัวกันล้างข้อมูล
 ```
