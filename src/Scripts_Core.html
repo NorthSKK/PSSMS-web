@@ -649,8 +649,12 @@ function renderApp(user) {
   if (role === 'STUDENT') {
     startPage = 'Page_Dashboard_Student';
     menuHTML += `<li class="mb-3"><a href="javascript:void(0)" class="nav-link-custom active" onclick="loadPage('Page_Dashboard_Student')"><i class="fas fa-home me-2"></i>หน้าแรกนักเรียน</a></li>`;
+    menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="dept-btn academic" onclick="loadPage('Page_Student_Academic')"><i class="fas fa-chart-line"></i> <span>ผลการเรียนและเวลาเรียน</span></a></li>`;
+    menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #2563eb !important;" onclick="loadPage('Page_Student_Timetable')"><i class="fas fa-calendar-week" style="color: #2563eb;"></i> <span>ตารางเรียนของฉัน</span></a></li>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #9c27b0 !important;" onclick="loadPage('Page_Student_Clubs')"><i class="fas fa-flag-checkered" style="color: #9c27b0;"></i> <span>ลงทะเบียนชุมนุม</span></a></li>`;
     menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #00897b !important;" onclick="loadPage('Page_Teaching_Media')"><i class="fas fa-book-open-reader" style="color: #00897b;"></i> <span>สื่อการสอน</span></a></li>`;
+    menuHTML += `<li class="mb-1"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #d97706 !important;" onclick="loadPage('Page_Student_Savings')"><i class="fas fa-piggy-bank" style="color: #d97706;"></i> <span>เงินออมของฉัน</span></a></li>`;
+    menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="dept-btn" style="border-left-color: #e83e8c !important;" onclick="loadPage('Page_Student_Calendar')"><i class="fas fa-calendar-alt" style="color: #e83e8c;"></i> <span>กิจกรรมโรงเรียน</span></a></li>`;
   } else {
     startPage = role === 'ADMIN' ? 'Page_Dashboard_Admin' : role === 'EXECUTIVE' ? 'Page_Dashboard_Executive' : 'Page_Dashboard_Teacher';
     const homeLabel = isManagement ? 'แดชบอร์ดผู้บริหาร' : 'แดชบอร์ดครู';
@@ -776,7 +780,7 @@ function _setupIdlePrefetch(role) {
   var rolePages = {
     ADMIN:     ['Page_Admin_Users','Page_Student_Watch','Page_Academic','Page_Score_Entry','Page_Calendar','Page_Budget'],
     TEACHER:   ['Page_Academic','Page_Score_Entry','Page_Calendar','Page_Teacher_Timetable','Page_Lesson_History'],
-    STUDENT:   ['Page_Student_Clubs','Page_Calendar'],
+    STUDENT:   ['Page_Student_Academic','Page_Student_Timetable','Page_Student_Clubs','Page_Teaching_Media','Page_Student_Savings','Page_Student_Calendar'],
     EXECUTIVE: ['Page_Admin_Settings','Page_Score_Entry','Page_Academic_Report','Page_Admin_Timetable','Page_Admin_Curriculum','Page_Admin_Clubs','Page_Teaching_Media','Page_Student_Watch','Page_Teacher_Progress','Page_Budget','Page_Personnel','Page_Admin_Users','Page_Leave_Request','Page_Leave_Admin','Page_Substitute_Admin','Page_General','Page_Project_Documents','Page_Savings','Page_Calendar']
   };
   var pages = rolePages[(role || '').toUpperCase()] || [];
@@ -999,6 +1003,10 @@ function setupPageContent(pageName, html) {
   // ⚠️ หน้าไหนที่ต้องเริ่มเอง ต้องมาลงที่นี่ — `<script>` ที่ฝังไว้ในไฟล์หน้าไม่ทำงาน
   // เพราะหน้าโหลดเข้ามาด้วย `innerHTML` (ดูคอมเมนต์เหนือ `setupPageContent`)
   if(pageName === 'Page_Student_Clubs') initStudentClubs();
+  if(pageName === 'Page_Student_Academic') initStudentAcademicPage();
+  if(pageName === 'Page_Student_Timetable') initStudentTimetablePage();
+  if(pageName === 'Page_Student_Savings') initStudentSavingsPage();
+  if(pageName === 'Page_Student_Calendar') initStudentCalendarPage();
   if(pageName === 'Page_Dashboard_Executive') initExecDashboard();
   if(pageName === 'Page_Admin_Timetable_Overview') { loadPage('Page_Admin_Timetable'); return; }
   if(pageName === 'Page_Teacher_Timetable') initTeacherTimetable();
@@ -1019,7 +1027,7 @@ function initStudentDashboard() {
   var nameEl = document.getElementById('studentName');
   var subEl  = document.getElementById('studentSubtitle');
   if (nameEl) nameEl.textContent = user.name || 'นักเรียน';
-  if (subEl)  subEl.textContent  = 'ชั้น ' + (user.dept || '—') + ' | เทอม ' + (user.currentTerm||'?') + '/' + (user.currentYear||'?');
+  if (subEl)  subEl.textContent  = 'กำลังโหลดข้อมูลนักเรียน...';
   var badge = document.getElementById('scoreFeedTermBadge');
   if (badge) badge.textContent = 'เทอม ' + (user.currentTerm||'?') + '/' + (user.currentYear||'?');
   var term = user.currentTerm || '';
@@ -1040,6 +1048,10 @@ function _loadStudentBundle(studentId, term, year) {
     if (cached.kpi && cached.kpi.ok) _renderStudentKpi(cached.kpi.data || {});
     if (cached.timetable && cached.timetable.ok) _renderStudentTodaySchedule(cached.timetable.data || []);
     if (cached.scoreFeed && cached.scoreFeed.ok) _renderScoreFeed(cached.scoreFeed.data || []);
+    if (cached.profile && cached.profile.ok) _renderStudentProfile(cached.profile.data || {});
+    if (cached.savings && cached.savings.ok) _renderStudentSavingsPreview(cached.savings.data || {});
+    if (cached.club && cached.club.ok) _renderStudentClubPreview(cached.club.data || {});
+    if (cached.upcomingEvents && cached.upcomingEvents.ok) _renderStudentEventsPreview(cached.upcomingEvents.data || []);
   } else {
     var schedEl = document.getElementById('studentTodaySchedule');
     if (schedEl) schedEl.innerHTML = '<div class="p-2">' + _skelCards(3, 40) + '</div>';
@@ -1052,6 +1064,7 @@ function _loadStudentBundle(studentId, term, year) {
       if (!bundle) return;
       if (!document.getElementById('studentName')) return;
       _dashCacheSet(_cacheKey, bundle);
+      if (bundle.profile && bundle.profile.ok) _renderStudentProfile(bundle.profile.data || {});
       if (bundle.kpi && bundle.kpi.ok) _renderStudentKpi(bundle.kpi.data || {});
       if (bundle.timetable && bundle.timetable.ok) _renderStudentTodaySchedule(bundle.timetable.data || []);
       else {
@@ -1063,6 +1076,12 @@ function _loadStudentBundle(studentId, term, year) {
         var el2 = document.getElementById('scoreFeedContainer');
         if (el2) el2.innerHTML = '<div class="text-danger small p-2"><i class="fas fa-exclamation-circle me-1"></i>' + ((bundle.scoreFeed && bundle.scoreFeed.error) || 'โหลดไม่สำเร็จ') + '</div>';
       }
+      if (bundle.savings && bundle.savings.ok) _renderStudentSavingsPreview(bundle.savings.data || {});
+      else _renderStudentSavingsPreview(null);
+      if (bundle.club && bundle.club.ok) _renderStudentClubPreview(bundle.club.data || {});
+      else _renderStudentClubPreview(null);
+      if (bundle.upcomingEvents && bundle.upcomingEvents.ok) _renderStudentEventsPreview(bundle.upcomingEvents.data || []);
+      else _renderStudentEventsPreview(null);
     })
     .withFailureHandler(function(err) {
       if (cached) return;
@@ -1173,6 +1192,49 @@ function _renderStudentKpi(kpi) {
   var gpa = document.getElementById('studentGPA');
   if (gpa) gpa.textContent = (kpi.gpa === null || kpi.gpa === undefined)
     ? '—' : Number(kpi.gpa).toFixed(2);
+}
+
+function _renderStudentProfile(profile) {
+  var name = document.getElementById('studentName');
+  var sub = document.getElementById('studentSubtitle');
+  var identity = document.getElementById('studentIdentity');
+  if (name) name.textContent = profile.studentName || 'นักเรียน';
+  if (sub) sub.textContent = 'เทอม ' + ((getSessionUser() || {}).currentTerm || '—') + '/' + ((getSessionUser() || {}).currentYear || '—');
+  if (identity) identity.textContent = 'รหัส ' + (profile.studentId || '—') + ' · ' + (profile.className || 'ไม่ระบุห้อง');
+}
+
+function _renderStudentSavingsPreview(savings) {
+  var balance = document.getElementById('studentSavingsBalance');
+  var detail = document.getElementById('studentSavingsDetail');
+  if (!balance || !detail) return;
+  if (!savings) { balance.textContent = '—'; detail.textContent = 'ยังโหลดข้อมูลไม่ได้'; return; }
+  balance.textContent = Number(savings.balance || 0).toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' บาท';
+  detail.textContent = 'ฝาก ' + Number(savings.totalDeposit || 0).toLocaleString('th-TH') + ' · ถอน ' + Number(savings.totalWithdraw || 0).toLocaleString('th-TH');
+}
+
+function _renderStudentClubPreview(club) {
+  var el = document.getElementById('studentClubPreview');
+  if (!el) return;
+  if (!club) { el.textContent = 'ยังโหลดข้อมูลไม่ได้'; return; }
+  if (!club.registered || !club.club) { el.innerHTML = '<span class="text-muted">ยังไม่ได้ลงทะเบียนชุมนุม</span>'; return; }
+  el.innerHTML = '<span class="fw-semibold">' + _sdEsc(club.club.clubName) + '</span><span class="text-muted ms-1">(' + Number(club.club.memberCount || 0) + '/' + (club.club.capacity || '∞') + ' คน)</span>';
+}
+
+function _renderStudentEventsPreview(events) {
+  var el = document.getElementById('studentEventsPreview');
+  if (!el) return;
+  if (!events) { el.innerHTML = '<div class="text-muted small">ยังโหลดข้อมูลไม่ได้</div>'; return; }
+  if (!events.length) { el.innerHTML = '<div class="text-muted small text-center py-2">ยังไม่มีกิจกรรมที่กำลังจะมาถึง</div>'; return; }
+  el.innerHTML = events.map(function(ev) {
+    return '<div class="d-flex align-items-start gap-2 py-2 border-bottom"><span class="rounded-circle mt-1 flex-shrink-0" style="width:9px;height:9px;background:' + _studentEventColor(ev.color) + ';"></span><div class="overflow-hidden"><div class="fw-medium small text-truncate">' + _sdEsc(ev.title) + '</div><div class="text-muted" style="font-size:.72rem;">' + _studentFormatDate(ev.startDate) + '</div></div></div>';
+  }).join('');
+}
+
+function _studentEventColor(color) { return /^#[0-9a-f]{6}$/i.test(String(color || '')) ? color : 'var(--p-accent)'; }
+function _studentFormatDate(value) {
+  if (!value) return 'ไม่ระบุวัน';
+  var d = new Date(String(value).slice(0, 10) + 'T00:00:00');
+  return isNaN(d) ? _sdEsc(value) : new Intl.DateTimeFormat('th-TH', {day:'numeric', month:'short', year:'numeric'}).format(d);
 }
 
 function _renderScoreFeed(feed) {

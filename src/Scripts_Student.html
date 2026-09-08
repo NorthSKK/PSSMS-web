@@ -1,0 +1,75 @@
+// หน้าสำหรับนักเรียนใช้ endpoint ที่ผูกกับ JWT เท่านั้น: ฝั่งหน้าเว็บส่ง id เพื่อความเข้ากันได้
+// แต่ server จะยืนยันว่าเป็นเจ้าของข้อมูลก่อนคืนผลเสมอ.
+function _studentSessionTerm() {
+  var u = getSessionUser() || {};
+  return { id: u.id || '', term: u.currentTerm || '', year: u.currentYear || '' };
+}
+function _studentError(el, message) {
+  if (el) el.innerHTML = '<div class="text-center text-danger small p-4"><i class="fas fa-exclamation-circle me-1"></i>' + _sdEsc(message || 'โหลดข้อมูลไม่สำเร็จ') + '</div>';
+}
+function _studentEmpty(el, message) {
+  if (el) el.innerHTML = '<div class="text-center text-muted small p-4"><i class="fas fa-inbox d-block fs-3 opacity-25 mb-2"></i>' + _sdEsc(message) + '</div>';
+}
+function _studentTermText() { var s = _studentSessionTerm(); return 'เทอม ' + (s.term || '—') + '/' + (s.year || '—'); }
+
+function initStudentAcademicPage() {
+  var s = _studentSessionTerm(), el = document.getElementById('studentAcademicList'), subtitle = document.getElementById('studentAcademicSubtitle');
+  if (subtitle) subtitle.textContent = _studentTermText();
+  if (!s.id || !s.term || !s.year) { _studentError(el, 'ไม่พบข้อมูลเทอมปัจจุบัน'); return; }
+  google.script.run.withSuccessHandler(function(res) { _renderStudentAcademic(res || {}); }).withFailureHandler(function(err) { _studentError(el, err.message); }).getStudentAcademicSummary(s.id, s.term, s.year);
+}
+function _renderStudentAcademic(res) {
+  var el = document.getElementById('studentAcademicList'); if (!el) return;
+  var subjects = res.subjects || [];
+  if (!subjects.length) { _studentEmpty(el, 'ยังไม่มีข้อมูลรายวิชาในเทอมนี้'); return; }
+  el.innerHTML = subjects.map(function(x) {
+    var a = x.attendance || {}, score = x.score || {}, concern = Number(a.absent || 0) + Number(a.skip || 0);
+    var attendance = a.total ? 'มา ' + a.present + ' · สาย ' + a.late + ' · ลา ' + a.leave + ' · ขาด ' + a.absent + ' · โดด ' + a.skip : 'ยังไม่มีบันทึกเวลาเรียน';
+    var grade = score.grade ? '<span class="badge" style="background:' + _studentGradeColor(score.grade) + ';">เกรด ' + _sdEsc(score.grade) + '</span>' : '<span class="badge bg-light text-secondary border">รอผลการเรียน</span>';
+    return '<div class="pssms-card p-3 mb-2"><div class="d-flex justify-content-between gap-2"><div class="overflow-hidden"><div class="fw-semibold text-truncate">' + _sdEsc(x.subjectName) + '</div><div class="text-muted small">' + _sdEsc(x.subjectCode) + '</div></div>' + grade + '</div><div class="small mt-3"><i class="fas fa-user-check me-1 text-success"></i>' + attendance + '</div>' + (score.totalScore !== null && score.totalScore !== undefined ? '<div class="small mt-1"><i class="fas fa-clipboard-list me-1" style="color:var(--p-accent);"></i>คะแนนรวมที่บันทึก: ' + Number(score.totalScore).toLocaleString('th-TH') + '</div>' : '') + (score.remedialStatus ? '<div class="small text-warning mt-1"><i class="fas fa-circle-exclamation me-1"></i>' + _sdEsc(score.remedialStatus) + '</div>' : '') + (concern ? '<div class="small text-danger mt-1"><i class="fas fa-info-circle me-1"></i>มีบันทึกขาด/โดด ' + concern + ' คาบ</div>' : '') + '</div>';
+  }).join('');
+}
+function _studentGradeColor(grade) { return /^(0|ร|มส)$/.test(String(grade)) ? '#dc2626' : String(grade) === '1' ? '#d97706' : '#16a34a'; }
+
+function initStudentTimetablePage() {
+  var s = _studentSessionTerm(), el = document.getElementById('studentWeeklyTimetable'), subtitle = document.getElementById('studentTimetableSubtitle');
+  if (subtitle) subtitle.textContent = _studentTermText();
+  if (!s.id || !s.term || !s.year) { _studentError(el, 'ไม่พบข้อมูลเทอมปัจจุบัน'); return; }
+  google.script.run.withSuccessHandler(function(res) { _renderStudentTimetable(res || {}); }).withFailureHandler(function(err) { _studentError(el, err.message); }).getStudentWeeklyTimetable(s.id, s.term, s.year);
+}
+function _renderStudentTimetable(res) {
+  var el = document.getElementById('studentWeeklyTimetable'); if (!el) return;
+  var days = res.days || [];
+  el.innerHTML = days.map(function(day) {
+    var lessons = day.lessons || [];
+    var body = lessons.length ? lessons.map(function(l) { return '<div class="d-flex gap-3 py-2 border-bottom"><div class="fw-bold text-center" style="min-width:42px;color:#2563eb;">คาบ ' + _sdEsc(l.period) + '</div><div class="overflow-hidden"><div class="fw-semibold small">' + _sdEsc(l.subjectName) + '</div><div class="text-muted" style="font-size:.72rem;">' + _sdEsc(l.subjectCode) + (l.teacherName ? ' · ' + _sdEsc(l.teacherName) : '') + (l.location ? ' · ' + _sdEsc(l.location) : '') + '</div></div></div>'; }).join('') : '<div class="small text-muted py-2">ไม่มีคาบเรียน</div>';
+    return '<section class="pssms-card p-3 mb-3"><h6 class="fw-bold mb-2">' + _sdEsc(day.day) + '</h6>' + body + '</section>';
+  }).join('');
+}
+
+function _loadStudentBundleForPage(success, failure) {
+  var s = _studentSessionTerm();
+  if (!s.id || !s.term || !s.year) { failure({message:'ไม่พบข้อมูลเทอมปัจจุบัน'}); return; }
+  google.script.run.withSuccessHandler(success).withFailureHandler(failure).getStudentDashboardBundle(s.id, s.term, s.year);
+}
+function initStudentSavingsPage() {
+  var balance = document.getElementById('studentSavingsPageBalance'), totals = document.getElementById('studentSavingsPageTotals'), history = document.getElementById('studentSavingsHistory');
+  _loadStudentBundleForPage(function(bundle) {
+    var s = bundle.savings && bundle.savings.ok ? bundle.savings.data : null;
+    if (!s) { if (balance) balance.textContent = '—'; _studentError(history, (bundle.savings && bundle.savings.error) || 'โหลดข้อมูลเงินออมไม่สำเร็จ'); return; }
+    if (balance) balance.textContent = Number(s.balance || 0).toLocaleString('th-TH', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' บาท';
+    if (totals) totals.textContent = 'ฝากสะสม ' + Number(s.totalDeposit || 0).toLocaleString('th-TH') + ' บาท · ถอนสะสม ' + Number(s.totalWithdraw || 0).toLocaleString('th-TH') + ' บาท';
+    var rows = s.recent || [];
+    if (!rows.length) { _studentEmpty(history, 'ยังไม่มีรายการเงินออม'); return; }
+    history.innerHTML = rows.map(function(r) { var deposit = r.type === 'deposit'; return '<div class="d-flex justify-content-between align-items-center py-2 border-bottom"><div><div class="small fw-medium">' + (deposit ? 'ฝากเงิน' : 'ถอนเงิน') + (r.note ? ' · ' + _sdEsc(r.note) : '') + '</div><div class="text-muted" style="font-size:.72rem;">' + _studentFormatDate(r.date) + '</div></div><div class="fw-bold " style="color:' + (deposit ? '#16a34a' : '#dc2626') + ';">' + (deposit ? '+' : '−') + Number(r.amount || 0).toLocaleString('th-TH', {minimumFractionDigits:2, maximumFractionDigits:2}) + '</div></div>'; }).join('');
+  }, function(err) { if (balance) balance.textContent = '—'; _studentError(history, err.message); });
+}
+function initStudentCalendarPage() {
+  var el = document.getElementById('studentCalendarEvents');
+  _loadStudentBundleForPage(function(bundle) {
+    var events = bundle.upcomingEvents && bundle.upcomingEvents.ok ? bundle.upcomingEvents.data : null;
+    if (!events) { _studentError(el, (bundle.upcomingEvents && bundle.upcomingEvents.error) || 'โหลดกิจกรรมไม่สำเร็จ'); return; }
+    if (!events.length) { _studentEmpty(el, 'ยังไม่มีกิจกรรมที่กำลังจะมาถึง'); return; }
+    el.innerHTML = events.map(function(ev) { return '<article class="d-flex gap-3 py-3 border-bottom"><div class="rounded-3 text-center flex-shrink-0 p-2" style="min-width:65px;background:var(--p-subtle);border-top:3px solid ' + _studentEventColor(ev.color) + ';"><div class="small fw-bold">' + _sdEsc(_studentFormatDate(ev.startDate)) + '</div></div><div><div class="fw-semibold">' + _sdEsc(ev.title) + '</div>' + (ev.description ? '<div class="small text-muted mt-1">' + _sdEsc(ev.description) + '</div>' : '') + (ev.endDate && ev.endDate !== ev.startDate ? '<div class="small text-muted mt-1">ถึง ' + _sdEsc(_studentFormatDate(ev.endDate)) + '</div>' : '') + '</div></article>'; }).join('');
+  }, function(err) { _studentError(el, err.message); });
+}

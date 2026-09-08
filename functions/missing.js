@@ -85,10 +85,22 @@ async function getStudentDashboardBundle([studentId, term, year], user) {
   // นักเรียนดูแดชบอร์ดของตัวเองเท่านั้น — เดิมเชื่อรหัสที่ส่งมาใน payload
   // ทำให้เปลี่ยนตัวเลขใน request แล้วอ่านเกรดของเพื่อนทั้งห้องได้
   const sid = resolveStudentId(user, studentId);
-  const userRes = await query(
-    `SELECT department FROM users WHERE username=$1`, [sid]
-  );
-  const className = userRes.rows[0]?.department || '';
+  // อ่านชื่อและห้องจากฐานข้อมูลทุกครั้ง ห้ามใช้ข้อมูลที่มากับ request/JWT เพราะเด็ก
+  // อาจเปลี่ยนห้องหรือแก้ชื่อแล้ว token เก่ายังค้างอยู่ได้
+  const profile = await dashboardSection(async () => {
+    const { rows } = await query(
+      `SELECT username, full_name, department FROM users
+       WHERE username=$1 AND UPPER(role)='STUDENT'`, [sid]
+    );
+    if (!rows.length) throw new Error('ไม่พบข้อมูลนักเรียน');
+    const row = rows[0];
+    return {
+      studentId: row.username,
+      studentName: row.full_name || '',
+      className: row.department || '',
+    };
+  });
+  const className = profile.ok ? profile.data.className : '';
   const parts = className.split('/');
   const level = parts[0] || '';
   const room = parts[1] || '';
@@ -222,7 +234,204 @@ async function getStudentDashboardBundle([studentId, term, year], user) {
     };
   } catch (e) { kpi = { ok: false, error: e.message, data: {} }; }
 
-  return { timetable, scoreFeed, kpi };
+  // ส่วนเสริมของแดชบอร์ดต้องแยกความผิดพลาดออกจากกัน: เช่น ตารางเงินออมยังสร้าง
+  // ไม่เสร็จ ก็ไม่ควรทำให้เด็กมองไม่เห็นตารางเรียนหรือคะแนนของตนเอง
+  const [savings, club, upcomingEvents] = await Promise.all([
+    dashboardSection(() => getStudentSavingsSection(sid)),
+    dashboardSection(() => getStudentClubSection(sid, term, year)),
+    dashboardSection(() => getStudentUpcomingEvents()),
+  ]);
+
+  return { profile, timetable, scoreFeed, kpi, savings, club, upcomingEvents };
+}
+
+// ข้อมูลส่วนตัวชุดเล็กสำหรับหน้าแรกนักเรียนเท่านั้น ไม่คืนชื่อหรือข้อมูลของเพื่อนร่วมชั้น
+async function getStudentSavingsSection(studentId) {
+  // savings_transactions เก็บรหัสโดยตัดเลขศูนย์นำหน้าแล้ว (ดู functions/savings.js)
+  const normalizedId = String(studentId || '').replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, '') || '0';
+  const [totals, recent] = await Promise.all([
+    query(
+      `SELECT COALESCE(SUM(CASE WHEN type='deposit' THEN amount ELSE 0 END),0) AS total_deposit,
+              COALESCE(SUM(CASE WHEN type='withdraw' THEN amount ELSE 0 END),0) AS total_withdraw
+       FROM savings_transactions WHERE student_id=$1`, [normalizedId]
+    ),
+    query(
+      `SELECT type, amount, date, note FROM savings_transactions
+       WHERE student_id=$1 ORDER BY date DESC, created_at DESC LIMIT 5`, [normalizedId]
+    ),
+  ]);
+  const deposited = Number(totals.rows[0]?.total_deposit || 0);
+  const withdrawn = Number(totals.rows[0]?.total_withdraw || 0);
+  return {
+    balance: deposited - withdrawn,
+    totalDeposit: deposited,
+    totalWithdraw: withdrawn,
+    recent: recent.rows.map(row => ({
+      type: row.type,
+      amount: Number(row.amount || 0),
+      date: row.date,
+      note: row.note || '',
+    })),
+  };
+}
+
+async function getStudentClubSection(studentId, term, year) {
+  const { rows } = await query(
+    `SELECT cm.club_id, c.club_name, c.description, c.capacity, c.status,
+            (SELECT COUNT(*)::int FROM club_members m2
+             WHERE m2.club_id=cm.club_id AND m2.term=$2 AND m2.year=$3) AS member_count
+     FROM club_members cm
+     JOIN clubs c ON c.club_id=cm.club_id AND c.term=$2 AND c.year=$3
+     WHERE cm.student_id=$1 AND cm.term=$2 AND cm.year=$3
+     LIMIT 1`, [studentId, term, year]
+  );
+  if (!rows.length) return { registered: false, club: null };
+  const row = rows[0];
+  return {
+    registered: true,
+    club: {
+      clubId: row.club_id,
+      clubName: row.club_name || '',
+      description: row.description || '',
+      capacity: Number(row.capacity || 0),
+      memberCount: Number(row.member_count || 0),
+      status: row.status || '',
+    },
+  };
+}
+
+async function getStudentUpcomingEvents() {
+  const { rows } = await query(
+    `SELECT id, title, start_date, end_date, color, description
+     FROM calendar_events
+     WHERE COALESCE(end_date, start_date) >= $1::date
+       -- สีม่วงคือกิจกรรมส่วนตัวของบุคลากร (ดู getCalendarEvents.js) ไม่ให้หลุดถึงนักเรียน
+       AND COALESCE(color, '') != '#6f42c1'
+     ORDER BY start_date, title LIMIT 3`, [schoolToday()]
+  );
+  return rows.map(row => ({
+    id: row.id,
+    title: row.title || '',
+    startDate: row.start_date,
+    endDate: row.end_date,
+    color: row.color || '',
+    description: row.description || '',
+  }));
+}
+
+async function getStudentProfile(studentId) {
+  const { rows } = await query(
+    `SELECT username, full_name, department FROM users
+     WHERE username=$1 AND UPPER(role)='STUDENT'`, [studentId]
+  );
+  if (!rows.length) throw new Error('ไม่พบข้อมูลนักเรียน');
+  return {
+    studentId: rows[0].username,
+    studentName: rows[0].full_name || '',
+    className: rows[0].department || '',
+  };
+}
+
+// หน้ารายละเอียดของนักเรียนไม่ใช่รายงานสำหรับบุคลากร จึงไม่เปิดช่องให้ role อื่นส่ง
+// studentId มาอ่านข้อมูลรายบุคคลผ่าน endpoint ที่ไม่มี ownership workflow ของครู.
+function resolveStudentDashboardId(user, payloadStudentId) {
+  if (String(user?.role || '').trim().toUpperCase() !== 'STUDENT') {
+    throw new Error('สงวนสิทธิ์เฉพาะนักเรียน');
+  }
+  return resolveStudentId(user, payloadStudentId);
+}
+
+/** ตารางเรียนทั้งสัปดาห์ของห้องที่ผู้ใช้เป็นนักเรียนอยู่ในปัจจุบัน. */
+async function getStudentWeeklyTimetable([studentId, term, year], user) {
+  const sid = resolveStudentDashboardId(user, studentId);
+  const profile = await getStudentProfile(sid);
+  const [level, room] = profile.className.split('/').map(s => s.trim());
+  const orderedDays = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
+  if (!level || !room) return { profile, days: orderedDays.map(day => ({ day, lessons: [] })) };
+
+  const { rows } = await query(
+    `SELECT t.subject_code, t.subject_name, t.day, t.period, t.location, u.full_name AS teacher_name
+     FROM timetable t
+     LEFT JOIN users u ON u.username=t.teacher_id
+     WHERE t.level=$1 AND t.room=$2 AND t.term=$3 AND t.year=$4
+     ORDER BY CASE t.day
+       WHEN 'จันทร์' THEN 1 WHEN 'อังคาร' THEN 2 WHEN 'พุธ' THEN 3
+       WHEN 'พฤหัสบดี' THEN 4 WHEN 'ศุกร์' THEN 5 ELSE 99 END,
+       NULLIF(regexp_replace(t.period, '[^0-9]', '', 'g'), '')::int NULLS LAST, t.period`,
+    [level, room, term, year]
+  );
+  const byDay = new Map(orderedDays.map(day => [day, []]));
+  for (const row of rows) {
+    if (!byDay.has(row.day)) continue;
+    byDay.get(row.day).push({
+      subjectCode: row.subject_code,
+      subjectName: row.subject_name || '',
+      period: row.period,
+      location: row.location || '',
+      teacherName: row.teacher_name || '',
+    });
+  }
+  return { profile, days: orderedDays.map(day => ({ day, lessons: byDay.get(day) })) };
+}
+
+/** สรุปผลและสถานะเช็คชื่อของผู้ใช้คนเดียว โดยไม่คำนวณร้อยละทางการซ้ำ. */
+async function getStudentAcademicSummary([studentId, term, year], user) {
+  const sid = resolveStudentDashboardId(user, studentId);
+  const profile = await getStudentProfile(sid);
+  const { rows } = await query(
+    `WITH codes AS (
+       SELECT subject_code FROM subject_config WHERE class_name=$1 AND term=$2 AND year=$3
+       UNION
+       SELECT subject_code FROM attendance
+        WHERE student_id=$4 AND term=$2 AND year=$3 AND subject_code NOT LIKE 'CLUB%'
+       UNION
+       SELECT subject_code FROM grade_summary WHERE student_id=$4 AND term=$2 AND year=$3
+     ), attendance_totals AS (
+       SELECT subject_code, MAX(subject_name) AS subject_name,
+              COUNT(*) FILTER (WHERE status='มา')::int AS present,
+              COUNT(*) FILTER (WHERE status='สาย')::int AS late,
+              COUNT(*) FILTER (WHERE status='ลา')::int AS leave,
+              COUNT(*) FILTER (WHERE status='ขาด')::int AS absent,
+              COUNT(*) FILTER (WHERE status='โดด')::int AS skip,
+              COUNT(*)::int AS total
+       FROM attendance
+       WHERE student_id=$4 AND term=$2 AND year=$3 AND subject_code NOT LIKE 'CLUB%'
+       GROUP BY subject_code
+     )
+     SELECT codes.subject_code,
+            COALESCE(NULLIF(att.subject_name,''), tt.subject_name, codes.subject_code) AS subject_name,
+            att.present, att.late, att.leave, att.absent, att.skip, att.total,
+            gs.total_score, gs.grade, gs.remedial_status
+     FROM codes
+     LEFT JOIN attendance_totals att ON att.subject_code=codes.subject_code
+     LEFT JOIN LATERAL (
+       SELECT subject_name FROM timetable
+       WHERE subject_code=codes.subject_code AND term=$2 AND year=$3
+         AND level=split_part($1,'/',1) AND room=split_part($1,'/',2)
+       LIMIT 1
+     ) tt ON TRUE
+     LEFT JOIN grade_summary gs ON gs.student_id=$4 AND gs.subject_code=codes.subject_code
+       AND gs.term=$2 AND gs.year=$3
+     ORDER BY codes.subject_code`,
+    [profile.className, term, year, sid]
+  );
+  return {
+    profile,
+    subjects: rows.map(row => ({
+      subjectCode: row.subject_code,
+      subjectName: row.subject_name || row.subject_code,
+      attendance: {
+        present: Number(row.present || 0), late: Number(row.late || 0),
+        leave: Number(row.leave || 0), absent: Number(row.absent || 0),
+        skip: Number(row.skip || 0), total: Number(row.total || 0),
+      },
+      score: {
+        totalScore: row.total_score === null ? null : Number(row.total_score),
+        grade: row.grade || '',
+        remedialStatus: row.remedial_status || '',
+      },
+    })),
+  };
 }
 
 // ============================================================
@@ -1104,6 +1313,8 @@ module.exports = {
   getTeacherRiskDashboard,
   getTeacherAtRiskDashboard,
   getStudentDashboardBundle,
+  getStudentWeeklyTimetable,
+  getStudentAcademicSummary,
   getExecutiveDashboardBundle,
   getClubMembers,
   getClubMembersForTeacher,

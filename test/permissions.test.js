@@ -80,7 +80,8 @@ test('Executive ใช้งานสิทธิ์จัดการโรง�
 // ครูและผู้ดูแลต้องยังดูได้ตามหน้าที่ เทสต์จึงต้องยืนยันทั้งสองด้าน
 // เพิ่ม endpoint ใหม่ที่รับ studentId เมื่อไหร่ ให้เพิ่มชื่อในลิสต์นี้ด้วย
 
-const SELF = M2_STUDENTS[0];      // นักเรียนที่ล็อกอิน (test/helpers/api.js ใช้คนนี้)
+const SELF = M2_STUDENTS[0];      // รหัสใน payload เพื่อทดสอบว่าถูก JWT ทับ
+const AUTH_SELF = '01901';        // นักเรียนที่ล็อกอิน (test/helpers/api.js ใช้คนนี้)
 const OTHER = M6_STUDENTS[0];     // เพื่อนคนละห้อง
 
 const STUDENT_SCOPED = [
@@ -88,6 +89,8 @@ const STUDENT_SCOPED = [
   ['getSavingsHistory',          (id) => [id]],
   ['getMyClub',                  (id) => [id, TERM, YEAR]],
   ['getStudentDashboardBundle',  (id) => [id, TERM, YEAR]],
+  ['getStudentWeeklyTimetable',  (id) => [id, TERM, YEAR]],
+  ['getStudentAcademicSummary',  (id) => [id, TERM, YEAR]],
 ];
 
 for (const [fnName, argsFor] of STUDENT_SCOPED) {
@@ -98,6 +101,11 @@ for (const [fnName, argsFor] of STUDENT_SCOPED) {
       `${fnName} ยอมให้นักเรียนอ่านข้อมูลของ ${OTHER} — รหัสใน payload ต้องถูกทิ้ง`);
   });
 }
+
+test('รายละเอียดแดชบอร์ดนักเรียนไม่เป็นช่องทางให้บุคลากรอ่านรายคน', async () => {
+  await denied('getStudentWeeklyTimetable', [OTHER, TERM, YEAR], 'teacher1');
+  await denied('getStudentAcademicSummary', [OTHER, TERM, YEAR], 'admin');
+});
 
 test('ครูยังดูข้อมูลของนักเรียนได้ตามหน้าที่', async () => {
   const bal = await ok('getSavingsBalance', [OTHER], 'teacher2');
@@ -151,5 +159,52 @@ test('แดชบอร์ดนักเรียน: payload ต้องม�
       assert.ok(['formative', 'midterm', 'final'].includes(it.type),
         `type '${it.type}' ไม่อยู่ในกลุ่มที่ renderer รู้จัก จะไม่ถูกแสดงเลย`);
     }
+  }
+});
+
+test('แดชบอร์ดนักเรียน: ส่วนข้อมูลส่วนตัวใช้ข้อมูลจริงและมี contract ครบ', async () => {
+  const b = await ok('getStudentDashboardBundle', [SELF, TERM, YEAR], 'student');
+  assert.deepEqual(b.profile.data, {
+    studentId: AUTH_SELF, studentName: 'เด็กหญิงกานดา ทดสอบ', className: 'ม.6/1',
+  });
+  assert.ok(b.savings.ok && b.club.ok && b.upcomingEvents.ok,
+    'ส่วนเสริมต้องแยกผลสำเร็จเป็นรายส่วน');
+  for (const key of ['balance', 'totalDeposit', 'totalWithdraw', 'recent']) {
+    assert.ok(key in b.savings.data, `savings ขาด ${key}`);
+  }
+  assert.ok(Array.isArray(b.savings.data.recent));
+  assert.equal(typeof b.club.data.registered, 'boolean');
+  assert.ok(Array.isArray(b.upcomingEvents.data));
+});
+
+test('รายละเอียดแดชบอร์ดนักเรียน: ตารางรายสัปดาห์ผูกกับห้องของผู้ล็อกอิน', async () => {
+  const weekly = await ok('getStudentWeeklyTimetable', [SELF, TERM, YEAR], 'student');
+  assert.equal(weekly.profile.studentId, AUTH_SELF);
+  assert.equal(weekly.profile.className, 'ม.6/1');
+  assert.deepEqual(weekly.days.map(day => day.day), ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์']);
+  for (const day of weekly.days) {
+    assert.ok(Array.isArray(day.lessons));
+    for (const lesson of day.lessons) {
+      assert.ok('subjectCode' in lesson && 'period' in lesson);
+      assert.ok(!('studentId' in lesson) && !('className' in lesson),
+        'ตารางนักเรียนไม่ควรมีข้อมูลเพื่อนร่วมชั้น');
+    }
+  }
+});
+
+test('รายละเอียดแดชบอร์ดนักเรียน: สรุปการเรียนคืนเฉพาะคะแนนและการเช็คชื่อของตน', async () => {
+  const summary = await ok('getStudentAcademicSummary', [SELF, TERM, YEAR], 'student');
+  assert.equal(summary.profile.studentId, AUTH_SELF);
+  assert.ok(Array.isArray(summary.subjects));
+  for (const subject of summary.subjects) {
+    assert.ok(subject.attendance && subject.score);
+    for (const key of ['present', 'late', 'leave', 'absent', 'skip', 'total']) {
+      assert.equal(typeof subject.attendance[key], 'number', `attendance ขาด ${key}`);
+    }
+    for (const key of ['totalScore', 'grade', 'remedialStatus']) {
+      assert.ok(key in subject.score, `score ขาด ${key}`);
+    }
+    assert.ok(!('studentId' in subject) && !('studentName' in subject),
+      'สรุปรายวิชาไม่ควรส่งข้อมูลนักเรียนคนอื่น');
   }
 });

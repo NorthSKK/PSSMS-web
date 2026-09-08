@@ -3,6 +3,7 @@
     <div>
       <h4><i class="fas fa-user-graduate me-2" style="color:var(--p-accent);"></i><span id="studentName">นักเรียน</span></h4>
       <p class="pssms-subtitle" id="studentSubtitle">กำลังโหลด...</p>
+      <div class="small text-muted" id="studentIdentity">กำลังโหลดข้อมูล...</div>
     </div>
   </div>
 
@@ -10,15 +11,28 @@
   <div class="row g-2 mb-3">
     <div class="col-6">
       <div class="pssms-card p-3 text-center">
-        <div class="text-muted small">ร้อยละการมาเรียน</div>
+        <div class="text-muted small">การมาเรียนเทอมนี้</div>
         <div class="fw-bold fs-4" id="studentAttendPct" style="color:var(--p-accent);">—</div>
       </div>
     </div>
     <div class="col-6">
       <div class="pssms-card p-3 text-center">
-        <div class="text-muted small">เกรดเฉลี่ยสะสม</div>
+        <div class="text-muted small">เกรดเฉลี่ยเทอมนี้</div>
         <div class="fw-bold fs-4" id="studentGPA" style="color:var(--p-accent);">—</div>
       </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <button type="button" class="pssms-card p-3 w-100 text-start border-0 h-100" onclick="loadPage('Page_Student_Savings')">
+        <div class="d-flex justify-content-between gap-2"><div><div class="small text-muted mb-1"><i class="fas fa-piggy-bank me-1"></i>เงินออมของฉัน</div><div class="fw-bold" id="studentSavingsBalance" style="font-size:1.15rem;color:#b45309;">—</div><div class="small text-muted mt-1" id="studentSavingsDetail">กำลังโหลด...</div></div><i class="fas fa-chevron-right text-muted align-self-center"></i></div>
+      </button>
+    </div>
+    <div class="col-md-6">
+      <button type="button" class="pssms-card p-3 w-100 text-start border-0 h-100" onclick="loadPage('Page_Student_Clubs')">
+        <div class="d-flex justify-content-between gap-2"><div><div class="small text-muted mb-1"><i class="fas fa-flag-checkered me-1"></i>ชุมนุมของฉัน</div><div class="small" id="studentClubPreview">กำลังโหลด...</div></div><i class="fas fa-chevron-right text-muted align-self-center"></i></div>
+      </button>
     </div>
   </div>
 
@@ -30,6 +44,11 @@
       <div id="studentNextClassTitle" class="fw-bold text-white" style="font-size:1.1rem;">กำลังตรวจสอบ...</div>
       <div id="studentNextClassDetail" class="text-white opacity-75 small mt-1"></div>
     </div>
+  </div>
+
+  <div class="pssms-card mb-3">
+    <div class="pssms-card-header d-flex justify-content-between align-items-center"><span><i class="fas fa-calendar-alt me-2" style="color:var(--p-text-muted);"></i>กิจกรรมที่กำลังจะมาถึง</span><button type="button" class="btn btn-link btn-sm p-0" onclick="loadPage('Page_Student_Calendar')">ดูทั้งหมด</button></div>
+    <div class="px-3 pb-2" id="studentEventsPreview"><div class="pssms-skel my-2" style="height:32px;border-radius:8px;"></div><div class="pssms-skel my-2" style="height:32px;border-radius:8px;"></div></div>
   </div>
 
   <!-- ตารางเรียนวันนี้ -->
