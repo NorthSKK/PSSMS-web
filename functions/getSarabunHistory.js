@@ -1,8 +1,17 @@
 const { query } = require('../lib/db');
 const { isAdmin } = require('../lib/permissions');
 
+function legacyFileUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
 /**
- * ทะเบียนสารบรรณ — ครูและ Admin เห็นทุกรายการ (ทะเบียนกลางของงานธุรการ)
+ * ทะเบียนสารบรรณ — บุคลากรเห็นทุกรายการ (ทะเบียนกลางของงานธุรการ)
  *
  * ⚠️ ตัวตนมาจาก JWT เท่านั้น **ห้ามกลับไปรับ userName/role จาก args**
  *    เดิมรับจาก client ทำให้ใครก็ตามที่ล็อกอินได้ส่ง role='TEACHER' แล้วอ่านทั้งโรงเรียน
@@ -11,7 +20,7 @@ const { isAdmin } = require('../lib/permissions');
 module.exports = async function getSarabunHistory(_args, user) {
   const role = String(user?.role || '').trim().toUpperCase();
   const admin = isAdmin(user);
-  const staff = admin || role === 'TEACHER';
+  const staff = admin || role === 'TEACHER' || role === 'EXECUTIVE';
 
   // ธง mine ตัดสินด้วย requester_id เป็นหลัก (กติกาเดียวกับ _assertOwnsSarabun)
   // ชื่อจริงสดใช้เฉพาะแถวเก่าที่ requester_id ว่าง — query ครั้งเดียว ไม่ใช่ต่อแถว
@@ -45,7 +54,9 @@ module.exports = async function getSarabunHistory(_args, user) {
     if (ownerId) return ownerId === callerId;   // ชื่อไม่เกี่ยวเมื่อมี id
     return !!callerName && String(r.requester || '').trim() === callerName;
   };
-  return rows.map(r => ({
+  return rows.map(r => {
+    const fileURL = legacyFileUrl(r.file_url);
+    return {
     id:         r.id,
     timestamp:  r.timestamp   || '',
     docType:    r.doc_type    || '',
@@ -54,12 +65,15 @@ module.exports = async function getSarabunHistory(_args, user) {
     requester:  r.requester   || '',
     targetDate: r.target_date || '',
     status:     r.status      || '',
-    fileURL:    r.file_url    || '',
+    fileURL,
     fileName:   r.file_name   || '',
     fileSize:   r.file_size == null ? null : Number(r.file_size),
-    hasFile:    !!r.file_key,
+    // ทะเบียนเก่ายังเก็บลิงก์อยู่ใน file_url จึงต้องนับเป็นไฟล์แนบด้วย
+    // ไม่เช่นนั้นครูคนอื่นเห็นแถว แต่ไม่มีปุ่มเปิดไฟล์
+    hasFile:    !!(r.file_key || fileURL),
     year:       r.year        || '',
     // ผู้เรียกเขียนแถวนี้ได้ไหม (แก้ไข/แนบไฟล์) — กติกาเดียวกับ _assertOwnsSarabun
     mine:       canWrite(r),
-  }));
+    };
+  });
 };

@@ -12,12 +12,21 @@
  * requester ว่าง (ข้อมูลเก่า/นำเข้า) สงวนให้ Admin แก้ (หลักเดียวกับ budgets.created_by)
  */
 const { query } = require('../lib/db');
-const { isAdmin } = require('../lib/permissions');
+const { isAdmin, staffOnly } = require('../lib/permissions');
 const storage = require('../lib/storage');
 const { schoolToday } = require('../lib/schoolDate');
 
 // 10MB — หนังสือราชการสแกนไม่กี่หน้า หรือรูปถ่ายจากมือถือ ไม่ใช่หนังสือทั้งเล่ม
 const MAX_ATTACH_MB = 10;
+
+function legacyFileUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+  } catch {
+    return '';
+  }
+}
 
 /**
  * ผู้รับผิดชอบเอกสาร — คืน `{ name, id }`
@@ -157,15 +166,28 @@ async function attachSarabunFile(id, file, user) {
   return { status: 'success', message: 'แนบไฟล์เรียบร้อย', fileName: file.originalname };
 }
 
-/** ลิงก์เปิดไฟล์แนบ อายุสั้น — ครูและ Admin เปิดได้ทุกใบ (ทะเบียนกลาง ดูหมายเหตุหัวไฟล์) */
+/**
+ * ลิงก์เปิดไฟล์แนบ — บุคลากรทุกคนเปิดได้ทุกใบ เพราะทะเบียนเป็นของกลาง
+ *
+ * ไฟล์ที่อัปโหลดในระบบใหม่มี `file_key` และต้องออก URL อายุสั้นจาก storage ก่อน
+ * ส่วนทะเบียนเดิมมีเพียง `file_url` (เช่นลิงก์ Drive) จึงคืนลิงก์เดิมหลังตรวจ
+ * สิทธิ์บุคลากรแล้ว. ห้ามใช้ `file_url` จาก client โดยตรง เพราะต้องอ่านจากแถว DB
+ * ที่ผู้เรียกมีสิทธิ์เห็นก่อนเสมอ.
+ */
 async function getSarabunFileTicket([id], user) {
+  // กันซ้ำจาก allowlist ของ route เพื่อให้ปลอดภัยแม้ฟังก์ชันถูกเรียกตรงในอนาคต
+  staffOnly(user);
   const docId = parseInt(id, 10);
   if (!Number.isInteger(docId)) throw new Error('ไม่พบทะเบียนเอกสารนี้');
   const { rows } = await query(
-    `SELECT id, file_key, file_name FROM sarabun WHERE id=$1`, [docId]
+    `SELECT id, file_key, file_name, file_url FROM sarabun WHERE id=$1`, [docId]
   );
   const row = rows[0];
-  if (!row || !row.file_key) throw new Error('ทะเบียนนี้ไม่มีไฟล์แนบ');
+  const fileURL = legacyFileUrl(row?.file_url);
+  if (!row || (!row.file_key && !fileURL)) throw new Error('ทะเบียนนี้ไม่มีไฟล์แนบ');
+
+  // ข้อมูลจากระบบเดิมยังเก็บเป็น URL ภายนอก ไม่มี object ให้สร้างตั๋วใหม่
+  if (!row.file_key) return { url: fileURL };
 
   const url = await storage.getFileUrl({
     kind: 'sarabun', id: docId, key: row.file_key, filename: row.file_name, user,

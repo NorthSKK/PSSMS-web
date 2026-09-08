@@ -151,7 +151,7 @@ test('แนบทับ: ไฟล์เก่าถูกลบ ไฟล์�
   await ok('deleteSarabun', [id], 'admin');
 });
 
-test('ตั๋วเปิดไฟล์แนบ: ครูเปิดได้ นักเรียนขอไม่ได้ ตั๋วข้ามชนิดไม่ได้', async () => {
+test('ตั๋วเปิดไฟล์แนบ: บุคลากรที่ไม่ใช่เจ้าของเปิดได้ นักเรียนขอไม่ได้ ตั๋วข้ามชนิดไม่ได้', async () => {
   const id = await makeDoc();
   await upload({ docId: id, token: TOKENS.teacher1, filename: 'หนังสือราชการ.pdf' });
 
@@ -159,6 +159,10 @@ test('ตั๋วเปิดไฟล์แนบ: ครูเปิดได
 
   const ticket = await ok('getSarabunFileTicket', [id], 'teacher2');
   assert.match(ticket.url, /^\/api\/media\/file\/sarabun\/\d+\?t=/);
+
+  // ผอ./รองเป็นบุคลากรที่อ่านทะเบียนกลางได้ แต่ไม่ใช่ผู้แก้ไขเอกสาร
+  const executiveTicket = await ok('getSarabunFileTicket', [id], 'executive');
+  assert.match(executiveTicket.url, /^\/api\/media\/file\/sarabun\/\d+\?t=/);
 
   const base = await baseURL();
   const res = await new Promise((resolve, reject) => {
@@ -180,6 +184,34 @@ test('ตั๋วเปิดไฟล์แนบ: ครูเปิดได
   assert.equal(crossed.status, 403);
 
   await ok('deleteSarabun', [id], 'admin');
+});
+
+test('ไฟล์แนบแบบลิงก์เก่า: บุคลากรที่ไม่ใช่เจ้าของเห็นปุ่มและเปิดได้', async () => {
+  const legacyUrl = 'https://drive.example.test/file/d/legacy-sarabun.pdf';
+  const id = await makeDoc('ไฟล์แนบจากระบบเดิม', 'ครูสมชาย ใจดี');
+  await query(`UPDATE sarabun SET file_url=$1 WHERE id=$2`, [legacyUrl, id]);
+
+  const history = await ok('getSarabunHistory', [], 'teacher2');
+  const row = history.find(r => r.id === id);
+  assert.equal(row.hasFile, true, 'ลิงก์เก่าต้องทำให้แสดงปุ่มเปิดไฟล์');
+  assert.equal(row.mine, false, 'ครูคนอื่นยังแก้/แนบไฟล์แทนไม่ได้');
+
+  const ticket = await ok('getSarabunFileTicket', [id], 'teacher2');
+  assert.equal(ticket.url, legacyUrl, 'ต้องคืนลิงก์เก่าหลังตรวจสิทธิ์บุคลากร');
+  const executiveHistory = await ok('getSarabunHistory', [], 'executive');
+  assert.ok(executiveHistory.some(r => r.id === id), 'ผู้บริหารต้องเห็นทะเบียนกลาง');
+  await denied('getSarabunFileTicket', [id], STUDENT);
+
+  await query(`DELETE FROM sarabun WHERE id=$1`, [id]);
+});
+
+test('ลิงก์ไฟล์แนบเดิมที่ไม่ใช่ http(s) ไม่ถูกเปิด', async () => {
+  const id = await makeDoc('ลิงก์ที่ไม่ปลอดภัย');
+  await query(`UPDATE sarabun SET file_url='javascript:alert(1)' WHERE id=$1`, [id]);
+  const history = await ok('getSarabunHistory', [], 'teacher2');
+  assert.equal(history.find(r => r.id === id).hasFile, false);
+  await denied('getSarabunFileTicket', [id], 'teacher2');
+  await query(`DELETE FROM sarabun WHERE id=$1`, [id]);
 });
 
 test('docx เสิร์ฟเป็น attachment ไม่ให้เบราว์เซอร์เรนเดอร์เอง', async () => {
