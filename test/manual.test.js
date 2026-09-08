@@ -55,6 +55,30 @@ test('`code` ตีก่อน **ตัวหนา** — ดาวที่อ
   assert.match(html, /<strong>หนา<\/strong>/);
 });
 
+test('บรรทัดที่ย่อหน้าเข้ามาเป็นเนื้อความต่อของข้อเดิม ไม่ตัดรายการทิ้ง', () => {
+  // ⚠️ เจอตอนดู PDF ของจริง: ตัดรายการแล้วข้อถัดไปขึ้น <ol> ใหม่ เลขวนกลับเป็น 1
+  const { html } = renderMarkdown('1. ข้อหนึ่ง\n   คำอธิบายต่อ\n2. ข้อสอง\n');
+  assert.strictEqual((html.match(/<ol>/g) || []).length, 1, 'รายการถูกตัดเป็นสองก้อน');
+  assert.match(html, /<li>ข้อหนึ่ง คำอธิบายต่อ<\/li>/);
+  assert.match(html, /<li>ข้อสอง<\/li>/);
+});
+
+test('บรรทัดว่างระหว่างข้อไม่ปิดรายการ', () => {
+  const { html } = renderMarkdown('- ก\n\n- ข\n');
+  assert.strictEqual((html.match(/<ul>/g) || []).length, 1);
+});
+
+test('ย่อหน้าที่ไม่ได้ย่อเข้ามาปิดรายการตามเดิม', () => {
+  const { html } = renderMarkdown('- ก\n\nย่อหน้าใหม่\n');
+  assert.match(html, /<\/ul>\n<p>ย่อหน้าใหม่<\/p>/);
+});
+
+test('คำพูดอ้างหลายบรรทัดเป็นย่อหน้าเดียว ไม่ถูกหั่นกลางประโยค', () => {
+  const { html } = renderMarkdown('> ประโยคยาว\n> ที่ขึ้นบรรทัดใหม่ในไฟล์\n>\n> ย่อหน้าที่สอง\n');
+  assert.match(html, /<p>ประโยคยาว ที่ขึ้นบรรทัดใหม่ในไฟล์<\/p>/);
+  assert.match(html, /<p>ย่อหน้าที่สอง<\/p>/);
+});
+
 test('ตัวเอียงไม่กินตัวหนา', () => {
   const { html } = renderMarkdown('*เอียง* กับ **หนา** ในบรรทัดเดียว\n');
   assert.match(html, /<em>เอียง<\/em>/);
