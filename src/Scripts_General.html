@@ -3238,7 +3238,7 @@ function restoreMediaCardById(id) {
 // ปุ่มทุกปุ่มในหน้าจึงเป็น ReferenceError และหน้าไม่โหลดข้อมูลอะไรเลย
 // **ตัวเริ่มหน้าอยู่ที่ `setupPageContent` ใน Scripts_Core.html เหมือนหน้าอื่นทั้งระบบ**
 
-// ── เอกสารโครงการ ──────────────────────────────────────────────────────
+// ── คลังเอกสารโรงเรียน ─────────────────────────────────────────────────
 var projectDocumentsData = [];
 var projectSaving = false;
 var projectCategoryFilter = 'ทั้งหมด';
@@ -3263,7 +3263,7 @@ window.initProjectDocumentsPage = function() {
 };
 window.loadProjectDocuments = function() {
   google.script.run.withFailureHandler(function(err) {
-    document.getElementById('projectDocumentsList').innerHTML = '<div class="col-12 text-danger text-center py-4">โหลดเอกสารโครงการไม่สำเร็จ: ' + _projectEsc(err.message) + '</div>';
+    document.getElementById('projectDocumentsList').innerHTML = '<div class="col-12 text-danger text-center py-4">โหลดคลังเอกสารไม่สำเร็จ: ' + _projectEsc(err.message) + '</div>';
   }).withSuccessHandler(function(rows) {
     projectDocumentsData = rows || [];
     renderProjectDocuments();
@@ -3279,7 +3279,7 @@ function renderProjectDocuments() {
   target.innerHTML = rows.map(function(p) {
     var style = PROJECT_CATEGORY_STYLE[p.category] || PROJECT_CATEGORY_STYLE['โครงการ'];
     var files = (p.files || []).map(function(f) { return '<li class="d-flex align-items-center gap-2 py-1"><i class="fas fa-paperclip text-muted"></i><a href="javascript:void(0)" class="text-decoration-none text-break" onclick="openProjectFile(' + Number(f.id) + ')">' + _projectEsc(f.name) + '</a><small class="text-muted ms-auto text-nowrap">' + _projectSize(f.size) + '</small>' + (p.mine ? '<button class="btn btn-link text-danger p-0" onclick="deleteProjectFile(' + Number(f.id) + ')"><i class="fas fa-times"></i></button>' : '') + '</li>'; }).join('');
-    return '<div class="col-sm-6 col-lg-4 col-xxl-3"><div class="pssms-card h-100 overflow-hidden" style="border-top:3px solid ' + style.color + '"><div class="p-3"><div class="d-flex justify-content-between align-items-start gap-2 mb-2"><span class="badge rounded-pill" style="background:' + style.color + '18;color:' + style.color + '"><i class="fas ' + style.icon + ' me-1"></i>' + _projectEsc(p.category) + '</span>' + (p.mine ? '<span class="project-document-actions"><button class="btn btn-sm btn-soft project-document-action" title="แก้ไข" aria-label="แก้ไขโครงการ" onclick="openProjectDocumentForm(' + Number(p.id) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-soft text-danger project-document-action" title="ลบ" aria-label="ลบโครงการ" onclick="deleteProjectDocument(' + Number(p.id) + ')"><i class="fas fa-trash"></i></button></span>' : '') + '</div><div class="fw-bold project-document-title mb-1">' + _projectEsc(p.title) + '</div><p class="small text-muted project-document-description mb-2">' + _projectEsc(p.description || 'ไม่มีรายละเอียด') + '</p><div class="project-document-meta small text-muted"><span class="project-document-owner"><i class="fas fa-user me-1"></i>' + _projectEsc(p.ownerName) + '</span><span class="text-nowrap">' + (p.files || []).length + ' ไฟล์</span></div>' + (files ? '<details class="small mt-2"><summary class="text-primary" style="cursor:pointer">เปิดรายการไฟล์</summary><ul class="list-unstyled mb-0 mt-1">' + files + '</ul></details>' : '') + '</div></div></div>';
+    return '<div class="col-sm-6 col-lg-4 col-xxl-3"><div class="pssms-card h-100 overflow-hidden" style="border-top:3px solid ' + style.color + '"><div class="p-3"><div class="d-flex justify-content-between align-items-start gap-2 mb-2"><span class="badge rounded-pill" style="background:' + style.color + '18;color:' + style.color + '"><i class="fas ' + style.icon + ' me-1"></i>' + _projectEsc(p.category) + '</span>' + (p.mine ? '<span class="project-document-actions"><button class="btn btn-sm btn-soft project-document-action" title="แก้ไข" aria-label="แก้ไขเอกสาร" onclick="openProjectDocumentForm(' + Number(p.id) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-soft text-danger project-document-action" title="ลบ" aria-label="ลบเอกสาร" onclick="deleteProjectDocument(' + Number(p.id) + ')"><i class="fas fa-trash"></i></button></span>' : '') + '</div><div class="fw-bold project-document-title mb-1">' + _projectEsc(p.title) + '</div><p class="small text-muted project-document-description mb-2">' + _projectEsc(p.description || 'ไม่มีรายละเอียด') + '</p><div class="project-document-meta small text-muted"><span class="project-document-owner"><i class="fas fa-user me-1"></i>' + _projectEsc(p.ownerName) + '</span><span class="text-nowrap">' + (p.files || []).length + ' ไฟล์</span></div>' + (files ? '<details class="small mt-2"><summary class="text-primary" style="cursor:pointer">เปิดรายการไฟล์</summary><ul class="list-unstyled mb-0 mt-1">' + files + '</ul></details>' : '') + '</div></div></div>';
   }).join('');
 }
 window.openProjectDocumentForm = function(id) {
@@ -3317,18 +3317,18 @@ function _setProjectProgress(done, total, fileName) {
 window.saveProjectDocumentForm = function() {
   if (projectSaving) return;
   var title = document.getElementById('projectDocumentTitle').value.trim();
-  if (!title) { showToast('กรุณาระบุชื่อโครงการ', 'danger'); return; }
+  if (!title) { showToast('กรุณาระบุชื่อเอกสาร', 'danger'); return; }
   var payload = { id:document.getElementById('projectDocumentId').value, title:title, category:document.getElementById('projectDocumentCategory').value, description:document.getElementById('projectDocumentDescription').value };
   var files = Array.prototype.slice.call(document.getElementById('projectDocumentFiles').files || []);
   _setProjectSaving(true);
-  google.script.run.withFailureHandler(function(err) { _setProjectSaving(false); showToast(err.message || 'บันทึกโครงการไม่สำเร็จ', 'danger'); }).withSuccessHandler(async function(res) {
+  google.script.run.withFailureHandler(function(err) { _setProjectSaving(false); showToast(err.message || 'บันทึกเอกสารไม่สำเร็จ', 'danger'); }).withSuccessHandler(async function(res) {
     // ถ้าอัปโหลดล้มแล้วผู้ใช้กดบันทึกซ้ำ ต้องแก้โครงการเดิม ไม่สร้างแถวใหม่ซ้ำ
     document.getElementById('projectDocumentId').value = res.id;
     try {
       for (var i=0; i<files.length; i++) { _setProjectProgress(i, files.length, files[i].name); await uploadProjectFile(res.id, files[i]); _setProjectProgress(i + 1, files.length, files[i].name); }
-      showToast(files.length ? 'บันทึกโครงการและอัปโหลดไฟล์แล้ว' : 'บันทึกโครงการแล้ว', 'success');
+      showToast(files.length ? 'บันทึกเอกสารและอัปโหลดไฟล์แล้ว' : 'บันทึกเอกสารแล้ว', 'success');
       bootstrap.Modal.getInstance(document.getElementById('projectDocumentModal')).hide(); loadProjectDocuments();
-    } catch (e) { showToast('บันทึกโครงการแล้ว แต่แนบไฟล์ไม่สำเร็จ: ' + e.message, 'danger'); }
+    } catch (e) { showToast('บันทึกเอกสารแล้ว แต่แนบไฟล์ไม่สำเร็จ: ' + e.message, 'danger'); }
     finally { _setProjectSaving(false); }
   }).saveProjectDocument(payload);
 };
@@ -3338,7 +3338,7 @@ async function uploadProjectFile(projectId, file) {
   var body = await response.json(); if (!response.ok || body.__error) throw new Error(body.__error || 'อัปโหลดไม่สำเร็จ');
 }
 window.openProjectFile = function(id) { google.script.run.withFailureHandler(function(err){ alert(err.message); }).withSuccessHandler(function(r){ window.open(r.url, '_blank', 'noopener'); }).getProjectFileTicket(id); };
-window.deleteProjectDocument = function(id) { if (!confirm('ลบโครงการและไฟล์ทั้งหมดหรือไม่?')) return; google.script.run.withFailureHandler(function(err){alert(err.message);}).withSuccessHandler(loadProjectDocuments).deleteProjectDocument(id); };
+window.deleteProjectDocument = function(id) { if (!confirm('ลบเอกสารและไฟล์ทั้งหมดหรือไม่?')) return; google.script.run.withFailureHandler(function(err){alert(err.message);}).withSuccessHandler(loadProjectDocuments).deleteProjectDocument(id); };
 window.deleteProjectFile = function(id) { if (!confirm('ลบไฟล์นี้หรือไม่?')) return; google.script.run.withFailureHandler(function(err){alert(err.message);}).withSuccessHandler(loadProjectDocuments).deleteProjectFile(id); };
 // `_esc()` ใช้ตัวของ Scripts_Core.html (เหมือนกันเป๊ะ) ไม่ประกาศซ้ำ
 
