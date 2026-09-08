@@ -137,6 +137,10 @@ S3_BUCKET=
 S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
 S3_REGION=auto
+
+# ปลายทางรับคำแจ้งปัญหา — ไม่ตั้ง = ปุ่มยังกดได้ แถวยังลง DB แต่ค้างที่ pending
+PSSMS_SUPPORT_INGEST_URL=      # ต้องเป็น https (ยกเว้นตอนเทส)
+PSSMS_SUPPORT_INGEST_TOKEN=
 ```
 ดู `.env.example` (commit ไว้) เป็นแม่แบบ. `.gitignore` คลุม `.env.*` ทั้งหมดยกเว้น `.env.example`
 
@@ -278,6 +282,7 @@ web/
 │   ├── importSpec.js            ⭐ คอลัมน์ไฟล์นำเข้า (ไม่แตะ DB) — backend ตรวจ +
 │   │                              หน้าเว็บ parse + สร้างแม่แบบ ผ่าน getImportSpec
 │   ├── subjectGroup.js          subject_code → กลุ่มสาระ · isHomeroomSubject()
+│   ├── appInfo.js               เวอร์ชัน/build ของ deployment (ไม่มีข้อมูลโรงเรียน)
 │   ├── manual.js                คู่มือโรงเรียน — เรนเดอร์ docs/school-onboarding.md
 │   │                              เป็นหน้าเว็บที่ GET /manual (ไม่แตะ DB · เปิดสาธารณะ)
 │   ├── storage/                 ที่เก็บไฟล์ เลือก driver ด้วย STORAGE_DRIVER
@@ -292,6 +297,7 @@ web/
 │   ├── media.js                 ⭐ REST endpoints ตัวเดียวของ repo — อัปโหลดไฟล์
 │   │                              (binary ไป REST, ที่เหลือไป /api/gas)
 │   └── assets.js                non-GAS-style routes
+│                                (`/manual` กับ `/api/app-info` อยู่ใน server.js ไม่ใช่ที่นี่)
 ├── functions/                   one file per logical domain
 │   ├── attendanceReport.js      ⭐ shared formula: getSemesterReport,
 │   │                              getAllSubjectsReport, getTeacherAtRiskDashboard
@@ -311,6 +317,7 @@ web/
 │   ├── getTeacherDashboardBundle.js  parallel sections
 │   ├── getAdminDashboardBundle.js
 │   ├── setupChecklist.js        รายการตั้งค่าเริ่มต้นของโรงเรียนใหม่ (อ่านสถานะจาก DB)
+│   ├── problemReports.js        แจ้งปัญหา — ส่งต่อไปหลังบ้านกลาง ไม่เก็บไฟล์ไว้ที่โรงเรียน
 │   ├── studentWatch.js          ⭐ ติดตามนักเรียน — classify() 4 อาการ อยู่ที่นี่ที่เดียว
 │   ├── teacherProgressBoard.js  กระดานติดตามงานครู (**พักไว้ ติดป้ายกำลังพัฒนา**)
 │   ├── substituteAuto.js        จัดสอนแทนอัตโนมัติ (preview / apply)
@@ -409,6 +416,7 @@ web/
 | `budgets` | งบประมาณ — PK `project_id`, มี `created_by` (JWT id ของคนสร้าง) |
 | `calendar_events` | ปฏิทินกิจกรรม |
 | `maintenance` | บำรุงรักษา |
+| `problem_reports` | คำแจ้งปัญหาที่ส่งออกไปหลังบ้านกลาง — เก็บไว้เป็น**หลักฐานการส่ง** ไม่ใช่กล่องข้อความของโรงเรียน · `delivery_status` มีแค่ `pending` / `delivered` |
 
 ---
 
@@ -1479,6 +1487,34 @@ completeness gate อยู่แล้ว แถวว่างกลางเ�
   ไม่ลง `sharp` ที่ Railway · ⚠️ **PNG ต้อง export กลับเป็น PNG** — `toBlob('image/jpeg')`
   จะทำให้พื้นโปร่งใสกลายเป็นพื้นดำทั้งใบ
 
+### แจ้งปัญหา — `functions/problemReports.js`
+
+ครูกดแจ้งปัญหาจากในแอป แล้วคำแจ้งวิ่งไป**หลังบ้านกลางของผู้ขาย** ไม่ได้อยู่ที่โรงเรียน
+
+| ทาง | ชื่อ | หมายเหตุ |
+|---|---|---|
+| RPC | `createProblemReport(payload)` | คนที่ล็อกอินได้เรียกได้ · อยู่ใน `READONLY_ALLOWED` |
+| REST | `POST /api/media/problem-report/:id/attachment` | รูปเท่านั้น (`jpg` `png` `webp`) ≤ 8MB ไม่เกิน 3 ใบ |
+| สาธารณะ | `GET /api/app-info` | บอกเวอร์ชัน/build ให้ทะเบียนลูกค้ายิงดูได้โดยไม่ต้องล็อกอิน |
+
+- ⚠️ **อยู่ใน `READONLY_ALLOWED` โดยตั้งใจ** — โรงเรียนที่ licence หมดแล้วต้องแจ้งได้ว่า
+  ระบบพัง การแจ้งปัญหาไม่ได้แก้ข้อมูลของโรงเรียน เอาไปไว้หลังกำแพงเงินไม่ได้
+  ด้วยเหตุผลเดียวกับพิมพ์ ปพ.5
+- ⚠️ **`schoolName` อ่านจาก `getSystemConfig` ฝั่ง server ไม่ใช่จากเบราว์เซอร์** —
+  ค่าที่ client ส่งมาระบุตัวโรงเรียนไม่ได้
+- ⚠️ **ไฟล์แนบไม่ได้เก็บไว้ที่โรงเรียน** — ส่งต่อไปปลายทางระหว่างที่ request ยังเปิดอยู่
+  ตาราง `problem_reports` เก็บแค่หลักฐานว่าส่งอะไรไปเมื่อไหร่ · ไม่มี endpoint ให้เปิด
+  ไฟล์กลับจาก deployment ของโรงเรียน
+- **ไม่ตั้ง env = ปุ่มยังกดได้** แถวลง DB แล้วค้าง `pending` (ไม่ใช่ throw ใส่หน้าคนแจ้ง)
+  · ปลายทางล่ม/ช้าเกิน 15 วิ ก็ `pending` เหมือนกัน — **ยังไม่มีตัวส่งซ้ำ**
+- แนบไฟล์ได้เฉพาะเจ้าของคำแจ้ง (`ownerReport` เทียบ `reporter_id` กับ `user.id` จาก JWT)
+- `webp` ถูกเพิ่มใน `lib/storage/types.js` เพราะมือถือถ่ายมาเป็น webp
+  ⚠️ **magic bytes ของ webp อยู่ที่ byte 8 ไม่ใช่ byte 0** (RIFF container) ตัวจับชนิดไฟล์
+  จึงเปลี่ยนจากเทียบ prefix ล้วนเป็นเรียก `matches()` ต่อชนิด
+- `problem_reports.id` เป็น `gen_random_uuid()` — เป็นฟังก์ชัน core ตั้งแต่ PostgreSQL 13
+  ไม่ต้องเปิด pgcrypto (ต่างจาก sha256 ใน `db/adminIssued.js` ที่เลี่ยงไปคิดใน node)
+- เทสอยู่ที่ `test/problem_reports.test.js`
+
 ### งานสารบรรณ — สิทธิ์และไฟล์แนบ
 
 ⚠️ **ตัวตนมาจาก JWT เท่านั้น ห้ามรับ `userName`/`role`/`requester` จาก client**
@@ -1995,6 +2031,7 @@ test/
 ├── license.test.js      สถานะ licence + READONLY_ALLOWED (พิมพ์ ปพ.5 ต้องได้เสมอ)
 ├── media_cards.test.js / media_upload.test.js / storage.test.js
 ├── sarabun.test.js      สิทธิ์ทะเบียนสารบรรณ + ไฟล์แนบ
+├── problem_reports.test.js  แจ้งปัญหา — สิทธิ์แนบไฟล์ + ปลายทางล่มต้องไม่พังทั้งคำขอ
 ├── manual.test.js       หน้าคู่มือ /manual — ตัวเรนเดอร์ markdown + คู่มือจริงต้องไม่มี
 │                        markdown หลุดออกมาเป็นข้อความ และต้องไม่มีค่า env/คีย์/คำสั่ง
 ├── migrate.test.js      schema.sql ต้องตรงกับ db/migrations/
