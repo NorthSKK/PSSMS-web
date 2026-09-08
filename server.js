@@ -10,6 +10,13 @@ if (process.env.NODE_ENV !== 'test') app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Public deployment marker for the central customer registry. Keep this route
+// deliberately data-free: it is probed without a school login.
+app.get('/api/app-info', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(require('./lib/appInfo').appInfo());
+});
+
 app.use('/api/assets', require('./routes/assets'));
 // multipart — ไม่ผ่าน express.json ข้างบน จึงไม่กระทบ limit ของ endpoint อื่น
 app.use('/api/media',  require('./routes/media'));

@@ -34,6 +34,7 @@ const { query } = require('../lib/db');
 const mediaCards = require('../functions/mediaCards');
 const sarabun = require('../functions/sarabun');
 const projects = require('../functions/projectDocuments');
+const problemReports = require('../functions/problemReports');
 const storage = require('../lib/storage');
 const types = require('../lib/storage/types');
 
@@ -110,7 +111,7 @@ function guardTeacher(req, res, next) {
  * ตัวรับไฟล์ร่วมของทุก endpoint — ด่านตรวจอยู่ที่เดียวจะได้ไม่หลุดจุดใดจุดหนึ่ง
  * `allowed` คือรายการนามสกุลที่จุดนั้นยอมรับ (สื่อการสอนรับ PDF/JPEG/PNG)
  */
-function receive({ maxMB, allowed, toDisk }) {
+function receive({ maxMB, allowed, toDisk, requiresStorage = true }) {
   const upload = multer({
     // สื่อการสอน (toDisk) เขียนลงไฟล์พักก่อน แล้ว stream ต่อไปที่เก็บ —
     // memoryStorage ถือไฟล์ทั้งก้อน ครูหลายคนอัปพร้อมกันทำให้ RAM เพิ่มตามจำนวนคน
@@ -142,7 +143,7 @@ function receive({ maxMB, allowed, toDisk }) {
 
   return (req, res, next) => {
     // ไม่มีที่เก็บถาวร = ไม่รับไฟล์ ดีกว่ารับแล้วหายตอน deploy รอบหน้า
-    if (!storage.isConfigured()) {
+    if (requiresStorage && !storage.isConfigured()) {
       return res.status(503).json({
         __error: 'ยังไม่เปิดให้อัปโหลดไฟล์ — แจ้งผู้ดูแลระบบ',
       });
@@ -226,6 +227,24 @@ router.post('/project/:id', requireAuth, guardTeacher,
       res.json({ __result: await projects.attachProjectFile(req.params.id, req.file, req.user) });
     } catch (e) {
       console.error('[project:attach]', e.message);
+      res.status(400).json({ __error: e.message });
+    }
+  });
+
+// ---------- แจ้งปัญหาการใช้งาน ----------
+// ทุกบทบาทที่ล็อกอินส่งภาพได้ แต่ route นี้ไม่มีทางอ่านภาพคืนจาก deployment
+// ของโรงเรียน: ภาพถูก relay ไปยัง back office กลางหลังตรวจ JWT + เจ้าของรายงานแล้ว.
+router.post('/problem-report/:id/attachment', requireAuth,
+  receive({
+    maxMB: problemReports.MAX_ATTACH_MB,
+    allowed: problemReports.IMAGE_EXTS,
+    requiresStorage: false,
+  }),
+  async (req, res) => {
+    try {
+      res.json({ __result: await problemReports.attachProblemReportFile(req.params.id, req.file, req.user) });
+    } catch (e) {
+      console.error('[problem-report:attach]', e.message);
       res.status(400).json({ __error: e.message });
     }
   });

@@ -118,6 +118,10 @@ const READONLY_ALLOWED = new Set([
     'getTeacherTimetable', 'getTeacherTimetableByDate', 'getTeacherTimetableWithStatus',
     'getTeachersForTimetable', 'getTodayAttendanceHistory', 'getTodayMorningSummary',
     'getTodoList',
+    // Reporting a broken system must remain available while the school is in
+    // read-only licence mode. It only relays support data; it cannot change
+    // school records.
+    'createProblemReport',
   'checkLogin',
   'generatePP5Template', 'exportClubsForTerm',
   'getLicenseStatus', 'getDemoAccounts',
@@ -144,12 +148,14 @@ const missing = require('../functions/missing');
 const pp5 = require('../functions/generatePP5Template');
 const mediaCards = require('../functions/mediaCards');
 const savings = require('../functions/savings');
+const problemReports = require('../functions/problemReports');
 
 const handlers = {
   // Auth
   checkLogin:                      require('../functions/checkLogin'),
   getSystemConfig:                 require('../functions/getSystemConfig'),
   getDemoAccounts:                 require('../functions/getDemoAccounts'),
+  createProblemReport:             (args, user) => problemReports.createProblemReport(args, user),
   getLicenseStatus:                require('../functions/getLicenseStatus'),
   getLicenseInfo:                  require('../functions/getLicenseInfo'),
   getAvailableTerms:               async () => {
