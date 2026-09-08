@@ -555,7 +555,8 @@ renderTermProgressBar('myTermProgress', cfg);   // มี systemConfig จาก
 
 > **เปิดโรงเรียนใหม่** ทำตาม [`docs/setup-new-school.md`](docs/setup-new-school.md)
 > ซึ่งรวบขั้นตอนในหัวข้อนี้กับ R2 · licence · โดเมน ไว้เป็นลำดับเดียว
-> ส่วนที่ส่งให้โรงเรียนคือ [`docs/school-onboarding.md`](docs/school-onboarding.md)
+> ส่วนที่โรงเรียนอ่านคือ [`docs/school-onboarding.md`](docs/school-onboarding.md)
+> ซึ่ง `lib/manual.js` เสิร์ฟเป็นหน้าเว็บที่ `/manual` — ส่งลิงก์ ไม่ต้องส่งไฟล์
 
 
 `main` ขึ้น **เดโม** (`demo.pssms.app`) และ `production` ขึ้น **โรงเรียนจริง**
