@@ -32,13 +32,25 @@ const { pool } = require('../../lib/db');
 
 let server = null;
 let baseUrl = '';
+let releaseLock = null;
 
+/**
+ * ⚠️ ถือล็อก dev ไว้ตลอดที่ไฟล์เทสนี้รัน — กัน `seed-dev.js` ของอีกหน้าต่าง
+ * ล้างฐานข้อมูลกลางคัน (ดู `lib/devLock.js`)
+ *
+ * ⚠️ **ล็อกครอบทีละไฟล์เทส ไม่ใช่ทั้ง `npm test`** — node --test แยก process ต่อไฟล์
+ * ล็อกจึงหลุดชั่วขณะระหว่างไฟล์ · ปิดช่องนั้นไม่ได้จากตรงนี้ ต้องมีตัวครอบทั้งคำสั่ง
+ * แต่แค่นี้ก็กันเคสที่เจอจริงได้แล้ว (อีกฝ่ายสั่ง seed ตอนเรากำลังรันอยู่)
+ */
 function start() {
   if (server) return Promise.resolve(baseUrl);
-  return new Promise((resolve) => {
-    server = app.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolve(baseUrl);
+  return require('../../lib/devLock').acquire('เทส').then((release) => {
+    releaseLock = release;
+    return new Promise((resolve) => {
+      server = app.listen(0, '127.0.0.1', () => {
+        baseUrl = `http://127.0.0.1:${server.address().port}`;
+        resolve(baseUrl);
+      });
     });
   });
 }
@@ -48,7 +60,11 @@ function stop() {
   return new Promise((resolve) => {
     if (!server) return resolve();
     server.close(() => { server = null; resolve(); });
-  }).then(() => pool.end());
+  })
+    // ⚠️ ต้องคืนล็อกก่อน `pool.end()` — ล็อกถือ client จาก pool อยู่ ปิด pool ทั้งที่ยัง
+    // ถือ client ค้างแล้ว process จะไม่จบ
+    .then(() => (releaseLock ? releaseLock().then(() => { releaseLock = null; }) : null))
+    .then(() => pool.end());
 }
 
 const token = (payload) => jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });

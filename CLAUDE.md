@@ -283,6 +283,7 @@ web/
 │   │                              หน้าเว็บ parse + สร้างแม่แบบ ผ่าน getImportSpec
 │   ├── subjectGroup.js          subject_code → กลุ่มสาระ · isHomeroomSubject()
 │   ├── appInfo.js               เวอร์ชัน/build ของ deployment (ไม่มีข้อมูลโรงเรียน)
+│   ├── devLock.js               กันสอง process แตะ DB dev พร้อมกัน (seed + เทส)
 │   ├── manual.js                คู่มือโรงเรียน — เรนเดอร์ docs/school-onboarding.md
 │   │                              เป็นหน้าเว็บที่ GET /manual (ไม่แตะ DB · เปิดสาธารณะ)
 │   ├── storage/                 ที่เก็บไฟล์ เลือก driver ด้วย STORAGE_DRIVER
@@ -2032,6 +2033,7 @@ test/
 ├── media_cards.test.js / media_upload.test.js / storage.test.js
 ├── sarabun.test.js      สิทธิ์ทะเบียนสารบรรณ + ไฟล์แนบ
 ├── problem_reports.test.js  แจ้งปัญหา — สิทธิ์แนบไฟล์ + ปลายทางล่มต้องไม่พังทั้งคำขอ
+├── dev_lock.test.js     ตัวกันสอง process แตะ DB dev พร้อมกัน
 ├── manual.test.js       หน้าคู่มือ /manual — ตัวเรนเดอร์ markdown + คู่มือจริงต้องไม่มี
 │                        markdown หลุดออกมาเป็นข้อความ และต้องไม่มีค่า env/คีย์/คำสั่ง
 ├── migrate.test.js      schema.sql ต้องตรงกับ db/migrations/
@@ -2044,6 +2046,14 @@ test/
 ### กติกา
 
 - **`npm test` reseed dev DB ทุกครั้ง** (`pretest` → `db/seed-dev.js`) — ข้อมูลที่กดเทสมือไว้บนหน้าเว็บหายหมด
+- ⚠️ **DB dev ตัวเดียวรันได้ทีละ process** — `lib/devLock.js` จับ `pg_try_advisory_lock`
+  ทั้งตอน seed และตลอดที่ไฟล์เทสรัน · ชนเมื่อไหร่ **ล้มทันทีพร้อมบอกทางออก** ไม่ใช่รอคิว
+  (รอคิวแล้วสองรอบจะสลับกันล้างข้อมูลกันเอง) · เกิดจริงตอนมี agent สองตัวทำงานพร้อมกัน
+  แล้วอีกฝ่ายได้เทสแดงที่ไม่ใช่บั๊กของใครเลย ซึ่งไล่หาสาเหตุยากที่สุดเพราะโค้ดไม่ผิด
+  · ทำงานพร้อมกันจริง ๆ ให้แยก DB: `createdb pssms_dev_<ชื่อ>` แล้วตั้ง `DATABASE_URL`
+  เฉพาะหน้าต่างนั้น (ด่าน localhost ของ seed/เทสยังผ่านเหมือนเดิม)
+  ⚠️ ล็อกครอบ**ทีละไฟล์เทส** ไม่ใช่ทั้ง `npm test` — `node --test` แยก process ต่อไฟล์
+  ล็อกจึงหลุดชั่วขณะระหว่างไฟล์ ยังไม่ได้ปิดช่องนั้น
 - `test/helpers/api.js` ปฏิเสธรันถ้า `DATABASE_URL` ไม่ได้ชี้ localhost (parse hostname เหมือน seed) — เทสเขียน DB จริง
 - `--test-concurrency=1` เพราะทุกไฟล์ใช้ DB เดียวกัน รันขนานแล้วชนกัน
 - `server.js` export `app` และ listen เฉพาะตอน `require.main === module` — เทสจึงไม่ชนกับ dev server บน :3000

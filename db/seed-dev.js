@@ -153,6 +153,17 @@ const HOLIDAYS = [
 
 async function main() {
   await assertSafeToWipe('seed-dev.js');
+  // ⚠️ จับล็อกก่อนล้าง — ถ้ามีเทสของอีกหน้าต่างรันอยู่บน DB เดียวกัน การล้างจะทำให้
+  // เทสฝั่งนั้นแดงด้วยเหตุผลที่ไม่ใช่บั๊กของใคร ล้มดัง ๆ ที่นี่ดีกว่าไปพังที่โน่นเงียบ ๆ
+  const release = await require('../lib/devLock').acquire('seed-dev.js');
+  try {
+    await seed();
+  } finally {
+    await release();
+  }
+}
+
+async function seed() {
 
   // ล้างเฉพาะตารางข้อมูล — system_settings / curriculum / print_config ก๊อปมาจาก prod ไว้แล้ว
   const wipe = [
