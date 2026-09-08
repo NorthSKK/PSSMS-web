@@ -418,6 +418,36 @@ body {
 }
 #sidebar ul li a:hover { background: var(--p-hover); color: var(--p-text); }
 
+/* Sidebar footer is shared by every role: help is always one tap away. */
+#sidebar .sidebar-footer { border-top: 1px solid var(--p-border); }
+#sidebar .sidebar-footer .btn { min-height: 34px; }
+.sidebar-app-version {
+  color: var(--p-text-muted); font-size: .67rem; line-height: 1;
+  text-align: center; margin-top: .65rem; letter-spacing: .02em;
+}
+
+/* แจ้งปัญหาการใช้งาน — compact enough for mobile, previews remain tappable. */
+.pssms-problem-report-modal { text-align: left; }
+.pssms-problem-report-modal .swal2-html-container { margin: 1rem 0 0; }
+.problem-report-help { color: var(--p-text-muted); font-size: .82rem; line-height: 1.45; }
+.problem-report-files { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.problem-report-file {
+  position: relative; border: 1px solid var(--p-border); border-radius: .55rem;
+  overflow: hidden; background: var(--p-subtle); min-width: 0;
+}
+.problem-report-file img { display: block; width: 100%; height: 76px; object-fit: cover; }
+.problem-report-file-name { display: block; padding: .28rem .35rem; font-size: .65rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.problem-report-remove {
+  position: absolute; top: .25rem; right: .25rem; width: 24px; height: 24px; padding: 0;
+  border-radius: 50%; border: 0; background: rgba(15,23,42,.78); color: #fff;
+}
+.problem-report-status { min-height: 1.3rem; font-size: .8rem; }
+.dark-mode .problem-report-file { background: rgba(255,255,255,.06); }
+@media (max-width: 480px) {
+  .pssms-problem-report-modal { width: calc(100vw - 1.25rem) !important; }
+  .problem-report-file img { height: 64px; }
+}
+
 .menu-divider {
     font-size: 0.65rem; text-transform: uppercase; color: var(--p-text-muted);
     margin: 10px 14px 4px 14px; letter-spacing: 0.05em;

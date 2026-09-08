@@ -118,10 +118,14 @@
         </div>
       </div>
       <ul class="list-unstyled components p-2" id="menu-list"></ul>
-      <div class="p-3">
+      <div class="sidebar-footer p-3">
         <button class="btn btn-outline-danger btn-sm w-100" onclick="logout()">
           <i class="fas fa-sign-out-alt"></i> ออกจากระบบ
         </button>
+        <button class="btn btn-outline-secondary btn-sm w-100 mt-2" type="button" onclick="openProblemReportModal()">
+          <i class="fas fa-comment-medical me-1"></i> แจ้งปัญหาการใช้งาน
+        </button>
+        <div id="sidebarAppVersion" class="sidebar-app-version" aria-live="polite">PSSMS v…</div>
       </div>
     </nav>
     <button type="button" id="sidebarBackdrop" aria-label="ปิดเมนู"></button>

@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
+const { appInfo } = require('../lib/appInfo');
 
 module.exports = async function getSystemConfig() {
   const cached = cache.get('system_config');
@@ -30,6 +31,9 @@ module.exports = async function getSystemConfig() {
       config.termEnd = r.value2 || '';
     }
   }
+
+  // ค่าเล็ก ๆ สำหรับให้ศูนย์กลางตรวจรุ่นที่ deployment นี้ใช้อยู่ โดยไม่เปิดข้อมูลโรงเรียน.
+  config.appInfo = appInfo();
 
   cache.set('system_config', config, 300);
   return config;

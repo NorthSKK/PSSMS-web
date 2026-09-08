@@ -1,6 +1,6 @@
 {
   "name": "pssms-web",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "PSSMS Web Prototype — Express + Google Sheets API",
   "main": "server.js",
   "scripts": {
