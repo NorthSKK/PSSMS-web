@@ -498,7 +498,7 @@ test('จำนวนที่ส่งมาเพี้ยนต้องไ�
   assert.equal(huge.count, 500, 'ต้องตัดที่เพดาน ไม่ใช่สร้างตามที่ขอ');
 });
 
-// ── ผอ./รอง (Executive) — อ่านทะเบียนได้ แต่แก้ไม่ได้ ────────────────────────
+// ── ผอ./รอง (Executive) — ใช้งานทะเบียนได้เทียบเท่า Admin ────────────────────
 
 /**
  * เมนูของ Executive มีหน้างานสารบรรณอยู่จริง แต่ `getSarabunHistory` เคยอยู่ใน
@@ -511,14 +511,14 @@ test('Executive อ่านทะเบียนสารบรรณได้ 
   assert.ok(Array.isArray(rows), 'ต้องได้รายการกลับมา ไม่ใช่ error สิทธิ์');
 });
 
-test('Executive ยังเขียนทะเบียนไม่ได้ — อ่านอย่างเดียวตาม ADR 0001', async () => {
-  const err = await denied('saveSarabun', [{
+test('Executive จัดการทะเบียนได้เทียบเท่า Admin', async () => {
+  const saved = await ok('saveSarabun', [{
     docType: 'บันทึกข้อความ', subject: 'ผอ.แก้เอง', requester: 'ผอ.ทดสอบ',
   }], 'executive');
-  assert.match(err, /สงวนสิทธิ์/);
+  assert.equal(saved.status, 'success');
 
-  const err2 = await denied('requestSarabunNumber', [{ docType: 'ทะเบียนคำสั่ง', amount: 1 }], 'executive');
-  assert.match(err2, /สงวนสิทธิ์/);
+  const numbered = await ok('requestSarabunNumber', [{ docType: 'ทะเบียนคำสั่ง', amount: 1 }], 'executive');
+  assert.equal(numbered.status, 'success');
 });
 
 test('นักเรียนยังอ่านทะเบียนไม่ได้', async () => {

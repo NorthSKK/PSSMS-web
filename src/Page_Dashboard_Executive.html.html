@@ -37,18 +37,18 @@
         </button>
       </div>
       <div class="col-6 col-md-3">
-        <button type="button" class="pssms-card p-3 text-center h-100 w-100 border-0 exec-kpi-link" onclick="loadPage('Page_Teacher_Progress')" aria-label="ดูการติดตามงานครู">
+        <button type="button" class="pssms-card p-3 text-center h-100 w-100 border-0 exec-kpi-link" onclick="loadPage('Page_Personnel')" aria-label="ดูข้อมูลบุคลากร">
           <div class="fw-bold" style="font-size:2rem;color:#198754;" id="kpiTeachers">-</div>
           <div class="text-muted small">ครู/บุคลากร</div>
-          <span class="small text-primary mt-1 d-block">ดูการติดตามงานครู</span>
+          <span class="small text-primary mt-1 d-block">ดูข้อมูลบุคลากร</span>
         </button>
       </div>
       <div class="col-6 col-md-3">
-        <button type="button" class="pssms-card p-3 text-center h-100 w-100 border-0 exec-kpi-link" onclick="loadPage('Page_Academic_Report')" aria-label="ดูรายงานวิชาการ">
+        <button type="button" class="pssms-card p-3 text-center h-100 w-100 border-0 exec-kpi-link" onclick="loadPage('Page_Student_Watch')" aria-label="ดูการติดตามเวลาเรียน">
           <div class="fw-bold" style="font-size:2rem;" id="kpiAttPct">-</div>
           <div class="text-muted small">เข้าเรียนวันนี้</div>
           <div class="small text-muted" id="kpiAttDetail"></div>
-          <span class="small text-primary mt-1 d-block">ดูรายงานวิชาการ</span>
+          <span class="small text-primary mt-1 d-block">ดูการติดตามเวลาเรียน</span>
         </button>
       </div>
       <div class="col-6 col-md-3">
@@ -59,6 +59,14 @@
           <span class="small text-primary mt-1 d-block">ดูงบประมาณ</span>
         </button>
       </div>
+    </div>
+
+    <!-- ทางลัด 4 ฝ่าย: ทุกปุ่มไปยังหน้าจัดการที่ผู้บริหารเปิดใช้งานได้ -->
+    <div class="row g-2 mb-4" aria-label="ทางลัดบริหาร 4 ฝ่าย">
+      <div class="col-6 col-lg-3"><button type="button" class="pssms-card w-100 border-0 text-start p-2 exec-kpi-link" style="border-left:4px solid var(--p-accent)!important;" onclick="loadPage('Page_Academic_Report')"><i class="fas fa-graduation-cap me-2" style="color:var(--p-accent);"></i><span class="small fw-bold">ฝ่ายวิชาการ</span><i class="fas fa-chevron-right float-end mt-1 text-muted" style="font-size:.7rem;"></i></button></div>
+      <div class="col-6 col-lg-3"><button type="button" class="pssms-card w-100 border-0 text-start p-2 exec-kpi-link" style="border-left:4px solid #198754!important;" onclick="loadPage('Page_Budget')"><i class="fas fa-wallet me-2 text-success"></i><span class="small fw-bold">ฝ่ายงบประมาณ</span><i class="fas fa-chevron-right float-end mt-1 text-muted" style="font-size:.7rem;"></i></button></div>
+      <div class="col-6 col-lg-3"><button type="button" class="pssms-card w-100 border-0 text-start p-2 exec-kpi-link" style="border-left:4px solid #0d6efd!important;" onclick="loadPage('Page_Personnel')"><i class="fas fa-users me-2 text-primary"></i><span class="small fw-bold">ฝ่ายบุคคล</span><i class="fas fa-chevron-right float-end mt-1 text-muted" style="font-size:.7rem;"></i></button></div>
+      <div class="col-6 col-lg-3"><button type="button" class="pssms-card w-100 border-0 text-start p-2 exec-kpi-link" style="border-left:4px solid #6f42c1!important;" onclick="loadPage('Page_General')"><i class="fas fa-building me-2" style="color:#6f42c1;"></i><span class="small fw-bold">ฝ่ายทั่วไป</span><i class="fas fa-chevron-right float-end mt-1 text-muted" style="font-size:.7rem;"></i></button></div>
     </div>
 
     <!-- Alerts -->

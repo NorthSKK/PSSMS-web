@@ -161,7 +161,7 @@ test('สรุปการเช็คชื่อชุมนุม: ยัง
 
 test('สรุปการเช็คชื่อชุมนุมเป็นของครู — นักเรียนเรียกไม่ได้', async () => {
   const err = await denied('getClubAttendanceSummary', [CLUB, TERM, YEAR], 'student');
-  assert.match(err, /ครูหรือผู้ดูแล/);
+  assert.match(err, /ครู.*ผู้ดูแล/);
 });
 
 // ── กันบั๊ก "โค้ดอยู่ในไฟล์หน้าแล้วไม่ทำงาน" กลับมา ──────────────────────────

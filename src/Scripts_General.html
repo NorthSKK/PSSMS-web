@@ -223,7 +223,7 @@ window.renderSarabunTable = function(dataList) {
     const tbody = document.getElementById('sarabunTableBody');
     if (!tbody) return;
 
-    const isAdmin = (function(){ var u = getSessionUser(); return u && String(u.role).toUpperCase() === 'ADMIN'; })();
+    const isAdmin = (function(){ var u = getSessionUser(); var role = u && String(u.role).toUpperCase(); return role === 'ADMIN' || role === 'EXECUTIVE'; })();
 
     let html = '';
     if (!dataList || dataList.length === 0) {
@@ -892,7 +892,7 @@ function _leaveAddFillTeachers(sel) {
   var staff = _leaveAddTeachers.filter(function(u) {
     var role = Array.isArray(u) ? String(u[3] || '') : String(u.role || '');
     role = role.trim().toUpperCase();
-    return role === 'TEACHER' || role === 'ADMIN';
+    return role === 'TEACHER' || role === 'ADMIN' || role === 'EXECUTIVE';
   });
   staff.sort(function(a, b) {
     var na = Array.isArray(a) ? String(a[2]||'') : String(a.name||a.fullName||'');
@@ -1935,8 +1935,8 @@ function _mediaRole() {
   return String((u && u.role) || '').trim().toUpperCase();
 }
 
-function _mediaIsAdmin() { return _mediaRole() === 'ADMIN'; }
-function _mediaIsStaff() { var r = _mediaRole(); return r === 'ADMIN' || r === 'TEACHER'; }
+function _mediaIsAdmin() { var r = _mediaRole(); return r === 'ADMIN' || r === 'EXECUTIVE'; }
+function _mediaIsStaff() { var r = _mediaRole(); return r === 'ADMIN' || r === 'EXECUTIVE' || r === 'TEACHER'; }
 
 function initTeachingMediaPage() {
   var grid = document.getElementById('mediaSubjectGrid');

@@ -27,7 +27,7 @@ const { query } = require('../lib/db');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const { finished } = require('stream/promises');
-const { isAdmin } = require('../lib/permissions');
+const { isManagement } = require('../lib/permissions');
 const { SUBJECT_GROUP_BY_PREFIX } = require('../lib/subjectGroup');
 const storage = require('../lib/storage');
 const types = require('../lib/storage/types');
@@ -164,7 +164,7 @@ function _toClient(row, user) {
     fileCount: Number(row.file_count || 0),
     totalSize: Number(row.total_size || 0),
     // คำนวณที่ server — client จะได้ไม่ต้องรู้กติกาสิทธิ์ซ้ำอีกชุด
-    canEdit: isAdmin(user) || String(row.created_by || '') === String(user?.id || ''),
+    canEdit: isManagement(user) || String(row.created_by || '') === String(user?.id || ''),
   };
 }
 
@@ -274,7 +274,7 @@ function _normalizeMeta(payload, user) {
     desc: _str(p.desc, 'description'),
     levels: _validLevels(p.visibleLevels),
     // ปักหมุดเป็นเครื่องมือจัดหน้ารวมของทั้งโรงเรียน ไม่ใช่ของครูคนเดียว
-    isFeatured: isAdmin(user) ? !!p.isFeatured : false,
+    isFeatured: isManagement(user) ? !!p.isFeatured : false,
   };
 }
 
@@ -282,7 +282,7 @@ function _normalize(payload, user) {
   return { ..._normalizeMeta(payload, user), url: _validUrl(payload && payload.url) };
 }
 
-// ครูแก้/ลบได้เฉพาะการ์ดตัวเอง Admin ทำได้หมด — คืนแถวเดิมไว้ให้ผู้เรียกใช้ต่อ
+// ครูแก้/ลบได้เฉพาะการ์ดตัวเอง ฝ่ายจัดการทำได้หมด — คืนแถวเดิมไว้ให้ผู้เรียกใช้ต่อ
 async function _loadOwned(id, user) {
   const cardId = parseInt(id, 10);
   if (!Number.isInteger(cardId)) throw new Error('ไม่พบการ์ดนี้');
@@ -292,7 +292,7 @@ async function _loadOwned(id, user) {
   );
   const row = rows[0];
   if (!row) throw new Error('ไม่พบการ์ดนี้');
-  if (!isAdmin(user) && String(row.created_by || '') !== String(user?.id || '')) {
+  if (!isManagement(user) && String(row.created_by || '') !== String(user?.id || '')) {
     throw new Error('แก้ไขได้เฉพาะการ์ดที่ตัวเองเพิ่ม');
   }
   return row;
@@ -308,7 +308,7 @@ async function saveMediaCard([payload], user) {
       ? { ..._normalizeMeta(payload, user), url: '' }
       : _normalize(payload, user);
     // ครูแก้การ์ดปักหมุดของโรงเรียนได้ถ้าเป็นเจ้าของ แต่ห้ามถอด/ติดหมุดเอง
-    const featured = isAdmin(user) ? c.isFeatured : existing.is_featured;
+    const featured = isManagement(user) ? c.isFeatured : existing.is_featured;
     await query(
       `UPDATE media_cards
        SET title=$1, subject_group=$2, icon=$3, color=$4, meta=$5, description=$6,

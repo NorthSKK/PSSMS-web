@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { isAdmin } = require('../lib/permissions');
+const { isManagement } = require('../lib/permissions');
 
 async function getBudgets([year]) {
   const { rows } = await query(
@@ -19,14 +19,14 @@ async function getBudgets([year]) {
 }
 
 // saveBudget เป็น upsert ตาม project_id — ถ้าไม่เช็คเจ้าของ ครูคนไหนก็ทับโครงการคนอื่นได้
-// แถวที่ created_by ว่าง (ข้อมูลก่อนเพิ่มคอลัมน์) ให้เฉพาะ Admin แก้
+// แถวที่ created_by ว่าง (ข้อมูลก่อนเพิ่มคอลัมน์) ให้เฉพาะฝ่ายจัดการแก้
 async function saveBudget([data], user) {
   const d = data || {};
   const me = String(user?.id || '');
   const projectId = d.projectId || `proj_${Date.now()}`;
 
   const { rows } = await query(`SELECT created_by FROM budgets WHERE project_id=$1`, [projectId]);
-  if (rows.length && !isAdmin(user)) {
+  if (rows.length && !isManagement(user)) {
     const owner = String(rows[0].created_by || '').trim();
     if (owner.toLowerCase() !== me.toLowerCase()) {
       throw new Error(owner ? 'ไม่มีสิทธิ์แก้โครงการนี้' : 'โครงการนี้ไม่มีเจ้าของบันทึกไว้ ต้องให้ผู้ดูแลระบบแก้');

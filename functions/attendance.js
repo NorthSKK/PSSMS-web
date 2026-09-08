@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { isAdmin, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner, verifyMorningBatchOwner } = require('../lib/permissions');
+const { isManagement, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner, verifyMorningBatchOwner } = require('../lib/permissions');
 const { slotsFromRows, expandSlots } = require('../lib/sessionCalendar');
 const { schoolToday } = require('../lib/schoolDate');
 
@@ -77,7 +77,7 @@ async function updateAttendanceBatch([updates], user) {
 async function getTodayAttendanceHistory([date, subjectCode, className], user) {
   const params = [date, subjectCode, className];
   let teacherFilter = '';
-  if (!isAdmin(user)) {
+  if (!isManagement(user)) {
     params.push(String(user?.id || '').trim().toLowerCase());
     teacherFilter = ` AND LOWER(teacher_id)=$${params.length}`;
   }

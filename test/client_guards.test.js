@@ -57,6 +57,31 @@ test('ทุกหน้าในเมนูต้องมีไฟล์อ�
   }
 });
 
+// ── ผู้บริหารต้องเห็นเมนูจัดการโรงเรียนครบและแดชบอร์ดพาไปหน้าที่ตรงข้อมูล ─────
+test('Executive ใช้เมนูบริหาร 4 ฝ่ายและลิงก์แดชบอร์ดได้เทียบเท่า Admin', () => {
+  const core = read('Scripts_Core.html');
+  const executivePage = read('Page_Dashboard_Executive.html.html');
+
+  assert.match(core, /const isManagement = role === 'ADMIN' \|\| role === 'EXECUTIVE'/,
+    'เมนูต้องจัด Admin และ Executive เป็นฝ่ายบริหารกลุ่มเดียวกัน');
+  for (const page of [
+    'Page_Admin_Settings', 'Page_Score_Entry', 'Page_Academic_Report',
+    'Page_Admin_Timetable', 'Page_Admin_Curriculum', 'Page_Admin_Clubs',
+    'Page_Teaching_Media', 'Page_Student_Watch', 'Page_Teacher_Progress',
+    'Page_Budget', 'Page_Personnel', 'Page_Admin_Users', 'Page_Leave_Request',
+    'Page_Leave_Admin', 'Page_Substitute_Admin', 'Page_General',
+    'Page_Project_Documents', 'Page_Savings', 'Page_Calendar'
+  ]) {
+    assert.match(core, new RegExp(`loadPage\\('${page}'\\)`), `เมนูฝ่ายบริหารต้องมี ${page}`);
+  }
+  assert.match(core, /EXECUTIVE:\s*\[[^\]]*Page_Admin_Settings[\s\S]*Page_Calendar/,
+    'หน้า Executive ที่เข้าถึงได้ต้องถูก prefetch เมื่อเครื่องว่าง');
+  assert.match(executivePage, /onclick="loadPage\('Page_Personnel'\)"[\s\S]*?ดูข้อมูลบุคลากร/,
+    'KPI บุคลากรต้องพาไปหน้าบุคลากร');
+  assert.match(executivePage, /onclick="loadPage\('Page_Student_Watch'\)"[\s\S]*?ดูการติดตามเวลาเรียน/,
+    'KPI เวลาเรียนต้องพาไปหน้าติดตามนักเรียน');
+});
+
 // ── ช่องคะแนนต้องผูก oninput ไม่ใช่ onkeyup ─────────────────────────────────
 //
 // keyup ไม่ยิงเมื่อวางค่าด้วยเมาส์ กด stepper ของ input[type=number] undo หรือ autofill

@@ -1,13 +1,12 @@
 const { query } = require('../lib/db');
 const getSystemConfig = require('./getSystemConfig');
 const cache = require('../lib/cache');
-const { isAdmin } = require('../lib/permissions');
+const { isManagement } = require('../lib/permissions');
 
 module.exports = async function getAllUsers(args, user) {
-  // getAllUsers is gated admin-only in routes/gas.js ADMIN_ONLY set.
-  // Non-admins are rejected before reaching here; isAdmin check is a safety net.
-  const adminCaller = isAdmin(user);
-  const cacheKey = adminCaller ? 'all_users_admin' : 'all_users_redacted';
+  // getAllUsers is gated management-only in routes/gas.js.
+  const managementCaller = isManagement(user);
+  const cacheKey = managementCaller ? 'all_users_management' : 'all_users_redacted';
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
@@ -21,7 +20,7 @@ module.exports = async function getAllUsers(args, user) {
 
   // [0]username [1]password [2]full_name [3]role [4]department [5]email [6]year [7]status
   const result = rows.map(r => [
-    r.username, adminCaller ? r.password : '', r.full_name, r.role,
+    r.username, managementCaller ? r.password : '', r.full_name, r.role,
     r.department || '', r.email || '', r.year || '', r.status || 'ปกติ',
   ]);
   cache.set(cacheKey, result, 60);

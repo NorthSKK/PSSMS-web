@@ -30,10 +30,12 @@ const consideredIn = (slot) =>
 const findSlot = (res, code, period) =>
   res.suggestions.find(s => s.subjectCode === code && String(s.period) === String(period));
 
-test('getAutoAssignPreview เป็น ADMIN_ONLY', async () => {
+test('getAutoAssignPreview เป็นสิทธิ์จัดการโรงเรียน', async () => {
   const ids = await pendingIds();
   const err = await denied('getAutoAssignPreview', [ids, TERM, YEAR], 'teacher1');
   assert.match(err, /ผู้ดูแลระบบ/);
+  const asExecutive = await ok('getAutoAssignPreview', [ids, TERM, YEAR], 'executive');
+  assert.ok(Array.isArray(asExecutive.suggestions));
 });
 
 test('applyAutoAssign เป็น ADMIN_ONLY', async () => {

@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { isAdmin } = require('../lib/permissions');
+const { isManagement } = require('../lib/permissions');
 
 function legacyFileUrl(value) {
   try {
@@ -15,18 +15,18 @@ function legacyFileUrl(value) {
  *
  * ⚠️ ตัวตนมาจาก JWT เท่านั้น **ห้ามกลับไปรับ userName/role จาก args**
  *    เดิมรับจาก client ทำให้ใครก็ตามที่ล็อกอินได้ส่ง role='TEACHER' แล้วอ่านทั้งโรงเรียน
- *    ตัวฟังก์ชันอยู่ใน TEACHER_OR_ADMIN แล้ว แต่ยังกรองซ้ำที่นี่ไม่ให้พึ่ง allowlist อย่างเดียว
+ *    ตัวฟังก์ชันอยู่ใน STAFF_ONLY แล้ว แต่ยังกรองซ้ำที่นี่ไม่ให้พึ่ง allowlist อย่างเดียว
  */
 module.exports = async function getSarabunHistory(_args, user) {
   const role = String(user?.role || '').trim().toUpperCase();
-  const admin = isAdmin(user);
-  const staff = admin || role === 'TEACHER' || role === 'EXECUTIVE';
+  const management = isManagement(user);
+  const staff = management || role === 'TEACHER';
 
   // ธง mine ตัดสินด้วย requester_id เป็นหลัก (กติกาเดียวกับ _assertOwnsSarabun)
   // ชื่อจริงสดใช้เฉพาะแถวเก่าที่ requester_id ว่าง — query ครั้งเดียว ไม่ใช่ต่อแถว
-  // Admin ไม่ต้องถาม (mine=true ทุกแถว) · ไม่มีทั้ง id และชื่อที่ตรง = ของ Admin เท่านั้น
+  // Management ไม่ต้องถาม (mine=true ทุกแถว) · ไม่มีทั้ง id และชื่อที่ตรง = ของฝ่ายจัดการเท่านั้น
   let callerName = '';
-  if (!admin) {
+  if (!management) {
     const r = await query(
       `SELECT full_name FROM users WHERE username=$1`, [String(user?.id || '')]
     );
@@ -49,7 +49,7 @@ module.exports = async function getSarabunHistory(_args, user) {
   const { rows } = await query(sql, params);
   const callerId = String(user?.id || '').trim();
   const canWrite = (r) => {
-    if (admin) return true;
+    if (management) return true;
     const ownerId = String(r.requester_id || '').trim();
     if (ownerId) return ownerId === callerId;   // ชื่อไม่เกี่ยวเมื่อมี id
     return !!callerName && String(r.requester || '').trim() === callerName;

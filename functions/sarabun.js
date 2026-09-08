@@ -8,11 +8,11 @@
  * ครูและ Admin เห็นทุกรายการและเปิดไฟล์แนบได้ทั้งหมด — เป็นทะเบียนกลางของงานธุรการ
  * **ไม่ใช่ที่เก็บเอกสารลับ** (เรื่องบุคคล เงินเดือน วินัย ไม่ควรแนบที่นี่)
  *
- * **เขียน (แก้ไข/แนบไฟล์) ได้เฉพาะผู้รับผิดชอบเอกสารหรือ Admin** — ดู _assertOwnsSarabun
- * requester ว่าง (ข้อมูลเก่า/นำเข้า) สงวนให้ Admin แก้ (หลักเดียวกับ budgets.created_by)
+ * **เขียน (แก้ไข/แนบไฟล์) ได้เฉพาะผู้รับผิดชอบเอกสารหรือฝ่ายจัดการ** — ดู _assertOwnsSarabun
+ * requester ว่าง (ข้อมูลเก่า/นำเข้า) สงวนให้ฝ่ายจัดการแก้ (หลักเดียวกับ budgets.created_by)
  */
 const { query } = require('../lib/db');
-const { isAdmin, staffOnly } = require('../lib/permissions');
+const { isManagement, staffOnly } = require('../lib/permissions');
 const storage = require('../lib/storage');
 const { schoolToday } = require('../lib/schoolDate');
 
@@ -32,17 +32,17 @@ function legacyFileUrl(value) {
  * ผู้รับผิดชอบเอกสาร — คืน `{ name, id }`
  *   name = ชื่อที่แสดงในทะเบียน · id = users.username ที่เป็นเจ้าของจริง (อาจเป็น null)
  *
- * Admin ระบุแทนคนอื่นได้ (ธุรการกรอกให้ครู) ครูทั่วไปเป็นตัวเองเสมอ
- * ชื่อที่ Admin พิมพ์มา หาชื่อเต็มใน users ให้ด้วย — ตรงเมื่อไหร่แถวนั้นได้เจ้าของทันที
+ * ฝ่ายจัดการระบุแทนคนอื่นได้ (ธุรการกรอกให้ครู) ครูทั่วไปเป็นตัวเองเสมอ
+ * ชื่อที่ฝ่ายจัดการพิมพ์มา หาชื่อเต็มใน users ให้ด้วย — ตรงเมื่อไหร่แถวนั้นได้เจ้าของทันที
  * (นี่คือทางแก้แถวเก่าที่ชื่อเป็นชื่อย่อ: Admin แก้ทะเบียนแล้วเลือกชื่อเต็มให้ถูก)
- * ไม่ตรง = ชื่ออิสระที่ไม่มีใครเป็นเจ้าของ → id = null สงวนให้ Admin แก้
+ * ไม่ตรง = ชื่ออิสระที่ไม่มีใครเป็นเจ้าของ → id = null สงวนให้ฝ่ายจัดการแก้
  *
  * อ่านชื่อจาก users.full_name ไม่ใช่ user.name ใน JWT — token ออกตอนล็อกอินและอยู่ได้
  * 90 วัน ครูที่เปลี่ยนชื่อ-สกุลจะได้ชื่อเก่าติดไปกับเอกสารใหม่
  * (หลักเดียวกับระดับชั้นนักเรียนใน functions/mediaCards.js)
  */
 async function resolveRequester(user, given) {
-  if (isAdmin(user) && given) {
+  if (isManagement(user) && given) {
     const name = String(given);
     const { rows } = await query(
       `SELECT username FROM users WHERE trim(full_name)=trim($1) LIMIT 1`, [name]
@@ -59,19 +59,19 @@ async function resolveRequester(user, given) {
 }
 
 /**
- * เจ้าของเอกสาร = แถวที่ requester_id ตรงกับ username ของผู้เรียก — Admin ผ่านเสมอ
+ * เจ้าของเอกสาร = แถวที่ requester_id ตรงกับ username ของผู้เรียก — ฝ่ายจัดการผ่านเสมอ
  *
  * **ตัดสินที่ requester_id เท่านั้นเมื่อมีค่า ไม่ดูชื่อเลย** — ครูที่เปลี่ยนชื่อ-สกุล
  * ต้องยังเป็นเจ้าของเอกสารเก่าของตัวเอง นั่นคือเหตุผลทั้งหมดของคอลัมน์นี้
  *
  * requester_id ว่าง = แถวเก่าก่อน migration ที่ backfill ด้วยชื่อไม่ตรง (ชื่อย่ออย่าง
  * `ครูพิสิษฐ์` หรือสองคนในช่องเดียว) → ตกไปใช้กติกาเดิม เทียบ requester กับชื่อจริงสด
- * เผื่อชื่อบังเอิญตรง · ไม่ตรงหรือว่าง = Admin เท่านั้น (หลักเดียวกับ budgets.created_by)
+ * เผื่อชื่อบังเอิญตรง · ไม่ตรงหรือว่าง = ฝ่ายจัดการเท่านั้น (หลักเดียวกับ budgets.created_by)
  *
  * ⚠️ ห้ามเทียบกับค่าจาก payload — row ต้องมาจาก DB และชื่อผู้เรียก query สดจาก users
  */
 async function _assertOwnsSarabun(user, row, msg) {
-  if (isAdmin(user)) return;
+  if (isManagement(user)) return;
   const callerId = String(user?.id || '').trim();
   const ownerId = String((row && row.requester_id) || '').trim();
   if (ownerId) {
@@ -117,7 +117,7 @@ async function saveSarabun([data], user) {
 }
 
 /**
- * ลบทะเบียนเอกสาร (ADMIN_ONLY) — **ลบไฟล์ก่อนแล้วค่อยลบแถว**
+ * ลบทะเบียนเอกสาร (MANAGEMENT_ONLY) — **ลบไฟล์ก่อนแล้วค่อยลบแถว**
  * สลับลำดับเมื่อไหร่ได้ไฟล์กำพร้าที่ไม่มีอะไรชี้ถึงตลอดกาล
  */
 async function deleteSarabun([id]) {
@@ -136,7 +136,7 @@ async function deleteSarabun([id]) {
 
 /**
  * แนบไฟล์ — เรียกจาก routes/media.js เท่านั้น (multipart ไม่ผ่าน /api/gas)
- * เฉพาะผู้รับผิดชอบเอกสารหรือ Admin (_assertOwnsSarabun) — ครูคนอื่นอ่านได้อย่างเดียว
+ * เฉพาะผู้รับผิดชอบเอกสารหรือฝ่ายจัดการ (_assertOwnsSarabun) — ครูคนอื่นอ่านได้อย่างเดียว
  * แนบทับ: อัปไฟล์ใหม่ให้สำเร็จก่อน แล้วค่อยลบของเก่า (ลบก่อนแล้วอัปพัง = เสียของเดิมฟรี)
  */
 async function attachSarabunFile(id, file, user) {

@@ -10,7 +10,8 @@ let _calImportRows = null;
 
 function _calIsAdmin() {
     const u = getSessionUser();
-    return u && String(u.role).toUpperCase() === 'ADMIN';
+    const role = u && String(u.role).toUpperCase();
+    return role === 'ADMIN' || role === 'EXECUTIVE';
 }
 
 const CAL_PERSONAL_COLOR = '#6f42c1';

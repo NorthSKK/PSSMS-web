@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { adminOnly, teacherOrAdmin, adminOrExecutive, staffOnly, isAdmin, verifyTeacherOwnsSubject } = require('../lib/permissions');
+const { adminOnly, managementOnly, teacherOrManagement, adminOrExecutive, staffOnly, isManagement, verifyTeacherOwnsSubject } = require('../lib/permissions');
 const cache = require('../lib/cache');
 const license = require('../lib/license');
 
@@ -23,7 +23,8 @@ const USER_WRITE_FNS = new Set([
 // Functions callable without a valid session token
 const PUBLIC_FNS = new Set(['checkLogin', 'getSystemConfig', 'getDemoAccounts']);
 
-const ADMIN_ONLY = new Set([
+// งานจัดการโรงเรียนใช้ได้ทั้ง Admin และ Executive. เรื่องสัญญาบริการคงเป็น Admin เท่านั้น.
+const MANAGEMENT_ONLY = new Set([
   'addUser', 'editUser', 'deleteUser', 'importStudentCSV', 'importTeacherCSV',
   'saveSystemConfig', 'saveCalendarEvent', 'deleteCalendarEvent', 'importCalendarCSV',
   'updateTimetableRow', 'deleteTimetableRow', 'importTimetableCSV', 'swapTimetableTeacher',
@@ -37,7 +38,7 @@ const ADMIN_ONLY = new Set([
   'addCurriculumItem', 'updateCurriculumItem', 'deleteCurriculumItem',
   'setupCalendarDatabase', 'setupClubDatabase', 'setupCurriculumDatabase',
   'promoteStudentsToNextYear', 'deleteClub', 'adminAddMember', 'adminRemoveMember',
-  'getAllUsers', 'getLicenseInfo',
+  'getAllUsers',
   'deleteSavingsTransaction', 'importSavingsCSV',
   // ครูสร้าง/แก้สารบรรณได้ แต่ลบเป็นของ Admin — sarabun ไม่มีคอลัมน์เจ้าของให้ตรวจสิทธิ์รายแถว
   'deleteSarabun',
@@ -45,7 +46,7 @@ const ADMIN_ONLY = new Set([
   'restoreMediaCard', 'getDeletedMediaCards', 'getMediaStorageStatus',
 ]);
 
-const TEACHER_OR_ADMIN = new Set([
+const TEACHER_OR_MANAGEMENT = new Set([
   'saveAttendanceBatch', 'saveLessonRecord', 'updateAttendanceStatus', 'updateAttendanceBatch',
   'saveMassiveAttendanceGrid', 'saveSubjectConfig', 'saveAllInOneScores', 'saveAllInOneWithConfig',
   'saveDetailedLessonRecord', 'updateDetailedLessonRecord', 'deleteDetailedLessonRecord',
@@ -62,17 +63,12 @@ const TEACHER_OR_ADMIN = new Set([
   'deleteMediaFile', 'renameMediaFile', 'reorderMediaFiles',
 ]);
 
-// บุคลากรทั้งหมด (ครู + Admin + ผอ./รอง) — กันแค่ "ไม่ใช่นักเรียน"
-//
-// ⚠️ ทะเบียนสารบรรณเคยอยู่ใน TEACHER_OR_ADMIN ซึ่งกัน Executive ออกไปด้วย ทั้งที่เมนู
-// ของ ผอ. มีหน้างานสารบรรณอยู่จริง — กดจากเมนูตัวเองแล้วเจอ "สงวนสิทธิ์เฉพาะครู
-// หรือผู้ดูแลระบบ" · **การเขียนยังเป็น TEACHER_OR_ADMIN เหมือนเดิม** ผอ. อ่านอย่างเดียว
+// บุคลากรทั้งหมด (ครู + Admin + Executive) — กันแค่ "ไม่ใช่นักเรียน"
 const STAFF_ONLY = new Set([
   'getSarabunHistory', 'getSarabunFileTicket', 'getProjectDocuments', 'getProjectFileTicket',
 ]);
 
-// อ่านได้ทั้งโรงเรียน แก้ไม่ได้ — Executive คือ ผอ./รอง ไม่ใช่หัวหน้ากลุ่มสาระ
-// และไม่ถูกจำกัดขอบเขตตาม dept (docs/adr/0001-executive-sees-whole-school.md)
+// ข้อมูลภาพรวมทั้งโรงเรียน — Management เท่านั้น
 const ADMIN_OR_EXECUTIVE = new Set([
   'getExecutiveDashboardBundle',
   'getTeacherProgressBoard',
@@ -247,9 +243,9 @@ const handlers = {
   // Academic reports
   getAllSubjectsReport:             require('../functions/getAllSubjectsReport'),
 
-  // Calendar — filter personal events to owner only (admin sees all)
+  // Calendar — management sees all, other users see only their personal events.
   getCalendarEvents: (args, user) => {
-    return require('../functions/getCalendarEvents')(isAdmin(user) ? null : user?.id);
+    return require('../functions/getCalendarEvents')(isManagement(user) ? null : user?.id);
   },
 
   // Morning activity
@@ -391,10 +387,11 @@ router.post('/:fnName', async (req, res) => {
 
   // Role-based authorization
   try {
-    if (ADMIN_ONLY.has(fnName)) adminOnly(user);
+    if (fnName === 'getLicenseInfo') adminOnly(user);
+    else if (MANAGEMENT_ONLY.has(fnName)) managementOnly(user);
     else if (ADMIN_OR_EXECUTIVE.has(fnName)) adminOrExecutive(user);
     else if (STAFF_ONLY.has(fnName)) staffOnly(user);
-    else if (TEACHER_OR_ADMIN.has(fnName)) teacherOrAdmin(user);
+    else if (TEACHER_OR_MANAGEMENT.has(fnName)) teacherOrManagement(user);
   } catch (e) {
     return res.json({ __error: e.message });
   }

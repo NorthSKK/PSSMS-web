@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { isAdmin, resolveTeacherId, verifyTeacherOwnsSubject } = require('../lib/permissions');
+const { resolveTeacherId, verifyTeacherOwnsSubject } = require('../lib/permissions');
 
 async function getSubjectConfig([subjectCode, className, term, year]) {
   let rows;

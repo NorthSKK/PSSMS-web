@@ -57,6 +57,19 @@ test('Admin bypass ownership check', async () => {
   assert.equal(res.status, 'success');
 });
 
+test('Executive ใช้งานสิทธิ์จัดการโรงเรียนเทียบเท่า Admin แต่ไม่เห็นข้อมูลสัญญาบริการ', async () => {
+  const users = await ok('getAllUsers', [], 'executive');
+  assert.ok(users.some((row) => row[0] === 'teacher1'), 'ผู้บริหารต้องเข้าหน้าจัดการบุคลากรได้');
+
+  const scoreWrite = await ok('saveAllInOneScores', [
+    [{ studentId: '01901', indicatorId: 'formative_0', score: '23' }],
+    PHYSICS.code, TERM, YEAR,
+  ], 'executive');
+  assert.equal(scoreWrite.status, 'success', 'ผู้บริหารต้องจัดการคะแนนวิชาใดก็ได้');
+
+  await denied('getLicenseInfo', [], 'executive');
+});
+
 // ---------------------------------------------------------------------------
 // นักเรียนอ่านข้อมูลของนักเรียนคนอื่นไม่ได้
 //

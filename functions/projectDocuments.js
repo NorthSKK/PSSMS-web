@@ -1,13 +1,13 @@
 'use strict';
 const { query } = require('../lib/db');
-const { isAdmin } = require('../lib/permissions');
+const { isManagement } = require('../lib/permissions');
 const storage = require('../lib/storage');
 
 const MAX_ATTACH_MB = 100;
 const CATEGORIES = ['โครงการ', 'แผนงาน', 'รายงาน', 'เอกสารประกอบ'];
 const idOf = user => String(user?.id || '').trim();
 function assertOwner(user, row, message) {
-  if (!isAdmin(user) && (!row || String(row.owner_id || '') !== idOf(user))) throw new Error(message);
+  if (!isManagement(user) && (!row || String(row.owner_id || '') !== idOf(user))) throw new Error(message);
 }
 function clean(value, max) { return String(value || '').trim().slice(0, max); }
 
@@ -19,7 +19,7 @@ async function getProjectDocuments(_args, user) {
     FROM project_documents p LEFT JOIN project_files f ON f.project_id=p.id
     GROUP BY p.id ORDER BY p.updated_at DESC,p.id DESC`);
   return rows.map(r => ({ id:r.id, title:r.title, category:r.category || 'โครงการ', description:r.description || '', ownerName:r.owner_name,
-    updatedAt:r.updated_at, files:r.files || [], mine:isAdmin(user) || String(r.owner_id) === idOf(user) }));
+    updatedAt:r.updated_at, files:r.files || [], mine:isManagement(user) || String(r.owner_id) === idOf(user) }));
 }
 
 async function saveProjectDocument([data], user) {

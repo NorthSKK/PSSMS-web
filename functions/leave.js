@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { isAdmin } = require('../lib/permissions');
+const { isManagement } = require('../lib/permissions');
 const { isHomeroomSubject } = require('../lib/subjectGroup');
 
 async function saveLeaveRequest([requestData], user) {
@@ -23,7 +23,7 @@ async function saveLeaveRequest([requestData], user) {
 }
 
 // แอดมินบันทึกการลาแทนครู — teacher_id มาจาก payload (ไม่ใช่ JWT เหมือน saveLeaveRequest)
-// จึงต้องเป็น ADMIN_ONLY และต้องยืนยันว่า username นั้นมีจริงก่อนเขียน
+// จึงต้องเป็น MANAGEMENT_ONLY และต้องยืนยันว่า username นั้นมีจริงก่อนเขียน
 // status เลือกได้: อนุมัติทันที (แอดมินคือผู้พิจารณาอยู่แล้ว) หรือส่งเข้าคิวรอพิจารณา
 async function adminCreateLeave([data], user) {
   const d = data || {};
@@ -96,7 +96,7 @@ async function rejectLeave([leaveId, /* reviewedByName — ignored, JWT user.id 
 async function saveSubstituteAssignment([assignData], user) {
   const a = assignData || {};
   // assigned_by is an audit field — take it from the JWT, not the payload
-  const assignedBy = isAdmin(user) ? (a.assignedBy || String(user?.id || '')) : String(user?.id || '');
+  const assignedBy = isManagement(user) ? (a.assignedBy || String(user?.id || '')) : String(user?.id || '');
   const { rows } = await query(
     `INSERT INTO substitute_assignments(leave_id,date,period,day_of_week,original_teacher_id,original_teacher_name,sub_teacher_id,sub_teacher_name,subject_code,subject_name,class,room,status,assigned_by,note)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'จัดแล้ว',$13,$14)
@@ -117,10 +117,10 @@ async function saveSubstituteAssignment([assignData], user) {
 // Only the teacher actually assigned to cover the slot may confirm it.
 async function confirmSubstitute([subId], user) {
   const { rowCount } = await query(
-    isAdmin(user)
+    isManagement(user)
       ? `UPDATE substitute_assignments SET status='ยืนยันแล้ว' WHERE id=$1`
       : `UPDATE substitute_assignments SET status='ยืนยันแล้ว' WHERE id=$1 AND LOWER(sub_teacher_id)=LOWER($2)`,
-    isAdmin(user) ? [subId] : [subId, String(user?.id || '')]
+    isManagement(user) ? [subId] : [subId, String(user?.id || '')]
   );
   if (rowCount === 0) throw new Error('ไม่มีสิทธิ์ยืนยันการสอนแทนนี้');
   return { status: 'success', message: 'บันทึกสำเร็จ' };
@@ -208,7 +208,7 @@ async function deleteSubstituteAssignment([assignmentId]) {
 
 // Throws unless the JWT user owns this leave record (admin bypasses).
 async function _assertOwnsLeave(user, leaveId) {
-  if (isAdmin(user)) return;
+  if (isManagement(user)) return;
   const { rows } = await query(
     `SELECT 1 FROM leave_records WHERE id=$1 AND LOWER(teacher_id)=LOWER($2)`,
     [leaveId, String(user?.id || '')]

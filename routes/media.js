@@ -28,7 +28,7 @@ const crypto = require('crypto');
 const router = express.Router();
 
 const requireAuth = require('../middleware/auth');
-const { teacherOrAdmin } = require('../lib/permissions');
+const { teacherOrManagement } = require('../lib/permissions');
 const cache = require('../lib/cache');
 const { query } = require('../lib/db');
 const mediaCards = require('../functions/mediaCards');
@@ -99,7 +99,7 @@ async function dropTemp(file) {
 
 function guardTeacher(req, res, next) {
   try {
-    teacherOrAdmin(req.user);
+    teacherOrManagement(req.user);
     next();
   } catch (e) {
     res.status(403).json({ __error: e.message });

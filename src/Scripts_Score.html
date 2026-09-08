@@ -296,7 +296,7 @@ function initScoreEntryPage() {
   const user = getSessionUser();
   if(!user) return;
   
-  if (user.role.toUpperCase() === 'ADMIN') {
+  if (['ADMIN', 'EXECUTIVE'].includes(user.role.toUpperCase())) {
      const adminPanel = document.getElementById('adminPrintSettingsPanel');
      if (adminPanel) {
          adminPanel.classList.remove('d-none');

@@ -190,9 +190,10 @@ test('ไม่คืนรหัสผ่านออกมาไม่ว่�
   assert.ok(!JSON.stringify(res).includes('1234'), 'ห้ามให้รหัสผ่านหลุดออกไปกับผลลัพธ์');
 });
 
-test('เป็น ADMIN_ONLY — ครูและ Executive เรียกไม่ได้', async () => {
+test('เป็นสิทธิ์จัดการโรงเรียน — ครูเรียกไม่ได้ แต่ Executive เรียกได้', async () => {
   await denied('getSetupChecklist', [], 'teacher1');
-  await denied('getSetupChecklist', [], 'executive');
+  const checklist = await ok('getSetupChecklist', [], 'executive');
+  assert.ok(Array.isArray(checklist.items));
 });
 
 test('อยู่ใน READONLY_ALLOWED — โรงเรียนหมดสัญญายังดูรายการตั้งค่าได้', () => {

@@ -10,8 +10,8 @@ function initSavingsPage() {
   const user = JSON.parse(localStorage.getItem('pssms_user') || '{}');
   if (!user) return;
 
-  // Show CSV import tab for Admin only
-  const isAdmin = String(user.role || '').trim().toUpperCase() === 'ADMIN';
+  // ฝ่ายบริหารจัดการรายการออมเงินและนำเข้าไฟล์ได้
+  const isAdmin = ['ADMIN', 'EXECUTIVE'].includes(String(user.role || '').trim().toUpperCase());
   document.getElementById('tabImportItem').style.display = isAdmin ? '' : 'none';
 
   // Populate year dropdowns
@@ -278,7 +278,7 @@ function loadSavingsSummary() {
 
 function renderSummaryTable(cls, data) {
   const user = JSON.parse(localStorage.getItem('pssms_user') || '{}');
-  const isAdmin = String(user?.role || '').trim().toUpperCase() === 'ADMIN';
+  const isAdmin = ['ADMIN', 'EXECUTIVE'].includes(String(user?.role || '').trim().toUpperCase());
   document.getElementById('summaryClassName').textContent = cls;
 
   const tbody = document.getElementById('summaryTableBody');

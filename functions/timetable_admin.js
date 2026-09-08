@@ -1,5 +1,5 @@
 const { query } = require('../lib/db');
-const { isAdmin } = require('../lib/permissions');
+const { isManagement } = require('../lib/permissions');
 const { isHomeroomManagedSubject } = require('../lib/subjectGroup');
 const { assertRows, prepareRows, assertNoErrors } = require('../lib/importSpec');
 
@@ -198,7 +198,7 @@ async function teacherUpdateTimetableRow([teacherId, rowIndex, newData], user) {
   if (!rows.length) throw new Error('ไม่พบรายการ');
   // Compare against the JWT identity, not the payload — a payload-vs-payload check
   // lets any teacher edit any row by sending that row's owner id.
-  if (!isAdmin(user) && String(rows[0].teacher_id).trim().toLowerCase() !== String(user?.id || '').trim().toLowerCase())
+  if (!isManagement(user) && String(rows[0].teacher_id).trim().toLowerCase() !== String(user?.id || '').trim().toLowerCase())
     throw new Error('ไม่มีสิทธิ์แก้ไขรายการนี้');
   assertTimetableFields(newData);   // ตรวจหลังสิทธิ์ — คนที่ไม่มีสิทธิ์ต้องเจอ error เรื่องสิทธิ์
   // Only allow editing display fields — subject_code/teacher_id/term/year are locked in DB
