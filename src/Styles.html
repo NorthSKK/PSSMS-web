@@ -116,6 +116,13 @@
 .btn-soft:hover { background: var(--p-hover); border-color: var(--p-border-strong); color: var(--p-text); }
 .btn-soft i { color: var(--p-text-muted); }
 
+/* Dashboard ผู้บริหาร: การ์ดเป็นจุดไปยังหน้ารายงานแบบอ่านข้อมูลเท่านั้น */
+.exec-kpi-link, .exec-calendar-link { color: var(--p-text); cursor: pointer; }
+.exec-kpi-link:hover, .exec-kpi-link:focus-visible,
+.exec-calendar-link:hover, .exec-calendar-link:focus-visible { background: var(--p-hover); outline: 2px solid var(--p-accent); outline-offset: 2px; }
+.exec-alert-link { min-height: 44px; border: 1px solid var(--p-border); }
+.exec-alert-link:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 2px; }
+
 /* ไอคอน Font Awesome มี baseline ของตัวอักษร จึงดูเอียงเมื่ออยู่ในปุ่มกลม
    บังคับให้ปุ่มสลับโหมดจัดกึ่งกลางแบบ flex ทั้งแนวตั้งและแนวนอน */
 .theme-toggle { display:inline-flex !important; align-items:center; justify-content:center; padding:0 !important; line-height:1; }

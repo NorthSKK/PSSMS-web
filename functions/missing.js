@@ -6,6 +6,7 @@ const { resolveStudentId } = require('../lib/permissions');
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 const { schoolToday, schoolDayIndex } = require('../lib/schoolDate');
+const getCalendarEvents = require('./getCalendarEvents');
 
 // ============================================================
 // getTeacherRiskDashboard — grade-based risk (0, ร, มส)
@@ -226,42 +227,191 @@ async function getStudentDashboardBundle([studentId, term, year], user) {
 // ============================================================
 // getExecutiveDashboardBundle
 // ============================================================
-async function getExecutiveDashboardBundle([dept]) {
-  const getSystemConfig = require('./getSystemConfig');
-  const getCalendarEvents = require('./getCalendarEvents');
-  const config = await getSystemConfig();
+// This bundle deliberately has no department filter.  Executive users are the
+// director/deputy-director role, so their dashboard is a whole-school view.
+function dashboardSection(fn) {
+  return Promise.resolve().then(fn)
+    .then(data => ({ ok: true, data }))
+    .catch(error => ({ ok: false, error: error.message }));
+}
 
-  const [staffRes, leaveRes, calendarEvents] = await Promise.all([
+async function executiveKpi(config) {
+  const today = schoolToday();
+  const [people, morning, budget] = await Promise.all([
     query(
-      `SELECT UPPER(role) as role, COUNT(*) as cnt FROM users
-       WHERE UPPER(role) != 'STUDENT' OR year=$1 GROUP BY UPPER(role)`,
+      `SELECT
+         COUNT(*) FILTER (WHERE UPPER(role)='STUDENT' AND year=$1)::int AS students,
+         COUNT(*) FILTER (WHERE UPPER(role) != 'STUDENT')::int AS staff
+       FROM users`,
       [config.year]
     ),
-    query(`SELECT COUNT(*) as cnt FROM leave_records WHERE status='รอพิจารณา' AND year=$1`, [config.year]),
-    getCalendarEvents(),
+    query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE flag_status IN ('มา','เข้าแถว','เข้า','ปกติ'))::int AS present
+       FROM morning_activity WHERE date=$1 AND term=$2 AND year=$3`,
+      [today, config.term, config.year]
+    ),
+    query(
+      `SELECT COALESCE(SUM(budget_amount),0) AS total,
+              COALESCE(SUM(used_amount),0) AS used
+       FROM budgets WHERE year=$1`,
+      [config.year]
+    ),
   ]);
+  const total = Number(morning.rows[0]?.total || 0);
+  const present = Number(morning.rows[0]?.present || 0);
+  const budgetTotal = Number(budget.rows[0]?.total || 0);
+  const budgetUsed = Number(budget.rows[0]?.used || 0);
+  return {
+    studentCount: Number(people.rows[0]?.students || 0),
+    teacherCount: Number(people.rows[0]?.staff || 0),
+    attPct: total ? Math.round((present / total) * 1000) / 10 : null,
+    todayPresent: present,
+    todayTotal: total,
+    budgetUsedPct: budgetTotal ? Math.round((budgetUsed / budgetTotal) * 100) : 0,
+  };
+}
 
-  let studentCount = 0, teacherCount = 0;
-  for (const r of staffRes.rows) {
-    if (r.role === 'STUDENT') studentCount += parseInt(r.cnt);
-    else teacherCount += parseInt(r.cnt);
-  }
+async function executiveAcademic(config) {
+  const today = schoolToday();
+  const [trend, risk, missing] = await Promise.all([
+    query(
+      `SELECT to_char(day::date,'YYYY-MM-DD') AS date,
+              COUNT(a.id) FILTER (WHERE a.status IN ('มา','สาย'))::int AS present,
+              COUNT(a.id) FILTER (WHERE a.status IN ('ขาด','โดด'))::int AS absent,
+              COUNT(a.id) FILTER (WHERE a.status IN ('ลา'))::int AS leave
+       FROM generate_series(($1::date - INTERVAL '6 days'), $1::date, INTERVAL '1 day') AS day
+       LEFT JOIN attendance a ON a.date=day::date AND a.term=$2 AND a.year=$3
+       GROUP BY day ORDER BY day`,
+      [today, config.term, config.year]
+    ),
+    query(
+      `SELECT COUNT(*)::int AS count FROM (
+         SELECT student_id FROM attendance
+          WHERE term=$1 AND year=$2 AND status IN ('ขาด','โดด')
+          GROUP BY student_id HAVING COUNT(*) >= 3
+       ) AS at_risk`,
+      [config.term, config.year]
+    ),
+    query(
+      `SELECT u.username AS teacher_id, u.full_name AS name
+       FROM users u
+       WHERE UPPER(u.role)='TEACHER'
+         AND EXISTS (SELECT 1 FROM timetable t WHERE t.teacher_id=u.username AND t.term=$1 AND t.year=$2)
+         AND NOT EXISTS (
+           SELECT 1 FROM academic_records r
+            WHERE r.teacher_id=u.username AND r.term=$1 AND r.year=$2
+              AND r.date BETWEEN ($3::date - INTERVAL '2 days') AND $3::date
+         )
+       ORDER BY u.full_name`,
+      [config.term, config.year, today]
+    ),
+  ]);
+  return {
+    trend: trend.rows.map(r => ({
+      date: r.date,
+      present: Number(r.present || 0), absent: Number(r.absent || 0), leave: Number(r.leave || 0),
+    })),
+    riskCount: Number(risk.rows[0]?.count || 0),
+    noAttendanceTeachers: missing.rows.map(r => ({ teacherId: r.teacher_id, name: r.name || '' })),
+  };
+}
+
+async function executiveBudget(config) {
+  const { rows } = await query(
+    `SELECT project_name, budget_amount, used_amount
+     FROM budgets WHERE year=$1 ORDER BY used_amount DESC, budget_amount DESC, project_name LIMIT 5`,
+    [config.year]
+  );
+  const totals = await query(
+    `SELECT COALESCE(SUM(budget_amount),0) AS total, COALESCE(SUM(used_amount),0) AS used
+     FROM budgets WHERE year=$1`,
+    [config.year]
+  );
+  return {
+    total: Number(totals.rows[0]?.total || 0),
+    used: Number(totals.rows[0]?.used || 0),
+    projects: rows.map(r => {
+      const total = Number(r.budget_amount || 0);
+      const used = Number(r.used_amount || 0);
+      return { name: r.project_name || '', total, used, pct: total ? Math.round((used / total) * 100) : 0 };
+    }),
+  };
+}
+
+async function executivePersonnel(config) {
+  const today = schoolToday();
+  const monthlyLeaves = await query(
+    `SELECT staff_name, type, start_date, end_date
+     FROM leave_records
+     WHERE status='อนุมัติ' AND start_date < (date_trunc('month', $1::date) + INTERVAL '1 month')::date
+       AND end_date >= date_trunc('month', $1::date)::date
+     ORDER BY start_date DESC, request_date DESC`,
+    [today]
+  );
+  const [staff, approvedToday, pending] = await Promise.all([
+    query(`SELECT COUNT(*)::int AS count FROM users WHERE UPPER(role) != 'STUDENT'`),
+    query(
+      `SELECT COUNT(*)::int AS count FROM leave_records
+       WHERE status='อนุมัติ' AND start_date <= $1 AND end_date >= $1`,
+      [today]
+    ),
+    query(
+      `SELECT COUNT(*)::int AS count FROM leave_records WHERE status='รอพิจารณา' AND year=$1`,
+      [config.year]
+    ),
+  ]);
+  const rows = monthlyLeaves.rows;
+  const leaveByType = {};
+  for (const row of rows) leaveByType[row.type || 'อื่น ๆ'] = (leaveByType[row.type || 'อื่น ๆ'] || 0) + 1;
+  return {
+    staffCount: Number(staff.rows[0]?.count || 0),
+    approvedLeaveToday: Number(approvedToday.rows[0]?.count || 0),
+    pendingLeaveCount: Number(pending.rows[0]?.count || 0),
+    leaveByType,
+    thisMonthLeave: rows.slice(0, 5).map(r => ({ name: r.staff_name || '', type: r.type || '', startDate: r.start_date, endDate: r.end_date })),
+  };
+}
+
+async function executiveGeneral(config) {
+  const [recent, pending] = await Promise.all([
+    query(
+      `SELECT doc_type, doc_number, subject FROM sarabun WHERE year=$1 ORDER BY timestamp DESC, id DESC LIMIT 5`,
+      [config.year]
+    ),
+    query(
+      `SELECT COUNT(*)::int AS count FROM sarabun
+       WHERE year=$1 AND NULLIF(file_key,'') IS NULL AND NULLIF(file_url,'') IS NULL`,
+      [config.year]
+    ),
+  ]);
+  return {
+    recent: recent.rows.map(r => ({ docType: r.doc_type || '-', docNumber: r.doc_number || '-', subject: r.subject || '' })),
+    pendingFile: Number(pending.rows[0]?.count || 0),
+  };
+}
+
+async function executiveCalendar() {
+  return getCalendarEvents();
+}
+
+async function getExecutiveDashboardBundle() {
+  const getSystemConfig = require('./getSystemConfig');
+  const config = await getSystemConfig();
+
+  const [kpi, academic, budget, personnel, general, calendar] = await Promise.all([
+    dashboardSection(() => executiveKpi(config)),
+    dashboardSection(() => executiveAcademic(config)),
+    dashboardSection(() => executiveBudget(config)),
+    dashboardSection(() => executivePersonnel(config)),
+    dashboardSection(() => executiveGeneral(config)),
+    dashboardSection(() => executiveCalendar()),
+  ]);
 
   return {
     ts: Date.now(),
     systemConfig: { ok: true, data: config },
-    kpi: {
-      ok: true,
-      data: {
-        studentCount, teacherCount,
-        pendingLeaveCount: parseInt(leaveRes.rows[0]?.cnt || 0),
-      },
-    },
-    calendarEvents: { ok: true, data: calendarEvents },
-    academic: { ok: true, data: {} },
-    budget: { ok: true, data: {} },
-    personnel: { ok: true, data: {} },
-    general: { ok: true, data: {} },
+    kpi, academic, budget, personnel, general, calendar,
   };
 }
 

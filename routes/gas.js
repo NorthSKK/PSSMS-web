@@ -74,6 +74,7 @@ const STAFF_ONLY = new Set([
 // อ่านได้ทั้งโรงเรียน แก้ไม่ได้ — Executive คือ ผอ./รอง ไม่ใช่หัวหน้ากลุ่มสาระ
 // และไม่ถูกจำกัดขอบเขตตาม dept (docs/adr/0001-executive-sees-whole-school.md)
 const ADMIN_OR_EXECUTIVE = new Set([
+  'getExecutiveDashboardBundle',
   'getTeacherProgressBoard',
   // ข้อมูลพฤติกรรมรายคนทั้งโรงเรียน ไม่ใช่ของครูรายวิชา
   'getDailyStudentWatch', 'getStudentAttendanceProfile', 'getStudentWatchRanking',

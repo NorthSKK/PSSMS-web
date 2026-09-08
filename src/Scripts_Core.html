@@ -1514,24 +1514,24 @@ window.safeRun = function(maxRetries = 3) {
 // ==========================================
 // Executive Dashboard (Page_Dashboard_Executive)
 // ==========================================
-function initExecDashboard() {
+function initExecDashboard(forceRefresh) {
   const user = JSON.parse(localStorage.getItem('pssms_user'));
   if (!user) return;
-  const dept = (user.dept || 'ผอ.').trim();
-  const deptClass = dept==='วิชาการ'?'pssms-dept-academic':dept==='งบประมาณ'?'pssms-dept-budget':dept==='บุคคล'?'pssms-dept-personnel':dept==='ทั่วไป'?'pssms-dept-general':'pssms-dept-academic';
+  const dept = (user.dept || '').trim();
+  const deptClass = dept==='งบประมาณ'?'pssms-dept-budget':dept==='บุคคล'?'pssms-dept-personnel':dept==='ทั่วไป'?'pssms-dept-general':'pssms-dept-academic';
   const root = document.getElementById('execDashPage');
   if (root) root.className = root.className.replace(/pssms-dept-\S+/g,'').trim() + ' ' + deptClass;
   var deptLbl = document.getElementById('execDeptLabel');
-  if (deptLbl) deptLbl.textContent = dept==='ผอ.'?'ภาพรวมทั้งโรงเรียน':dept==='วิชาการ'?'รองผู้อำนวยการฝ่ายวิชาการ':dept==='งบประมาณ'?'รองผู้อำนวยการฝ่ายงบประมาณ':dept==='บุคคล'?'รองผู้อำนวยการฝ่ายบุคคล':dept==='ทั่วไป'?'รองผู้อำนวยการฝ่ายทั่วไป':dept;
-  var _execCacheKey = 'exec_bundle_' + dept;
-  var _execCached = _dashCacheGet(_execCacheKey);
+  if (deptLbl) deptLbl.textContent = 'ภาพรวมทั้งโรงเรียน · อ่านข้อมูลเพื่อการติดตาม';
+  var _execCacheKey = 'exec_bundle_school';
+  var _execCached = forceRefresh ? null : _dashCacheGet(_execCacheKey);
   var ld = document.getElementById('execLoading');
   var ct = document.getElementById('execContent');
 
   if (_execCached) {
     if (ld) ld.classList.add('d-none');
     if (ct) ct.classList.remove('d-none');
-    _execRender(_execCached, dept);
+    _execRender(_execCached);
   } else {
     if (ld) ld.classList.remove('d-none');
     if (ct) ct.classList.add('d-none');
@@ -1543,16 +1543,32 @@ function initExecDashboard() {
       _dashCacheSet(_execCacheKey, bundle);
       var ld2 = document.getElementById('execLoading'); if (ld2) ld2.classList.add('d-none');
       var ct2 = document.getElementById('execContent'); if (ct2) ct2.classList.remove('d-none');
-      _execRender(bundle, dept);
+      _execRender(bundle);
     })
     .withFailureHandler(function(err) {
       if (_execCached) return; // already showing cached data — ignore failure silently
       var ld3 = document.getElementById('execLoading');
-      if (ld3) ld3.innerHTML = '<i class="fas fa-exclamation-triangle text-danger fa-2x mb-2 d-block"></i><div class="text-danger">โหลดข้อมูลไม่สำเร็จ: '+(err.message||'')+'</div>';
+      if (ld3) { ld3.textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + ((err && err.message) || 'โปรดลองใหม่'); ld3.className = 'p-3 text-danger'; }
     })
-    .getExecutiveDashboardBundle(dept);
+    .getExecutiveDashboardBundle();
 }
-function _execRender(bundle, dept) { _execRenderKPI(bundle.kpi); _execRenderAlerts(bundle, dept); _execRenderSections(bundle, dept); _execRenderCalendar(bundle.calendar); }
+function _execRender(bundle) {
+  _execRenderMeta(bundle);
+  _execRenderKPI(bundle.kpi);
+  _execRenderAlerts(bundle);
+  _execRenderSections(bundle);
+  _execRenderCalendar(bundle.calendar || bundle.calendarEvents);
+}
+function _execRenderMeta(bundle) {
+  var label = document.getElementById('execUpdatedLabel');
+  if (!label) return;
+  var config = bundle && bundle.systemConfig && bundle.systemConfig.ok ? bundle.systemConfig.data : {};
+  var term = config && config.term ? 'เทอม ' + config.term : '';
+  var year = config && config.year ? '/' + config.year : '';
+  var when = bundle && bundle.ts ? new Date(bundle.ts) : new Date();
+  var updated = isNaN(when.getTime()) ? '' : ' · อัปเดต ' + when.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  label.textContent = (term || year ? term + year : 'ข้อมูลทั้งโรงเรียน') + updated;
+}
 function _execRenderKPI(section) {
   if (!section||!section.ok) return;
   const d = section.data;
@@ -1566,49 +1582,43 @@ function _execRenderKPI(section) {
   var bar = document.getElementById('kpiBudgetBar');
   if (bar) { bar.style.width=d.budgetUsedPct+'%'; bar.className='progress-bar '+(d.budgetUsedPct>=90?'bg-danger':d.budgetUsedPct>=75?'bg-warning':'bg-success'); }
 }
-function _execRenderAlerts(bundle, dept) {
+function _execRenderAlerts(bundle) {
   const alerts = [];
-  if (bundle.academic&&bundle.academic.ok) { const a=bundle.academic.data; if(a.noAttendanceTeachers&&a.noAttendanceTeachers.length) alerts.push({color:'warning',icon:'fa-exclamation-circle',msg:'ครู '+a.noAttendanceTeachers.length+' คนไม่ได้บันทึกการสอน 3 วัน'}); if(a.riskCount>0) alerts.push({color:'danger',icon:'fa-user-times',msg:'นักเรียนกลุ่มเสี่ยง '+a.riskCount+' คน'}); }
-  if (bundle.kpi&&bundle.kpi.ok&&bundle.kpi.data.budgetUsedPct>=90) alerts.push({color:'danger',icon:'fa-wallet',msg:'งบประมาณเหลือ '+(100-bundle.kpi.data.budgetUsedPct)+'% — ใกล้หมด'});
-  if (bundle.general&&bundle.general.ok&&bundle.general.data.pendingFile>0) alerts.push({color:'secondary',icon:'fa-file-upload',msg:'หนังสือ '+bundle.general.data.pendingFile+' เลขที่ยังไม่แนบไฟล์'});
+  if (bundle.academic&&bundle.academic.ok) { const a=bundle.academic.data; if(a.noAttendanceTeachers&&a.noAttendanceTeachers.length) alerts.push({color:'warning',icon:'fa-clipboard-check',page:'Page_Teacher_Progress',msg:'มีครู '+a.noAttendanceTeachers.length+' คนที่ยังไม่มีบันทึกการสอนในข้อมูล 3 วันล่าสุด'}); if(a.riskCount>0) alerts.push({color:'danger',icon:'fa-user-clock',page:'Page_Student_Watch',msg:'มีนักเรียน '+a.riskCount+' คนที่มีบันทึกขาดหรือโดดสะสม 3 ครั้งขึ้นไป'}); }
+  if (bundle.kpi&&bundle.kpi.ok&&bundle.kpi.data.budgetUsedPct>=90) alerts.push({color:'danger',icon:'fa-wallet',page:'Page_Budget',msg:'ใช้งบประมาณแล้ว '+bundle.kpi.data.budgetUsedPct+'%'});
+  if (bundle.general&&bundle.general.ok&&bundle.general.data.pendingFile>0) alerts.push({color:'secondary',icon:'fa-file-upload',page:'Page_General',msg:'มีหนังสือ '+bundle.general.data.pendingFile+' รายการที่ยังไม่มีไฟล์แนบ'});
   var box = document.getElementById('execAlerts'); if (!box) return;
-  box.innerHTML = alerts.length ? alerts.map(function(a){return '<div class="alert alert-'+a.color+' alert-dismissible py-2 mb-2 small"><i class="fas '+a.icon+' me-2"></i>'+a.msg+'<button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button></div>';}).join('') : '';
+  box.innerHTML = alerts.length ? alerts.map(function(a){return '<button type="button" class="alert alert-'+a.color+' py-2 mb-2 small w-100 text-start exec-alert-link" onclick="loadPage(\''+a.page+'\')"><i class="fas '+a.icon+' me-2" aria-hidden="true"></i>'+_execEsc(a.msg)+'<i class="fas fa-chevron-right float-end mt-1" aria-hidden="true"></i></button>';}).join('') : '<div class="pssms-card small text-muted py-2">ยังไม่มีรายการที่ต้องติดตามจากข้อมูลปัจจุบัน</div>';
 }
-function _execRenderSections(bundle, dept) {
+function _execRenderSections(bundle) {
   var wrap = document.getElementById('execSections'); if (!wrap) return;
-  const show = { academic:dept==='ผอ.'||dept==='วิชาการ', budget:dept==='ผอ.'||dept==='งบประมาณ', personnel:dept==='ผอ.'||dept==='บุคคล', general:dept==='ผอ.'||dept==='ทั่วไป' };
-  const col = dept==='ผอ.'?'col-md-6':'col-12';
-  var html = '';
-  if (show.academic) html += _execSectionAcademic(bundle.academic, col);
-  if (show.budget) html += _execSectionBudget(bundle.budget, col);
-  if (show.personnel) html += _execSectionPersonnel(bundle.personnel, col);
-  if (show.general) html += _execSectionGeneral(bundle.general, col);
-  wrap.innerHTML = html;
+  const col = 'col-12 col-lg-6';
+  wrap.innerHTML = _execSectionAcademic(bundle.academic, col) + _execSectionBudget(bundle.budget, col) + _execSectionPersonnel(bundle.personnel, col) + _execSectionGeneral(bundle.general, col);
 }
 function _execSectionAcademic(section, col) {
   if (!section||!section.ok) return '<div class="'+col+'"><div class="pssms-card pssms-dept-academic p-3 text-muted small">ฝ่ายวิชาการ: โหลดไม่สำเร็จ</div></div>';
   const d = section.data;
   const last7 = (d.trend||[]).slice(-7);
-  const bars = last7.map(function(day){ const tot=day.present+day.absent+day.leave; const pct=tot>0?Math.round(day.present/tot*100):0; const color=pct>=90?'#198754':pct>=75?'#ffc107':tot>0?'#dc3545':'#dee2e6'; const lbl=day.date?day.date.slice(5):''; return '<div class="d-flex flex-column align-items-center" style="flex:1;"><div style="height:'+Math.max(4,pct*0.5)+'px;background:'+color+';width:70%;border-radius:3px 3px 0 0;" title="'+lbl+' '+pct+'%"></div><div class="text-muted" style="font-size:9px;margin-top:2px;">'+lbl+'</div></div>'; }).join('');
+  const bars = last7.map(function(day){ const tot=Number(day.present||0)+Number(day.absent||0)+Number(day.leave||0); const pct=tot>0?Math.round(Number(day.present||0)/tot*100):0; const color=pct>=90?'#198754':pct>=75?'#ffc107':tot>0?'#dc3545':'#dee2e6'; const lbl=day.date?String(day.date).slice(5):''; return '<div class="d-flex flex-column align-items-center" style="flex:1;"><div style="height:'+Math.max(4,Math.min(100,pct)*0.5)+'px;background:'+color+';width:70%;border-radius:3px 3px 0 0;" title="'+_execEsc(lbl+' '+pct+'%')+'"></div><div class="text-muted" style="font-size:9px;margin-top:2px;">'+_execEsc(lbl)+'</div></div>'; }).join('');
   return '<div class="'+col+'"><div class="pssms-card h-100"><div class="pssms-card-header d-flex justify-content-between"><span class="fw-bold small"><i class="fas fa-graduation-cap me-2" style="color:var(--p-accent)"></i>ฝ่ายวิชาการ</span><a href="javascript:void(0)" onclick="loadPage(\'Page_Academic_Report\')" class="small text-primary">ดูรายงาน →</a></div><div class="p-3"><div class="mb-2 small fw-bold text-muted">แนวโน้มการเข้าเรียน 7 วัน</div><div class="d-flex align-items-end gap-1 mb-3" style="height:60px;">'+bars+'</div><div class="row g-2 text-center"><div class="col-6"><div class="pssms-card p-2"><div class="fw-bold text-danger fs-5">'+(d.riskCount||0)+'</div><div class="text-muted small">กลุ่มเสี่ยง</div></div></div><div class="col-6"><div class="pssms-card p-2"><div class="fw-bold text-warning fs-5">'+((d.noAttendanceTeachers||[]).length)+'</div><div class="text-muted small">ครูไม่บันทึก</div></div></div></div></div></div></div>';
 }
 function _execSectionBudget(section, col) {
   if (!section||!section.ok) return '<div class="'+col+'"><div class="pssms-card pssms-dept-budget p-3 text-muted small">ฝ่ายงบประมาณ: โหลดไม่สำเร็จ</div></div>';
   const d = section.data; const projects=(d.projects||[]).slice(0,5); const totalPct=d.total>0?Math.round(d.used/d.total*100):0;
-  const rows = projects.length ? projects.map(function(p){ const bc=p.pct>=90?'bg-danger':p.pct>=75?'bg-warning':'bg-success'; return '<div class="mb-2"><div class="d-flex justify-content-between small mb-1"><span class="text-truncate" style="max-width:200px;" title="'+p.name+'">'+p.name+'</span><span class="fw-bold '+(p.pct>=90?'text-danger':p.pct>=75?'text-warning':'')+'">'+p.pct+'%</span></div><div class="progress" style="height:6px;"><div class="progress-bar '+bc+'" style="width:'+p.pct+'%"></div></div></div>'; }).join('') : '<div class="text-muted small text-center py-2">ไม่มีข้อมูลงบประมาณ</div>';
+  const rows = projects.length ? projects.map(function(p){ const pct=Math.max(0,Math.min(100,Number(p.pct)||0)); const bc=pct>=90?'bg-danger':pct>=75?'bg-warning':'bg-success'; const name=_execEsc(p.name||'ไม่ระบุชื่อโครงการ'); return '<div class="mb-2"><div class="d-flex justify-content-between small mb-1"><span class="text-truncate" style="max-width:200px;" title="'+name+'">'+name+'</span><span class="fw-bold '+(pct>=90?'text-danger':pct>=75?'text-warning':'')+'">'+pct+'%</span></div><div class="progress" style="height:6px;"><div class="progress-bar '+bc+'" style="width:'+pct+'%"></div></div></div>'; }).join('') : '<div class="text-muted small text-center py-2">ไม่มีข้อมูลงบประมาณ</div>';
   return '<div class="'+col+'"><div class="pssms-card h-100"><div class="pssms-card-header d-flex justify-content-between"><span class="fw-bold small"><i class="fas fa-wallet me-2" style="color:#198754"></i>ฝ่ายงบประมาณ</span><a href="javascript:void(0)" onclick="loadPage(\'Page_Budget\')" class="small text-primary">ดูทั้งหมด →</a></div><div class="p-3"><div class="d-flex justify-content-between align-items-center mb-2"><span class="small text-muted">รวมทั้งหมด</span><span class="fw-bold '+(totalPct>=90?'text-danger':'')+'">'+totalPct+'% ('+_fmtBaht(d.used)+' / '+_fmtBaht(d.total)+')</span></div><div class="progress mb-3" style="height:8px;"><div class="progress-bar '+(totalPct>=90?'bg-danger':totalPct>=75?'bg-warning':'bg-success')+'" style="width:'+totalPct+'%"></div></div><div class="small fw-bold text-muted mb-2">โครงการใช้งบสูงสุด</div>'+rows+'</div></div></div>';
 }
 function _execSectionPersonnel(section, col) {
   if (!section||!section.ok) return '<div class="'+col+'"><div class="pssms-card pssms-dept-personnel p-3 text-muted small">ฝ่ายบุคคล: โหลดไม่สำเร็จ</div></div>';
   const d = section.data; const leaveTypes=Object.entries(d.leaveByType||{}).sort(function(a,b){return b[1]-a[1];});
-  const leaveRows = d.thisMonthLeave&&d.thisMonthLeave.length ? d.thisMonthLeave.slice(0,5).map(function(l){return '<div class="d-flex justify-content-between small py-1 border-bottom"><span>'+l.name+'</span><span class="badge bg-secondary">'+l.type+'</span></div>';}).join('') : '<div class="text-muted small text-center py-2">ไม่มีการลาเดือนนี้</div>';
-  const typeBadges = leaveTypes.slice(0,4).map(function(e){return '<span class="badge bg-light text-dark border me-1">'+e[0]+': '+e[1]+'</span>';}).join('');
+  const leaveRows = d.thisMonthLeave&&d.thisMonthLeave.length ? d.thisMonthLeave.slice(0,5).map(function(l){return '<div class="d-flex justify-content-between small py-1 border-bottom"><span>'+_execEsc(l.name||'ไม่ระบุชื่อ')+'</span><span class="badge bg-secondary">'+_execEsc(l.type||'อื่น ๆ')+'</span></div>';}).join('') : '<div class="text-muted small text-center py-2">ไม่มีการลาเดือนนี้</div>';
+  const typeBadges = leaveTypes.slice(0,4).map(function(e){return '<span class="badge bg-light text-dark border me-1">'+_execEsc(e[0])+': '+Number(e[1]||0)+'</span>';}).join('');
   return '<div class="'+col+'"><div class="pssms-card h-100"><div class="pssms-card-header d-flex justify-content-between"><span class="fw-bold small"><i class="fas fa-users me-2" style="color:#0d6efd"></i>ฝ่ายบุคคล</span><a href="javascript:void(0)" onclick="loadPage(\'Page_Personnel\')" class="small text-primary">ดูทั้งหมด →</a></div><div class="p-3"><div class="d-flex gap-3 mb-3 text-center"><div class="flex-fill pssms-card p-2"><div class="fw-bold fs-5 text-primary">'+(d.staffCount||0)+'</div><div class="text-muted small">ครู/บุคลากร</div></div><div class="flex-fill pssms-card p-2"><div class="fw-bold fs-5 text-warning">'+((d.thisMonthLeave||[]).length)+'</div><div class="text-muted small">ลาเดือนนี้</div></div></div>'+(typeBadges?'<div class="mb-2">'+typeBadges+'</div>':'')+'<div class="small fw-bold text-muted mb-1">รายชื่อการลาเดือนนี้</div>'+leaveRows+'</div></div></div>';
 }
 function _execSectionGeneral(section, col) {
   if (!section||!section.ok) return '<div class="'+col+'"><div class="pssms-card pssms-dept-general p-3 text-muted small">ฝ่ายทั่วไป: โหลดไม่สำเร็จ</div></div>';
   const d = section.data;
-  const docRows = (d.recent||[]).length ? (d.recent||[]).map(function(r){return '<div class="d-flex gap-2 align-items-start small py-1 border-bottom"><span class="badge bg-primary flex-shrink-0">'+r.docType+'</span><div class="flex-grow-1 text-truncate" title="'+r.subject+'">'+r.subject+'</div><span class="text-muted flex-shrink-0">'+r.docNumber+'</span></div>';}).join('') : '<div class="text-muted small text-center py-2">ไม่มีข้อมูลสารบรรณ</div>';
+  const docRows = (d.recent||[]).length ? (d.recent||[]).map(function(r){var subject=_execEsc(r.subject||'ไม่ระบุเรื่อง');return '<div class="d-flex gap-2 align-items-start small py-1 border-bottom"><span class="badge bg-primary flex-shrink-0">'+_execEsc(r.docType||'-')+'</span><div class="flex-grow-1 text-truncate" title="'+subject+'">'+subject+'</div><span class="text-muted flex-shrink-0">'+_execEsc(r.docNumber||'-')+'</span></div>';}).join('') : '<div class="text-muted small text-center py-2">ไม่มีข้อมูลสารบรรณ</div>';
   return '<div class="'+col+'"><div class="pssms-card h-100"><div class="pssms-card-header d-flex justify-content-between"><span class="fw-bold small"><i class="fas fa-file-alt me-2" style="color:#fd7e14"></i>ฝ่ายทั่วไป — สารบรรณ</span><a href="javascript:void(0)" onclick="loadPage(\'Page_General\')" class="small text-primary">ดูทั้งหมด →</a></div><div class="p-3"><div class="d-flex gap-3 mb-3 text-center"><div class="flex-fill pssms-card p-2"><div class="fw-bold fs-5 text-primary">'+((d.recent||[]).length)+'</div><div class="text-muted small">ล่าสุด</div></div><div class="flex-fill pssms-card p-2"><div class="fw-bold fs-5 '+(d.pendingFile>0?'text-warning':'text-success')+'">'+(d.pendingFile||0)+'</div><div class="text-muted small">ยังไม่แนบไฟล์</div></div></div><div class="small fw-bold text-muted mb-1">เอกสารล่าสุด</div>'+docRows+'</div></div></div>';
 }
 function _execRenderCalendar(section) {
@@ -1619,8 +1629,9 @@ function _execRenderCalendar(section) {
   const events=(section.data||[]).filter(function(e){return e.startDate>=todayStr&&e.startDate<=cutoffStr;}).sort(function(a,b){return a.startDate.localeCompare(b.startDate);}).slice(0,10);
   if (!events.length) { body.innerHTML='<div class="text-muted small text-center py-2">ไม่มีกิจกรรม 14 วันข้างหน้า</div>'; return; }
   const months=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  body.innerHTML='<div class="d-flex flex-wrap gap-2">'+events.map(function(e){const p=e.startDate.split('-');return '<div class="pssms-card px-3 py-2 d-flex align-items-center gap-2"><div class="text-center flex-shrink-0" style="width:36px;"><div class="fw-bold" style="font-size:16px;line-height:1;color:var(--p-accent);">'+parseInt(p[2])+'</div><div class="text-muted" style="font-size:10px;">'+months[parseInt(p[1])]+'</div></div><div class="text-truncate small fw-medium" style="max-width:160px;" title="'+(e.title||'')+'">'+( e.title||'')+'</div></div>';}).join('')+'</div>';
+  body.innerHTML='<div class="d-flex flex-wrap gap-2">'+events.map(function(e){const p=String(e.startDate||'').split('-');const title=_execEsc(e.title||'ไม่ระบุชื่อกิจกรรม');return '<button type="button" class="pssms-card px-3 py-2 d-flex align-items-center gap-2 text-start border-0 exec-calendar-link" onclick="loadPage(\'Page_Calendar\')" aria-label="ดูปฏิทิน: '+title+'"><div class="text-center flex-shrink-0" style="width:36px;"><div class="fw-bold" style="font-size:16px;line-height:1;color:var(--p-accent);">'+Number(p[2]||0)+'</div><div class="text-muted" style="font-size:10px;">'+_execEsc(months[Number(p[1]||0)]||'')+'</div></div><div class="text-truncate small fw-medium" style="max-width:160px;" title="'+title+'">'+title+'</div></button>';}).join('')+'</div>';
 }
 function _fmtBaht(n) { if(!n) return '0'; if(n>=1000000) return (n/1000000).toFixed(1)+'M'; if(n>=1000) return (n/1000).toFixed(0)+'K'; return Number(n).toLocaleString(); }
+function _execEsc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>'\"]/g, function(ch) { return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]; }); }
 
 </script>
