@@ -7,6 +7,7 @@ const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 const { schoolToday, schoolDayIndex } = require('../lib/schoolDate');
 const getCalendarEvents = require('./getCalendarEvents');
+const { assertRows, prepareRows, assertNoErrors } = require('../lib/importSpec');
 
 // ============================================================
 // getTeacherRiskDashboard — grade-based risk (0, ร, มส)
@@ -632,21 +633,39 @@ async function getCurriculumData([subjectCode]) {
   }));
 }
 
+/**
+ * นำเข้าคลังตัวชี้วัด — เดินตาม `lib/importSpec.js` ชุดเดียวกับครู/นักเรียน/ตารางสอน
+ *
+ * ⚠️ เดิมคืน `{status:'success', message:'นำเข้า 0 รายการ'}` เมื่อ rows ไม่ใช่ array
+ * และรับแถวดิบจากหน้าเว็บที่ `split(',')` เอง ไม่ข้ามหัวตาราง — แถวหัวตารางจึงเข้า DB
+ * เป็นตัวชี้วัดจริง (prod มีแถว subject_type='ประเภท' ค้างอยู่ 1 แถวเป็นหลักฐาน)
+ *
+ * `clearOld` = ล้างคลังทั้งก้อนก่อนใส่ใหม่ · ต่างจากครู/นักเรียนที่ทับของเดิมอย่างเดียว
+ * ตรงที่คลังเป็นของกลางที่แอดมินคุมทั้งชุด ไม่ใช่ตัวตนของใคร — แต่ต้องบอกจำนวนที่จะลบ
+ * บนหน้ายืนยันก่อนเสมอ
+ */
 async function importCurriculumCSV([rows, clearOld]) {
-  if (!Array.isArray(rows) || rows.length === 0) return { status: 'success', message: 'นำเข้า 0 รายการ' };
+  assertRows(rows);
+  const { rows: clean, errors } = prepareRows('curriculum', rows);
+  assertNoErrors(errors);
+
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   let count = 0;
+  let deleted = 0;
   try {
     await client.query('BEGIN');
-    if (clearOld) await client.query('DELETE FROM curriculum');
-    for (const r of rows) {
+    if (clearOld) {
+      const res = await client.query('DELETE FROM curriculum');
+      deleted = res.rowCount || 0;
+    }
+    for (const r of clean) {
       await client.query(
         `INSERT INTO curriculum(subject_code,subject_type,standard_code,description,eval_type)
          VALUES($1,$2,$3,$4,$5)
          ON CONFLICT(subject_code,standard_code) DO UPDATE
            SET subject_type=$2, description=$4, eval_type=$5`,
-        [r.subjectCode||'', r.subjectType||'', r.standardCode||'', r.description||'', r.evalType||'']
+        [r.subjectCode, r.subjectType, r.standardCode, r.description, r.evalType]
       );
       count++;
     }
@@ -657,7 +676,14 @@ async function importCurriculumCSV([rows, clearOld]) {
   } finally {
     client.release();
   }
-  return { status: 'success', message: `นำเข้าสำเร็จ ${count} รายการ` };
+  const wiped = clearOld ? ` (ลบของเดิม ${deleted} รายการ)` : '';
+  return { status: 'success', message: `นำเข้าสำเร็จ ${count} รายการ${wiped}` };
+}
+
+/** จำนวนแถวในคลังตอนนี้ — หน้ายืนยันต้องถามสด ไม่ใช่นับจากตัวแปรที่หน้าโหลดไว้ */
+async function getCurriculumCount() {
+  const { rows } = await query('SELECT count(*)::int AS n FROM curriculum');
+  return { count: rows[0].n };
 }
 
 // ============================================================
@@ -668,9 +694,6 @@ async function setupCalendarDatabase() {
 }
 async function setupClubDatabase() {
   return { status: 'success', message: 'ฐานข้อมูลชุมนุมพร้อมใช้งานแล้ว' };
-}
-async function setupCurriculumDatabase() {
-  return { status: 'success', message: 'ฐานข้อมูลหลักสูตรพร้อมใช้งานแล้ว' };
 }
 // Instant-save for the ร/มส dropdown in the ปพ.5 grid (updateRemarkInstant in
 // Scripts_Score.html) — writes the same score_database row the full save uses.
@@ -1095,12 +1118,12 @@ module.exports = {
   getCurriculumData,
   getCurriculumBySubject,
   importCurriculumCSV,
+  getCurriculumCount,
   addCurriculumItem,
   updateCurriculumItem,
   deleteCurriculumItem,
   setupCalendarDatabase,
   setupClubDatabase,
-  setupCurriculumDatabase,
   saveStudentRemarkDirectly,
   getTeacherListForDropdown,
   getMyClub,

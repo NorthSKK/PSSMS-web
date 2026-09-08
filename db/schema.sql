@@ -277,6 +277,10 @@ CREATE TABLE IF NOT EXISTS curriculum (
 );
 
 CREATE INDEX IF NOT EXISTS idx_curriculum_code ON curriculum(subject_code);
+-- ⚠️ ON CONFLICT (subject_code, standard_code) ใน scores.js / missing.js พึ่งตัวนี้
+-- ขาดเมื่อไหร่ = โรงเรียนใหม่บันทึกโครงสร้างวิชาไม่ได้เลย (ดู migration 2026-09-08)
+CREATE UNIQUE INDEX IF NOT EXISTS curriculum_subject_standard_unique
+  ON curriculum (subject_code, standard_code);
 
 -- ============================================================
 -- BUDGET

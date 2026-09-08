@@ -19,12 +19,18 @@ const { TERM, YEAR } = require('./helpers/fixtures');
  * progress_board กับ substituteAuto ที่รันทีหลังจะพังเพราะไม่มีตารางสอนให้นับ
  */
 let _ttBackup = [];
+// ⚠️ `curriculum` ต้องคืนด้วย — `db/seed-dev.js` ไม่แตะตารางนี้ (ก๊อปมาจาก prod ตอนตั้งเครื่อง)
+// เทสนำเข้าแบบล้างของเดิมจึงลบทิ้งถาวร ไม่มีอะไรใส่กลับให้
+let _curBackup = [];
 before(async () => {
   const { rows } = await query(
     `SELECT subject_code,subject_name,level,room,location,teacher_id,day,period,term,year
        FROM timetable WHERE term=$1 AND year=$2 ORDER BY id`, [TERM, YEAR]
   );
   _ttBackup = rows;
+  _curBackup = (await query(
+    'SELECT subject_code,subject_type,standard_code,description,eval_type FROM curriculum ORDER BY id'
+  )).rows;
 });
 
 after(async () => {
@@ -35,6 +41,14 @@ after(async () => {
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [r.subject_code, r.subject_name, r.level, r.room, r.location,
        r.teacher_id, r.day, r.period, r.term, r.year]
+    );
+  }
+  await query('DELETE FROM curriculum');
+  for (const r of _curBackup) {
+    await query(
+      `INSERT INTO curriculum(subject_code,subject_type,standard_code,description,eval_type)
+       VALUES($1,$2,$3,$4,$5) ON CONFLICT(subject_code,standard_code) DO NOTHING`,
+      [r.subject_code, r.subject_type, r.standard_code, r.description, r.eval_type]
     );
   }
   await stop();
@@ -222,10 +236,10 @@ test('นำเข้าเป็น ADMIN_ONLY — ครูเรียกไ�
   }
 });
 
-test('getImportSpec: ครูเรียกไม่ได้ แต่ Admin ได้ spec ครบสามชนิด', async () => {
+test('getImportSpec: ครูเรียกไม่ได้ แต่ Admin ได้ spec ครบทุกชนิด', async () => {
   await denied('getImportSpec', [], 'teacher1');
   const spec = await ok('getImportSpec', [], 'admin');
-  assert.deepStrictEqual(spec.kinds.sort(), ['student', 'teacher', 'timetable']);
+  assert.deepStrictEqual(spec.kinds.sort(), ['curriculum', 'student', 'teacher', 'timetable']);
   for (const kind of spec.kinds) {
     assert.ok(spec.specs[kind].columns.length > 0, `${kind} ต้องมีคอลัมน์`);
     for (const c of spec.specs[kind].columns) {
@@ -305,4 +319,67 @@ test('ไม่มีชื่อโรงเรียนใด hardcode อย�
     { cwd: root, encoding: 'utf8' }
   ).trim();
   assert.strictEqual(out, '', `ชื่อโรงเรียนยัง hardcode อยู่:\n${out}`);
+});
+
+
+// ── 4. คลังตัวชี้วัด — เดินตาม spec ชุดเดียวกับครู/นักเรียน ─────────────────────
+
+const curRow = (over = {}) => ({
+  subjectCode: 'zz101', subjectType: 'พื้นฐาน', standardCode: 'zz 1.1 ม.1/1',
+  description: 'ทดสอบตัวชี้วัด', evalType: 'ระหว่างทาง', ...over,
+});
+const curCount = async () => (await query('SELECT count(*)::int AS n FROM curriculum')).rows[0].n;
+
+test('คลังตัวชี้วัด: ส่ง base64 มาต้องล้มดัง ๆ ไม่ใช่ "นำเข้า 0 รายการ"', async () => {
+  const err = await denied('importCurriculumCSV', [BASE64ish, false], 'admin');
+  assert.match(err, /ไม่ถูกรูปแบบ/);
+});
+
+test('คลังตัวชี้วัด: ไม่ล้างของเดิม = ทับเฉพาะคู่ที่ตรงกัน ของเดิมอยู่ครบ', async () => {
+  const before = await curCount();
+  await ok('importCurriculumCSV', [[curRow()], false], 'admin');
+  assert.strictEqual(await curCount(), before + 1, 'ควรเพิ่มมาแถวเดียว ไม่ลบใคร');
+
+  await ok('importCurriculumCSV', [[curRow({ description: 'แก้แล้ว' })], false], 'admin');
+  assert.strictEqual(await curCount(), before + 1, 'คู่รหัสวิชา+รหัสตัวชี้วัดเดิมต้องทับ ไม่เกิดแถวใหม่');
+  const { rows } = await query(
+    'SELECT description FROM curriculum WHERE subject_code=$1 AND standard_code=$2',
+    ['zz101', 'zz 1.1 ม.1/1']
+  );
+  assert.strictEqual(rows[0].description, 'แก้แล้ว');
+  await query('DELETE FROM curriculum WHERE subject_code=$1', ['zz101']);
+});
+
+test('คลังตัวชี้วัด: รหัสวิชา+รหัสตัวชี้วัดซ้ำกันในไฟล์เป็นข้อผิดพลาด ไม่ใช่ทับกันเงียบ ๆ', async () => {
+  const before = await curCount();
+  const err = await denied('importCurriculumCSV',
+    [[curRow(), curRow({ description: 'อีกอัน' })], false], 'admin');
+  assert.match(err, /ซ้ำกับแถว 2/);
+  assert.strictEqual(await curCount(), before, 'มี error แล้วห้ามเขียนอะไรลง DB เลย');
+});
+
+test('คลังตัวชี้วัด: ขาดคำอธิบาย บอกเลขแถวใน Excel', async () => {
+  const err = await denied('importCurriculumCSV',
+    [[curRow(), curRow({ standardCode: 'zz 1.2 ม.1/1', description: '' })], false], 'admin');
+  assert.match(err, /แถว 3: ไม่ได้กรอก "คำอธิบาย"/);
+});
+
+test('คลังตัวชี้วัด: ประเภท/ประเมิน นอกลิสต์ถูกบล็อกด้วย oneOf จาก spec', async () => {
+  assert.match(await denied('importCurriculumCSV', [[curRow({ subjectType: 'ทั่วไป' })], false], 'admin'),
+    /ต้องเป็นหนึ่งใน/);
+  assert.match(await denied('importCurriculumCSV', [[curRow({ evalType: 'กลางภาค' })], false], 'admin'),
+    /ต้องเป็นหนึ่งใน/);
+});
+
+test('คลังตัวชี้วัด: ล้างของเดิมแล้วบอกจำนวนที่ลบไปจริง', async () => {
+  const before = await curCount();
+  const res = await ok('importCurriculumCSV', [[curRow()], true], 'admin');
+  assert.match(res.message, new RegExp(`ลบของเดิม ${before} รายการ`));
+  assert.strictEqual(await curCount(), 1);
+});
+
+test('คลังตัวชี้วัด: นำเข้าและตัวนับเป็น ADMIN_ONLY', async () => {
+  await denied('importCurriculumCSV', [[], false], 'teacher1');
+  await denied('getCurriculumCount', [], 'teacher1');
+  assert.strictEqual((await ok('getCurriculumCount', [], 'admin')).count, await curCount());
 });

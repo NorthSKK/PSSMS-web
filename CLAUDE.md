@@ -363,7 +363,7 @@ web/
 | Table | Cols | Note |
 |---|---|---|
 | `timetable` | id, subject_code, subject_name, level, room, location, teacher_id, day, period, term, year | level/room แยก (level เช่น `ม.4`, room=`1` → combined `ม.4/1`) |
-| `curriculum` | ... | ตัวชี้วัด |
+| `curriculum` | id, subject_code, subject_type, standard_code, description, eval_type | คลังตัวชี้วัด/ผลการเรียนรู้ · **UNIQUE `(subject_code, standard_code)`** — `ON CONFLICT` ทั้ง 3 ที่พึ่งตัวนี้ |
 | `substitute_assignments` | substitute teacher slots |
 
 **HR timetable:** `setHomeroomTeacher` / `setAllHomeroomTeachers` insert **5 rows** ต่อ teacher+class (จันทร์–ศุกร์, period `'0'`) เพื่อให้ HR ขึ้น dropdown ทุกวันทำการ. ห้าม insert เฉพาะวันจันทร์ — HR จะหายไปวันอื่น.
@@ -502,6 +502,24 @@ async function fnName([arg1, arg2, arg3]) { ... }
 - ⚠️ `test/import.test.js` **ต้องคืนตารางสอนของ seed ใน `after()`** ต่างจากเทสไฟล์อื่น
   เพราะ import ล้างทั้งเทอม แล้ว `progress_board` / `substituteAuto` ที่รันทีหลัง
   บน DB เดียวกันจะพังเพราะไม่มีตารางสอนให้นับ
+- **`curriculum` เป็นชนิดที่ 4** — คลังตัวชี้วัด/ผลการเรียนรู้ (`Page_Admin_Curriculum`)
+  · คีย์เป็น **สองคอลัมน์รวมกัน** (`uniqueBy: ['subjectCode','standardCode']` ใน spec)
+  ต่างจากอีกสามชนิดที่ `unique` อยู่ที่คอลัมน์เดียว — `prepareRows()` และ
+  `_validateImportRows()` เดินตาม field นี้เหมือนกันทั้งคู่ อย่าเขียน `if (kind === ...)`
+  · สวิตช์ "ล้างข้อมูลเดิมก่อนนำเข้า" เป็นตัวเลือกของแอดมิน (ต่างจากคนที่ทับอย่างเดียว
+  และตารางสอนที่ล้างเสมอ) — จำนวนที่จะลบ **ถามจาก `getCurriculumCount` สด** ไม่ใช่นับจาก
+  `allCurriculumData` ที่มีค่าเฉพาะตอนตารางโหลดแล้ว
+  · ⚠️ ตัวนำเข้าเดิมอ่านไฟล์เอง (`readAsText` UTF-8 + `split(',')` + ไม่ข้ามหัวตาราง)
+  หลุดถึง production: prod มีแถว `subject_type='ประเภท'` ค้างอยู่ 1 แถวซึ่งคือหัวตาราง
+  ที่ถูกนำเข้าเป็นตัวชี้วัดจริง
+  · ⚠️ **`curriculum_subject_standard_unique` เคยมีเฉพาะใน DB โรงเรียนแรก** สร้างมือตอน
+  migrate จาก Sheets ไม่เคยเข้า repo · โรงเรียนใหม่ที่สร้าง DB จาก `schema.sql` จึงล้ม
+  ทุก `ON CONFLICT(subject_code, standard_code)` — `saveSubjectConfig` (auto-add),
+  `addCurriculumItem`, `importCurriculumCSV` · หนักสุดคือตัวแรกที่เขียน `subject_config`
+  สำเร็จไปแล้วค่อย throw ครูเห็น error ทั้งที่บันทึกติด
+  (`db/migrations/2026-09-08-curriculum-unique.sql`)
+- ⚠️ **เทสคลังตัวชี้วัดต้องคืนข้อมูลเดิมใน `after()`** — `db/seed-dev.js` ไม่แตะตาราง
+  `curriculum` (ก๊อปมาจาก prod ตอนตั้งเครื่อง) ล้างแล้วไม่มีอะไรใส่กลับให้
 - แผนเต็มอยู่ที่ `docs/plan-import-onboarding.md` (ทำครบทั้ง 4 รอบแล้ว)
 - **คู่มือส่งมอบมีสองชิ้น แยกผู้อ่านโดยตั้งใจ** — `docs/setup-new-school.md` (ฝั่งเรา:
   DB, R2, โดเมน, licence) กับ `docs/school-onboarding.md` (ฝั่งธุรการโรงเรียน)

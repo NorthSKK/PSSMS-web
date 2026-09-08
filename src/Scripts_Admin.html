@@ -970,6 +970,22 @@ function _validateImportRows(rows, kind) {
         }
       }
     });
+
+    // คีย์ที่เป็นหลายคอลัมน์รวมกัน (คลังตัวชี้วัด = รหัสวิชา + รหัสตัวชี้วัด)
+    // ต้องตัดสินตรงกับ prepareRows() ฝั่ง server — test/import_client.test.js จับ drift
+    if (spec.uniqueBy) {
+      var parts = spec.uniqueBy.map(function(k) { return String(r[k] || '').trim(); });
+      if (parts.every(function(x) { return x; })) {
+        var key = parts.join('|');
+        var labels = spec.uniqueBy.map(function(k) {
+          var col = spec.columns.filter(function(c) { return c.key === k; })[0];
+          return col.label;
+        });
+        if (seen['@|' + key]) {
+          errors.push({ row: at, message: labels.join(' + ') + ' "' + parts.join(' ') + '" ซ้ำกับแถว ' + seen['@|' + key] });
+        } else seen['@|' + key] = at;
+      }
+    }
   });
   return { errors: errors, warnings: warnings };
 }
@@ -1898,40 +1914,67 @@ function filterManageTable() {
   renderManageTable(filterManageKeyword(document.getElementById('searchManage')?.value));
 }
 
-function uploadCurriculumCSV() {
-  const fileInput = document.getElementById('csvCurriculumFile');
-  if (!fileInput || !fileInput.files.length) return showToast('⚠️ กรุณาเลือกไฟล์ CSV ก่อนครับ', 'warning');
-  const clearOld = document.getElementById('clearOldCurriculum').checked;
-  const file = fileInput.files[0];
-  const btn = document.getElementById('btnImportCurriculum');
-  const oldText = btn.innerHTML;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>กำลังประมวลผล...';
-  btn.disabled = true;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const text = e.target.result;
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    const rows = lines.map(line => {
-      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-      return { subjectCode: cols[0]||'', subjectType: cols[1]||'', standardCode: cols[2]||'', description: cols[3]||'', evalType: cols[4]||'' };
-    }).filter(r => r.standardCode);
-    if (!rows.length) { btn.innerHTML = oldText; btn.disabled = false; return showToast('⚠️ ไม่พบข้อมูลในไฟล์ CSV', 'warning'); }
-    google.script.run
-      .withFailureHandler(err => { btn.innerHTML = oldText; btn.disabled = false; showToast('❌ Error: ' + err.message, 'danger'); })
-      .withSuccessHandler(res => {
-        btn.innerHTML = oldText; btn.disabled = false;
-        if(res.status === 'success') { showToast(res.message, 'success'); fileInput.value = ''; loadCurriculumData(); }
-        else showToast(res.message, 'danger');
-      }).importCurriculumCSV(rows, clearOld);
-  };
-  reader.readAsText(file, 'UTF-8');
-}
+/**
+ * นำเข้าคลังตัวชี้วัด — ใช้ท่อเดียวกับนำเข้าครู/นักเรียน (`_readImportFile` → `_impOpen`)
+ *
+ * ⚠️ ของเดิมอ่านไฟล์เอง: `readAsText(file,'UTF-8')` (Excel ไทยบันทึกเป็น TIS-620
+ * → ภาษาต่างดาวทั้งไฟล์), `split(',')` ตรง ๆ (คำอธิบายตัวชี้วัดมีคอมมาได้),
+ * และไม่ข้ามหัวตาราง — แถวหัวจึงเข้า DB เป็นตัวชี้วัดจริง
+ */
+function handleCurriculumUpload(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reset = function() { input.value = ''; };
+  var clearOld = !!(document.getElementById('clearOldCurriculum') || {}).checked;
 
-function initCurriculumDB() {
-  Swal.fire({ title: 'สร้างฐานข้อมูล Curriculum?', icon: 'question', showCancelButton: true, confirmButtonText: 'สร้าง', cancelButtonText: 'ยกเลิก' }).then(r => {
-    if (!r.isConfirmed) return;
-    google.script.run.withSuccessHandler(res => { showToast(res, 'info'); }).setupCurriculumDatabase();
-  });
+  _loadImportSpec()
+    .then(function() { return _readImportFile(file, 'curriculum'); })
+    .then(function(parsed) {
+      if (parsed.missingRequired.length) {
+        reset();
+        return showAlert('❌ ไฟล์ขาดคอลัมน์ที่ต้องมี: ' + parsed.missingRequired.join(', '));
+      }
+      if (!parsed.rows.length) { reset(); return showAlert('⚠️ ไม่พบแถวข้อมูลใต้หัวตาราง'); }
+
+      // จำนวนที่จะโดนลบต้องถามจาก server สด — นับจาก allCurriculumData ไม่ได้
+      // เปิดหน้ามากดนำเข้าเลยตัวแปรนั้นยังว่าง จะขึ้น "ลบ 0 รายการ" ทั้งที่กำลังจะลบทั้งคลัง
+      var askCount = new Promise(function(resolve) {
+        if (!clearOld) return resolve(0);
+        google.script.run
+          .withSuccessHandler(function(res) { resolve((res && res.count) || 0); })
+          .withFailureHandler(function() { resolve(null); })
+          .getCurriculumCount();
+      });
+
+      var v = _validateImportRows(parsed.rows, 'curriculum');
+      askCount.then(function(existing) {
+        var note = clearOld
+          ? '<b>ล้างคลังเดิมทั้งหมด' + (existing === null ? '' : ' ' + existing + ' รายการ') +
+            '</b> แล้วใส่ ' + parsed.rows.length + ' รายการจากไฟล์นี้แทน'
+          : 'ตัวชี้วัดที่มีอยู่แล้ว (รหัสวิชา + รหัสตัวชี้วัดตรงกัน) จะถูกทับด้วยข้อมูลใหม่ · <b>ไม่มีรายการไหนถูกลบ</b>';
+
+        _impOpen({
+          kind: 'curriculum',
+          title: _importSpec.specs.curriculum.title,
+          rows: parsed.rows,
+          unknownHeaders: parsed.unknownHeaders,
+          errors: v.errors,
+          warnings: v.warnings,
+          noteHtml: note,
+          confirmText: 'นำเข้า ' + parsed.rows.length + ' รายการ',
+          onConfirm: function() {
+            // ⚠️ ห้ามเขียน innerHTML ทับปุ่มนำเข้าเป็นสปินเนอร์ — ปุ่มเป็น <label> ที่ห่อ
+            // <input type="file"> ไว้ข้างใน เขียนทับเมื่อไหร่ช่องเลือกไฟล์หายไปทั้งอัน
+            showToast('กำลังนำเข้า ' + parsed.rows.length + ' รายการ…', 'info');
+            google.script.run
+              .withSuccessHandler(function(res) { showToast(res.message, 'success'); reset(); loadCurriculumData(); })
+              .withFailureHandler(function(err) { showAlert('❌ ' + err.message); reset(); })
+              .importCurriculumCSV(parsed.rows, clearOld);
+          },
+        });
+      });
+    })
+    .catch(function(err) { reset(); showAlert('❌ ' + err.message); });
 }
 
 // ==========================================

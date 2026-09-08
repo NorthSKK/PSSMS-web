@@ -103,6 +103,12 @@ const CASES = {
     [{ username: 't1', fullName: 'ก', role: '' }, 'บทบาทว่าง'],
     [{ username: 't1', fullName: 'ก', role: 'ผู้อำนวยการ' }, 'บทบาทนอกลิสต์'],
   ],
+  curriculum: [
+    [{ subjectCode: 'ว30201', subjectType: 'เพิ่มเติม', standardCode: '1', description: 'ก', evalType: 'ระหว่างทาง' }, 'ถูกทุกอย่าง'],
+    [{ subjectCode: 'ว30201', subjectType: '', standardCode: '1', description: 'ก', evalType: '' }, 'ประเภท/ประเมินว่างได้'],
+    [{ subjectCode: 'ว30201', subjectType: 'ทั่วไป', standardCode: '1', description: 'ก', evalType: '' }, 'ประเภทนอกลิสต์'],
+    [{ subjectCode: 'ว30201', subjectType: '', standardCode: '', description: 'ก', evalType: '' }, 'ไม่มีรหัสตัวชี้วัด'],
+  ],
   timetable: [
     [{ subjectCode: 'ว1', subjectName: 'ฟ', level: 'ม.6', room: '1', teacherId: 't1', day: 'จันทร์', period: '3' }, 'ถูกทุกอย่าง'],
     [{ subjectCode: 'ว1', subjectName: 'ฟ', level: 'ม.6', room: '1', teacherId: 't1', day: 'จ.', period: '3' }, 'วันรูปย่อ'],
@@ -163,4 +169,35 @@ test('รหัสยาวเท่ากันทั้งไฟล์ไม�
   const mk = (id, at) => ({ __excelRow: at, __numeric: {}, username: id, fullName: 'ก', level: 'ม.6', room: '1' });
   const v = sandbox._validateImportRows([mk('01903', 2), mk('01904', 3)], 'student');
   assert.strictEqual(v.warnings.length, 0);
+});
+
+test('คลังตัวชี้วัด: คู่รหัสวิชา+รหัสตัวชี้วัดซ้ำ ทั้งสองฝั่งจับได้เหมือนกัน', () => {
+  const rows = [
+    { subjectCode: 'ว30201', subjectType: '', standardCode: '1', description: 'ก', evalType: '' },
+    { subjectCode: 'ว30201', subjectType: '', standardCode: '1', description: 'ข', evalType: '' },
+    // รหัสวิชาเดียวกันแต่คนละตัวชี้วัด = คนละรายการ ต้องไม่ถูกมองว่าซ้ำ
+    { subjectCode: 'ว30201', subjectType: '', standardCode: '2', description: 'ค', evalType: '' },
+  ];
+  const clientRows = rows.map((r, i) => Object.assign({ __excelRow: i + 2, __numeric: {} }, r));
+  assert.strictEqual(sandbox._validateImportRows(clientRows, 'curriculum').errors.length, 1);
+  assert.strictEqual(prepareRows('curriculum', rows).errors.length, 1);
+});
+
+test('คลังตัวชี้วัด: หัวตารางไม่กลายเป็นตัวชี้วัดจริง (prod เคยมีแถว "ประเภท" ค้าง)', () => {
+  const p = parseCsv(
+    'รหัสวิชา,ประเภท,รหัสตัวชี้วัด,คำอธิบาย,ประเมิน\nว30201,เพิ่มเติม,1,สืบค้นและอธิบาย,ระหว่างทาง',
+    'curriculum'
+  );
+  assert.strictEqual(p.rows.length, 1, 'แถวหัวตารางต้องถูกใช้เป็นหัว ไม่ใช่ข้อมูล');
+  assert.strictEqual(p.rows[0].subjectType, 'เพิ่มเติม');
+  assert.strictEqual(p.missingRequired.length, 0);
+});
+
+test('คลังตัวชี้วัด: คำอธิบายที่มี comma ต้องไม่ถูกหั่นเป็นคนละคอลัมน์', () => {
+  const p = parseCsv(
+    'รหัสวิชา,ประเภท,รหัสตัวชี้วัด,คำอธิบาย,ประเมิน\nว30201,เพิ่มเติม,1,"วัด, รายงานผล และสรุป",ปลายทาง',
+    'curriculum'
+  );
+  assert.strictEqual(p.rows[0].description, 'วัด, รายงานผล และสรุป');
+  assert.strictEqual(p.rows[0].evalType, 'ปลายทาง');
 });

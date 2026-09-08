@@ -24,34 +24,27 @@
   <div id="tab-csv" class="row g-3">
     <div class="col-md-4">
       <div class="pssms-card h-100">
-        <div class="pssms-card-header"><span><i class="fas fa-file-import me-2" style="color: var(--p-text-muted);"></i>นำเข้าหลักสูตร (CSV)</span></div>
+        <div class="pssms-card-header"><span><i class="fas fa-file-import me-2" style="color: var(--p-text-muted);"></i>นำเข้าคลังตัวชี้วัด</span></div>
 
         <div class="p-3 rounded-3 small mb-3" style="background: var(--p-subtle); border: 1px solid var(--p-border);">
-          <b style="color: var(--p-text);">รูปแบบคอลัมน์</b> (.csv UTF-8):<br>
-          A: รหัสวิชา (เช่น พ22103)<br>
-          B: ประเภท (พื้นฐาน / เพิ่มเติม)<br>
-          C: รหัสตัวชี้วัด (เช่น พ 4.1 ม.2/2)<br>
-          D: คำอธิบาย/จุดประสงค์<br>
-          E: ประเมิน (ระหว่างทาง / ปลายทาง)
+          กรอกตามหัวตารางในไฟล์แม่แบบ — ระบบตรวจให้ก่อนเขียนลงระบบทุกครั้ง
+          และแสดงตารางให้ดูก่อนกดยืนยัน<br>
+          รับไฟล์ <b>.xlsx</b> และ <b>.csv</b> (ไฟล์ CSV จาก Excel ภาษาไทยอ่านได้)
         </div>
 
-        <div class="mb-3">
-          <input type="file" id="csvCurriculumFile" class="form-control" accept=".csv">
-        </div>
+        <button class="btn btn-soft w-100 btn-sm mb-3" onclick="downloadImportTemplate('curriculum')">
+          <i class="fas fa-download me-1"></i>ดาวน์โหลดไฟล์แม่แบบ
+        </button>
 
         <div class="form-check form-switch mb-3">
           <input class="form-check-input" type="checkbox" id="clearOldCurriculum" checked>
           <label class="form-check-label small fw-medium" for="clearOldCurriculum" style="color: var(--p-danger);">ล้างข้อมูลตัวชี้วัดเดิมก่อนนำเข้า</label>
         </div>
 
-        <button class="btn btn-accent w-100 py-2 fw-medium mb-2" id="btnImportCurriculum" onclick="uploadCurriculumCSV()">
-          <i class="fas fa-cloud-upload-alt me-2"></i>อัปโหลดเข้าระบบ
-        </button>
-
-        <hr style="opacity: 0.1;">
-        <button class="btn btn-soft w-100 btn-sm" onclick="initCurriculumDB()">
-          <i class="fas fa-tools me-1"></i>สร้างฐานข้อมูลครั้งแรก (Setup DB)
-        </button>
+        <label class="btn btn-accent w-100 py-2 fw-medium mb-0">
+          <i class="fas fa-cloud-upload-alt me-2"></i>เลือกไฟล์แล้วนำเข้า
+          <input type="file" id="csvCurriculumFile" accept=".xlsx,.xls,.csv" class="d-none" onchange="handleCurriculumUpload(this)">
+        </label>
       </div>
     </div>
 
