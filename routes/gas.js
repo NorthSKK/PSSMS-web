@@ -192,7 +192,8 @@ const handlers = {
   getStudentsByClub:               (args) => students.getStudentsByClub(args),
 
   // Subjects / timetable
-  getTeacherSubjects:              require('../functions/getTeacherSubjects'),
+  // สิทธิ์รายวิชาต้องอ่านจาก JWT: ฝ่ายบริหารเห็นทั้งโรงเรียน, ครูเห็นของตนเองเท่านั้น.
+  getTeacherSubjects:              (args, user) => require('../functions/getTeacherSubjects')(args, user),
 
   // Timetable — reads
   getTeacherTimetableByDate:       (args) => require('../functions/timetable').getTeacherTimetableByDate(args),
