@@ -1,0 +1,37 @@
+{
+  "recordedAt": "2026-09-09T03:23:35.248Z",
+  "source": {
+    "environment": "Railway staging",
+    "workflowRun": "https://github.com/NorthSKK/PSSMS-web/actions/runs/34306916205",
+    "profile": "large"
+  },
+  "dbPoolMax": 20,
+  "elapsedMs": 7181,
+  "school": {
+    "teachers": 100,
+    "students": 3500
+  },
+  "scenarios": [
+    {
+      "name": "เช็คชื่อพร้อมกัน",
+      "requests": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "latencyMs": { "p50": 1206, "p95": 2006, "p99": 2087, "max": 2104 }
+    },
+    {
+      "name": "เปิดสมุดเช็คชื่อพร้อมกัน",
+      "requests": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "latencyMs": { "p50": 1225, "p95": 1724, "p99": 1741, "max": 1741 }
+    },
+    {
+      "name": "เปิดแดชบอร์ดครูพร้อมกัน",
+      "requests": 100,
+      "succeeded": 100,
+      "failed": 0,
+      "latencyMs": { "p50": 1459, "p95": 1513, "p99": 1517, "max": 1517 }
+    }
+  ]
+}

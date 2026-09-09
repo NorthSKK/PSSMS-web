@@ -56,4 +56,5 @@ jobs:
         with:
           name: staging-load-test-${{ github.run_id }}
           path: load-test-result.json
+          retention-days: 365
           if-no-files-found: warn
