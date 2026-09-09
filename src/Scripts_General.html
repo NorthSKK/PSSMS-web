@@ -1505,7 +1505,12 @@ function renderSubTeacherList() {
       ? '<span class="badge" style="background:#fef3c7;color:#92400e;">กลุ่มเดียวกัน</span>'
       : '<span class="badge bg-light text-muted">อื่นๆ</span>';
     var conflictBadge = t.hasConflict
-      ? '<span class="badge bg-danger ms-1">มีคาบชน</span>' : '';
+      ? '<span class="badge bg-danger ms-1">' + _escH(t.unavailableReason || 'มีคาบชน') + '</span>' : '';
+    var subLoad = Number(t.subLoadToday || 0);
+    var normalLoad = Number(t.normalLoadToday || 0);
+    var totalLoad = Number(t.totalLoadToday || (normalLoad + subLoad) || 0);
+    var loadTitle = ' title="คาบสอนปกติ ' + normalLoad + ' · สอนแทน ' + subLoad + '"';
+    var loadBadge = '<span class="badge" style="background:#eef2ff;color:#3730a3;"' + loadTitle + '>วันนี้ ' + totalLoad + ' คาบ</span>';
     var selectedCls = (selectedId === t.teacherId) ? 'border-accent' : '';
     var bg = (selectedId === t.teacherId) ? 'background:var(--p-accent-soft);' : '';
     var disabled = t.hasConflict ? ' opacity:.55;pointer-events:none;' : '';
@@ -1513,7 +1518,8 @@ function renderSubTeacherList() {
       '<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">' +
       '<div><strong>' + _escH(t.name) + '</strong> <span class="text-muted small">' + _escH(t.department || '-') + '</span></div>' +
       '<div class="d-flex gap-1 align-items-center">' + matchBadge + conflictBadge +
-        ' <span class="badge" style="background:var(--p-subtle);color:var(--p-text);">สอนแทนแล้ว ' + (t.subCount||0) + ' ครั้ง</span>' +
+        loadBadge +
+        ' <span class="badge" style="background:var(--p-subtle);color:var(--p-text);">สอนแทน 30 วัน ' + (t.recentSubCount || t.subCount || 0) + ' คาบ</span>' +
       '</div>' +
       '</div></div>';
   });
@@ -1659,8 +1665,16 @@ function _subAutoChip(text) {
   var bg = 'var(--p-subtle)', fg = 'var(--p-text-muted, #6b7280)';
   if (t.indexOf('สอนวิชานี้') === 0)        { bg = '#f0fdf4'; fg = '#166534'; }
   else if (t.indexOf('สอน') === 0 && t.indexOf('คาบ') > 0) { bg = '#fef3c7'; fg = '#92400e'; }
+  else if (t.indexOf('วันนี้มีภาระ') === 0) { bg = '#eef2ff'; fg = '#3730a3'; }
   else if (t.indexOf('ครูที่ปรึกษา') === 0)  { bg = 'var(--p-accent-soft)'; fg = 'var(--p-accent)'; }
   return '<span class="badge me-1" style="background:' + bg + ';color:' + fg + ';font-weight:500;font-size:.7rem;">' + _escH(t) + '</span>';
+}
+
+function _subLoadText(t) {
+  var normal = Number(t && t.normalLoadToday || 0);
+  var sub = Number(t && t.subLoadToday || 0);
+  var total = Number(t && t.totalLoadToday || (normal + sub) || 0);
+  return 'วันนี้ ' + total + ' คาบ' + (sub ? ' (ปกติ ' + normal + ' + แทน ' + sub + ')' : '');
 }
 
 // ครูที่ถูกเลือกซ้ำในวัน+คาบเดียวกัน — server ปฏิเสธแน่ ๆ กันไว้ตั้งแต่บนจอ
@@ -1687,11 +1701,14 @@ function _renderAutoPreview() {
   var html = '';
   sug.forEach(function(s, i) {
     var opts = '<option value=""' + (_subAutoPicks[i] ? '' : ' selected') + '>— ไม่จัด (คงไว้รอจัด) —</option>';
-    var pool = [{ teacherId: s.subTeacherId, name: s.subTeacherName, department: s.subTeacherDept, score: s.score }]
+    var pool = [{
+      teacherId: s.subTeacherId, name: s.subTeacherName, department: s.subTeacherDept, score: s.score,
+      normalLoadToday: s.normalLoadToday, subLoadToday: s.subLoadToday, totalLoadToday: s.totalLoadToday,
+    }]
       .concat(s.alternatives || []);
     pool.forEach(function(t) {
       opts += '<option value="' + _escH(t.teacherId) + '"' + (_subAutoPicks[i] === t.teacherId ? ' selected' : '') + '>' +
-        _escH(t.name) + ' · ' + t.score + ' คะแนน</option>';
+        _escH(t.name) + ' · ' + _subLoadText(t) + ' · ' + t.score + ' คะแนน</option>';
     });
     opts += '<option value="__more__">เลือกครูคนอื่น…</option>';
 
@@ -1723,7 +1740,10 @@ function _renderAutoPreview() {
   body.innerHTML = html || '<tr><td colspan="6" class="text-center text-muted py-4">ไม่มีคาบให้จัด</td></tr>';
 
   var sum = _subAutoPreview.summary || {};
-  var per = (sum.perTeacher || []).map(function(t){ return _escH(t.name) + ' ' + t.count + ' คาบ'; }).join(' · ');
+  var per = (sum.perTeacher || []).map(function(t){
+    var loads = (t.dayLoads || []).map(function(d){ return _subThaiDate(d.date) + ' ' + (d.totalLoadToday || 0) + ' คาบ'; }).join(', ');
+    return _escH(t.name) + ' +' + t.count + ' คาบ' + (loads ? ' (' + _escH(loads) + ')' : '');
+  }).join(' · ');
   var info = document.getElementById('subAutoSummary');
   if (info) {
     info.innerHTML =
@@ -1765,7 +1785,7 @@ function subAutoLoadMoreTeachers(idx) {
       var opts = '<option value="">— ไม่จัด (คงไว้รอจัด) —</option>';
       free.forEach(function(t) {
         opts += '<option value="' + _escH(t.teacherId) + '"' + (_subAutoPicks[idx] === t.teacherId ? ' selected' : '') + '>' +
-          _escH(t.name) + (t.department ? ' (' + _escH(t.department) + ')' : '') + '</option>';
+          _escH(t.name) + ' · ' + _subLoadText(t) + (t.department ? ' (' + _escH(t.department) + ')' : '') + '</option>';
       });
       sel.innerHTML = opts;
       if (free.every(function(t){ return t.teacherId !== _subAutoPicks[idx]; })) {

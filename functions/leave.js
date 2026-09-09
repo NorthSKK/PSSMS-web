@@ -1,6 +1,7 @@
 const { query } = require('../lib/db');
 const { isManagement } = require('../lib/permissions');
 const { isHomeroomSubject } = require('../lib/subjectGroup');
+const { MAX_SUBSTITUTE_PER_DAY } = require('./substitutePolicy');
 
 async function saveLeaveRequest([requestData], user) {
   const r = requestData || {};
@@ -163,6 +164,24 @@ async function _assertSubstituteFree(assignmentId, subTeacherId) {
     [a.date, String(a.period), subTeacherId, assignmentId]
   );
   if (dup.length) throw new Error(`ครูคนนี้ถูกจัดสอนแทนคาบ ${a.period} ของวันนี้ไปแล้ว`);
+
+  const { rows: leaveRows } = await query(
+    `SELECT 1 FROM leave_records
+      WHERE teacher_id=$1 AND status='อนุมัติ'
+        AND start_date <= $2::date AND end_date >= $2::date
+      LIMIT 1`,
+    [subTeacherId, a.date]
+  );
+  if (leaveRows.length) throw new Error('ครูคนนี้ลาวันนี้ จัดให้สอนแทนไม่ได้');
+
+  const { rows: dayLoad } = await query(
+    `SELECT COUNT(*)::int AS n FROM substitute_assignments
+      WHERE date=$1::date AND sub_teacher_id=$2 AND status<>'ยกเลิก' AND id<>$3`,
+    [a.date, subTeacherId, assignmentId]
+  );
+  if (Number(dayLoad[0]?.n || 0) >= MAX_SUBSTITUTE_PER_DAY) {
+    throw new Error(`ครูคนนี้ครบโควตาสอนแทนวันละ ${MAX_SUBSTITUTE_PER_DAY} คาบแล้ว`);
+  }
 }
 
 async function assignSubstitute([assignmentId, subTeacherId, note, /* assignedByName — ignored, JWT user.id used instead */], user) {

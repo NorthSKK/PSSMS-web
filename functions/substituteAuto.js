@@ -12,19 +12,12 @@ const { query } = require('../lib/db');
 const { normalizeKey } = require('../lib/permissions');
 const { subjectPrefixOf, subjectGroupOf, isHomeroomSubject } = require('../lib/subjectGroup');
 const { _assertSubstituteFree } = require('./leave');
-
-// ปรับที่เดียวจบ — ตัวเลขพวกนี้คือ "นโยบายการจัด" ไม่ใช่รายละเอียดการทำงาน
-const SCORE_WEIGHTS = {
-  exactSubject:   50,  // สอน subject_code นี้อยู่แล้วในเทอมปัจจุบัน
-  strongPrefix:   30,  // สอนกลุ่มสาระเดียวกัน >= STRONG_PREFIX_MIN คาบ
-  weakPrefix:     15,  // สอนกลุ่มสาระเดียวกัน 1-2 คาบ
-  homeroom:       25,  // เป็นครูที่ปรึกษาของห้องนั้น
-  sameClass:       8,  // สอนห้องนี้อยู่แล้ว (คนละวิชา)
-  workloadPer:    -6,  // ต่อ 1 คาบสอนแทนในหน้าต่าง FAIRNESS_WINDOW_DAYS
-};
+const {
+  SCORE_WEIGHTS,
+  FAIRNESS_WINDOW_DAYS,
+  MAX_SUBSTITUTE_PER_DAY: MAX_PER_DAY,
+} = require('./substitutePolicy');
 const STRONG_PREFIX_MIN = 3;
-const FAIRNESS_WINDOW_DAYS = 30;
-const MAX_PER_DAY = 2;          // โควตาสอนแทนต่อครู 1 คน ต่อ 1 วัน
 
 const PENDING = 'รอจัด';
 
@@ -73,6 +66,7 @@ async function _loadContext(slots, term, year) {
   const busy = new Map();        // teacher|day|period -> [{subjectCode, normClass}]
   const teaches = new Map();     // teacher -> Set<subject_code>
   const prefixCount = new Map(); // teacher|prefix -> n
+  const normalDayCount = new Map(); // teacher|day -> n
   const classTaught = new Map(); // teacher -> Set<normClass>
   const homeroom = new Map();    // normClass -> Set<teacher>
   for (const r of tt) {
@@ -83,6 +77,7 @@ async function _loadContext(slots, term, year) {
     addTo(teaches, r.teacher_id, r.subject_code);
     addTo(classTaught, r.teacher_id, normClass);
     if (isHomeroomSubject(r.subject_code)) addTo(homeroom, normClass, r.teacher_id);
+    if (!isHomeroomSubject(r.subject_code)) bump(normalDayCount, `${r.teacher_id}|${r.day}`);
     const p = subjectPrefixOf(r.subject_code);
     if (p) bump(prefixCount, `${r.teacher_id}|${p}`);
   }
@@ -129,7 +124,7 @@ async function _loadContext(slots, term, year) {
   }
 
   return { teachers, busy, teaches, prefixCount, classTaught, homeroom,
-           booked, leaves: leaveRows, windowCount, dayCount };
+           booked, leaves: leaveRows, windowCount, dayCount, normalDayCount };
 }
 
 // ครูติดคาบสอนของตัวเองในวัน+คาบนั้นหรือไม่ — ตรงกับ _assertSubstituteFree ใน leave.js
@@ -207,12 +202,30 @@ function _scoreOf(ctx, t, slot) {
   }
 
   const load = ctx.windowCount.get(id) || 0;
+  const normalLoadToday = ctx.normalDayCount.get(`${id}|${slot.dayOfWeek}`) || 0;
+  const subLoadToday = ctx.dayCount.get(`${id}|${slot.date}`) || 0;
+  const totalLoadToday = normalLoadToday + subLoadToday;
+  if (totalLoadToday) {
+    score += SCORE_WEIGHTS.dailyLoadPer * totalLoadToday;
+    reasons.push(`วันนี้มีภาระ ${totalLoadToday} คาบ`);
+  }
+
   if (load) {
     score += SCORE_WEIGHTS.workloadPer * load;
     reasons.push(`สอนแทนแล้ว ${load} คาบใน ${FAIRNESS_WINDOW_DAYS} วัน`);
   }
 
-  return { teacherId: id, name: t.full_name, department: t.department || '', score, reasons };
+  return {
+    teacherId: id,
+    name: t.full_name,
+    department: t.department || '',
+    score,
+    reasons,
+    normalLoadToday,
+    subLoadToday,
+    totalLoadToday,
+    recentSubCount: load,
+  };
 }
 
 async function getAutoAssignPreview([assignmentIds, term, year]) {
@@ -289,11 +302,12 @@ async function getAutoAssignPreview([assignmentIds, term, year]) {
       continue;
     }
 
-    // tie-break: คะแนนมากก่อน → ภาระน้อยก่อน → ชื่อ (deterministic เพราะเทสพึ่งลำดับนี้)
+    // tie-break: คะแนนมากก่อน → ภาระวันนี้น้อยก่อน → ภาระสอนแทนย้อนหลังน้อยก่อน → ชื่อ
     const ranked = eligible
       .map(t => _scoreOf(ctx, t, slot))
       .sort((a, b) => (b.score - a.score)
-        || ((ctx.windowCount.get(a.teacherId) || 0) - (ctx.windowCount.get(b.teacherId) || 0))
+        || (a.totalLoadToday - b.totalLoadToday)
+        || (a.recentSubCount - b.recentSubCount)
         || String(a.name).localeCompare(String(b.name), 'th'));
 
     const pick = ranked[0];
@@ -310,9 +324,17 @@ async function getAutoAssignPreview([assignmentIds, term, year]) {
       subTeacherDept: pick.department,   // คืนมาให้เห็นบนจอ เผื่อ department เพี้ยน
       score: pick.score,
       reasons: pick.reasons,
+      normalLoadToday: pick.normalLoadToday,
+      subLoadToday: pick.subLoadToday,
+      totalLoadToday: pick.totalLoadToday,
+      recentSubCount: pick.recentSubCount,
       alternatives: ranked.slice(1, 5).map(r => ({
         teacherId: r.teacherId, name: r.name, department: r.department,
         score: r.score, reasons: r.reasons,
+        normalLoadToday: r.normalLoadToday,
+        subLoadToday: r.subLoadToday,
+        totalLoadToday: r.totalLoadToday,
+        recentSubCount: r.recentSubCount,
       })),
     });
   }
@@ -335,7 +357,19 @@ async function getAutoAssignPreview([assignmentIds, term, year]) {
       assigned: suggestions.length,
       unassigned: unassigned.length,
       perTeacher: [...perTeacher.entries()]
-        .map(([teacherId, count]) => ({ teacherId, name: nameOf.get(teacherId) || '', count }))
+        .map(([teacherId, count]) => ({
+          teacherId,
+          name: nameOf.get(teacherId) || '',
+          count,
+          // รวมภาระหลัง preview นี้แล้ว เพราะ ctx.dayCount ถูก bump ตอนเลือกแต่ละคาบ
+          dayLoads: [...new Set(suggestions.filter(s => s.subTeacherId === teacherId).map(s => s.date))]
+            .map(date => {
+              const slot = suggestions.find(s => s.subTeacherId === teacherId && s.date === date);
+              const normal = slot ? (ctx.normalDayCount.get(`${teacherId}|${slot.dayOfWeek}`) || 0) : 0;
+              const sub = ctx.dayCount.get(`${teacherId}|${date}`) || 0;
+              return { date, normalLoadToday: normal, subLoadToday: sub, totalLoadToday: normal + sub };
+            }),
+        }))
         .sort((a, b) => b.count - a.count),
     },
   };

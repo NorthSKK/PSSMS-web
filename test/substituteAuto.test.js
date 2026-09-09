@@ -68,6 +68,19 @@ test('ครูที่สอนกลุ่มสาระเดียวก�
   assert.ok(sci.score > 0);
 });
 
+test('preview คืนภาระสอนของครูในวันนั้นให้หน้าจอใช้ตัดสินใจ', async () => {
+  const res = await preview(await pendingIds());
+  const slot = res.suggestions[0];
+  assert.strictEqual(typeof slot.normalLoadToday, 'number');
+  assert.strictEqual(typeof slot.subLoadToday, 'number');
+  assert.strictEqual(typeof slot.totalLoadToday, 'number');
+  assert.ok(slot.totalLoadToday >= slot.normalLoadToday);
+  for (const alt of slot.alternatives || []) {
+    assert.strictEqual(typeof alt.totalLoadToday, 'number');
+  }
+  assert.ok((res.summary.perTeacher || []).every(t => Array.isArray(t.dayLoads)));
+});
+
 test('ครูที่ปรึกษาห้องนั้นได้แต้มพิเศษ', async () => {
   const res = await preview(await pendingIds());
   const health = res.suggestions.find(s => s.subjectCode === 'พ22101');
@@ -93,6 +106,22 @@ test('ครูที่ลาเองวันนั้นไม่ถูก�
   const sameDay = res.suggestions.filter(s => s.date === rows[0].s);
   assert.ok(sameDay.length > 0, 'ต้องมีคาบในวันที่ teacher4 ลา');
   for (const s of sameDay) assert.ok(!consideredIn(s).includes('teacher4'));
+});
+
+test('รายชื่อจัดเองแสดงภาระวันนี้ และตัดครูที่ลาเองวันนั้นออก', async () => {
+  const { rows } = await query(
+    `SELECT start_date::text AS s FROM leave_records WHERE teacher_id='teacher4' AND status='อนุมัติ'`
+  );
+  const list = await ok('getAvailableSubstitutes', [rows[0].s, '4', 'ว30205', 'teacher1', TERM, YEAR], 'admin');
+  const teacher4 = list.find(t => t.teacherId === 'teacher4');
+  const teacher3 = list.find(t => t.teacherId === 'teacher3');
+  assert.ok(teacher4.hasConflict);
+  assert.match(teacher4.unavailableReason, /ลา/);
+  assert.ok(teacher3.hasConflict);
+  assert.match(teacher3.unavailableReason, /คาบสอน/);
+  assert.strictEqual(typeof teacher4.totalLoadToday, 'number');
+  assert.strictEqual(typeof teacher4.normalLoadToday, 'number');
+  assert.strictEqual(typeof teacher4.subLoadToday, 'number');
 });
 
 test('ไม่จัดครูคนเดียวกันซ้อน 2 คาบที่วัน+คาบเดียวกัน', async () => {

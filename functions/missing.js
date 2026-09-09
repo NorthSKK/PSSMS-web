@@ -8,6 +8,8 @@ const cache = require('../lib/cache');
 const { schoolToday, schoolDayIndex } = require('../lib/schoolDate');
 const getCalendarEvents = require('./getCalendarEvents');
 const { assertRows, prepareRows, assertNoErrors } = require('../lib/importSpec');
+const { subjectPrefixOf, subjectGroupOf } = require('../lib/subjectGroup');
+const { MAX_SUBSTITUTE_PER_DAY } = require('./substitutePolicy');
 
 // ============================================================
 // getTeacherRiskDashboard — grade-based risk (0, ร, มส)
@@ -1073,67 +1075,141 @@ async function deleteCurriculumItem([id]) {
 async function getAvailableSubstitutes([date, period, originalSubjectCode, originalTeacherId, term, year]) {
   const DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
   const dayName = DAYS[new Date(date).getDay()];
-
-  // Get original teacher's department for group matching
-  const { rows: origRows } = await query(
-    `SELECT department FROM users WHERE username=$1 LIMIT 1`, [originalTeacherId]
-  );
-  const origDept = origRows[0]?.department || '';
+  const t = String(term || '').trim();
+  const y = String(year || '').trim();
+  let activeTerm = t;
+  let activeYear = y;
+  if (!activeTerm || !activeYear) {
+    const { rows: setting } = await query(
+      `SELECT value1, value2 FROM system_settings WHERE key='Active' AND subkey='Term' LIMIT 1`
+    );
+    activeTerm = activeTerm || (setting[0]?.value1 || '1');
+    activeYear = activeYear || (setting[0]?.value2 || '');
+  }
 
   // Find teachers who have a timetable conflict at that slot
   const { rows: conflictRows } = await query(
     `SELECT DISTINCT teacher_id FROM timetable
      WHERE day=$1 AND period=$2 AND term=$3 AND year=$4`,
-    [dayName, String(period), String(term), String(year)]
+    [dayName, String(period), activeTerm, activeYear]
   );
   const conflictSet = new Set(conflictRows.map(r => r.teacher_id));
+  const conflictReason = new Map(conflictRows.map(r => [r.teacher_id, 'มีคาบสอนของตัวเอง']));
 
-  // Also conflict if already assigned as substitute that date+period
+  // Also conflict if already assigned as substitute that date+period, or is the absent original teacher.
   try {
     const { rows: subRows } = await query(
-      `SELECT DISTINCT sub_teacher_id FROM substitute_assignments
+      `SELECT DISTINCT sub_teacher_id, original_teacher_id FROM substitute_assignments
        WHERE date=$1 AND period=$2 AND status != 'ยกเลิก'`,
       [date, String(period)]
     );
-    subRows.forEach(r => conflictSet.add(r.sub_teacher_id));
+    subRows.forEach(r => {
+      if (r.sub_teacher_id) {
+        conflictSet.add(r.sub_teacher_id);
+        if (!conflictReason.has(r.sub_teacher_id)) conflictReason.set(r.sub_teacher_id, 'ถูกจัดคาบนี้แล้ว');
+      }
+      if (r.original_teacher_id) {
+        conflictSet.add(r.original_teacher_id);
+        if (!conflictReason.has(r.original_teacher_id)) conflictReason.set(r.original_teacher_id, 'เป็นครูที่ไม่อยู่คาบนี้');
+      }
+    });
   } catch (_) {}
 
-  // Get all teachers + their lifetime substitute count
+  const { rows: leaveRows } = await query(
+    `SELECT teacher_id FROM leave_records
+      WHERE status='อนุมัติ' AND start_date <= $1::date AND end_date >= $1::date`,
+    [date]
+  );
+  leaveRows.forEach(r => {
+    conflictSet.add(r.teacher_id);
+    if (!conflictReason.has(r.teacher_id)) conflictReason.set(r.teacher_id, 'ลาวันนี้');
+  });
+
+  const { rows: normalRows } = await query(
+    `SELECT teacher_id, COUNT(*)::int AS n
+       FROM timetable
+      WHERE day=$1 AND term=$2 AND year=$3
+        AND NOT (UPPER(COALESCE(subject_code,'')) IN ('HR','HOMEROOM') OR COALESCE(subject_code,'') LIKE 'CLUB%')
+      GROUP BY teacher_id`,
+    [dayName, activeTerm, activeYear]
+  );
+  const normalLoad = new Map(normalRows.map(r => [r.teacher_id, Number(r.n || 0)]));
+
+  const { rows: daySubRows } = await query(
+    `SELECT sub_teacher_id, COUNT(*)::int AS n
+       FROM substitute_assignments
+      WHERE date=$1::date AND sub_teacher_id IS NOT NULL AND status <> 'ยกเลิก'
+      GROUP BY sub_teacher_id`,
+    [date]
+  );
+  const subLoad = new Map(daySubRows.map(r => [r.sub_teacher_id, Number(r.n || 0)]));
+  for (const [teacherId, n] of subLoad.entries()) {
+    if (n >= MAX_SUBSTITUTE_PER_DAY) {
+      conflictSet.add(teacherId);
+      if (!conflictReason.has(teacherId)) conflictReason.set(teacherId, `ครบโควตาวันละ ${MAX_SUBSTITUTE_PER_DAY} คาบ`);
+    }
+  }
+
+  // Get all active teachers + rolling substitute count
   const { rows: teachers } = await query(
     `SELECT u.username, u.full_name, u.department,
-            COUNT(sa.id) AS sub_count
+            COUNT(sa.id) FILTER (
+              WHERE sa.date >= $2::date - INTERVAL '30 days'
+                AND sa.date <= $2::date
+                AND sa.status <> 'ยกเลิก'
+            ) AS sub_count
      FROM users u
      LEFT JOIN substitute_assignments sa ON sa.sub_teacher_id=u.username
-     WHERE UPPER(u.role) = 'TEACHER' AND u.username != $1
+     WHERE UPPER(u.role) = 'TEACHER'
+       AND (u.status IS NULL OR u.status='ปกติ')
+       AND u.username != $1
      GROUP BY u.username, u.full_name, u.department
      ORDER BY u.full_name`,
-    [originalTeacherId]
+    [originalTeacherId, date]
   );
 
   // Find teachers who taught same subject (for 'exact' badge)
   const { rows: exactRows } = await query(
     `SELECT DISTINCT teacher_id FROM timetable
      WHERE subject_code=$1 AND term=$2 AND year=$3`,
-    [originalSubjectCode, String(term), String(year)]
+    [originalSubjectCode, activeTerm, activeYear]
   );
   const exactSet = new Set(exactRows.map(r => r.teacher_id));
+  const originalPrefix = subjectPrefixOf(originalSubjectCode);
+  const { rows: prefixRows } = originalPrefix ? await query(
+    `SELECT teacher_id, COUNT(*)::int AS n
+       FROM timetable
+      WHERE term=$1 AND year=$2
+        AND LEFT(COALESCE(subject_code,''), 1)=$3
+        AND NOT (UPPER(COALESCE(subject_code,'')) IN ('HR','HOMEROOM') OR COALESCE(subject_code,'') LIKE 'CLUB%')
+      GROUP BY teacher_id`,
+    [activeTerm, activeYear, originalPrefix]
+  ) : { rows: [] };
+  const prefixCount = new Map(prefixRows.map(r => [r.teacher_id, Number(r.n || 0)]));
 
   const RANK = { exact: 0, group: 1, none: 2 };
   const result = teachers.map(t => ({
-    teacherId:    t.username,
-    name:         t.full_name,
-    department:   t.department,
-    subjectMatch: exactSet.has(t.username) ? 'exact'
-                : (origDept && t.department === origDept ? 'group' : 'none'),
-    hasConflict:  conflictSet.has(t.username),
-    subCount:     Number(t.sub_count || 0),
+    teacherId:          t.username,
+    name:               t.full_name,
+    department:         t.department,
+    subjectMatch:       exactSet.has(t.username) ? 'exact'
+                      : (prefixCount.get(t.username) ? 'group' : 'none'),
+    subjectGroup:       originalPrefix ? (subjectGroupOf(originalSubjectCode) || '') : '',
+    hasConflict:        conflictSet.has(t.username),
+    unavailableReason:  conflictReason.get(t.username) || '',
+    subCount:           Number(t.sub_count || 0),
+    recentSubCount:     Number(t.sub_count || 0),
+    normalLoadToday:    normalLoad.get(t.username) || 0,
+    subLoadToday:       subLoad.get(t.username) || 0,
+    totalLoadToday:     (normalLoad.get(t.username) || 0) + (subLoad.get(t.username) || 0),
   }));
 
-  // Sort: no conflict first → exact > group > none → subCount ASC
+  // Sort: no conflict first → exact > group > none → today's load ASC → rolling substitute count ASC
   result.sort((a, b) => {
     if (a.hasConflict !== b.hasConflict) return a.hasConflict ? 1 : -1;
     const rd = RANK[a.subjectMatch] - RANK[b.subjectMatch];
     if (rd !== 0) return rd;
+    if (a.totalLoadToday !== b.totalLoadToday) return a.totalLoadToday - b.totalLoadToday;
     return a.subCount - b.subCount;
   });
   return result;
