@@ -33,7 +33,8 @@
 
    หาก marker นี้ไม่อยู่ สคริปต์จะหยุดก่อนเขียนข้อมูล. ห้ามตั้ง marker นี้ใน DB โรงเรียนจริง
 4. ใน GitHub สร้าง Environment ชื่อ `load-test-staging`, ตั้ง required reviewers อย่างน้อย
-   1 คน, แล้วเพิ่ม secrets ต่อไปนี้ใน Environment (ไม่ใช่ repository secrets):
+   1 คน, แล้วเพิ่ม secrets ต่อไปนี้ใน Environment (ไม่ใช่ repository secrets). Environment
+   นี้ตั้งค่าเรียบร้อยแล้วใน repository หลัก:
 
    | Secret | ค่า |
    | --- | --- |
