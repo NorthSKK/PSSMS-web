@@ -1,0 +1,59 @@
+name: Staging load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'ขนาดโรงเรียนจำลอง'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - small
+          - medium
+          - large
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    name: Load test (${{ inputs.profile }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Create this protected GitHub Environment before the first run. Its secrets
+    # are intentionally unavailable to ordinary CI jobs and pull requests.
+    environment: load-test-staging
+    env:
+      PSSMS_LOAD_TEST_CONFIRM: STAGING_ONLY
+      PSSMS_LOAD_TEST_DATABASE_SSL: "false"
+      PSSMS_LOAD_TEST_URL: ${{ secrets.PSSMS_LOAD_TEST_URL }}
+      PSSMS_LOAD_TEST_DATABASE_URL: ${{ secrets.PSSMS_LOAD_TEST_DATABASE_URL }}
+      PSSMS_LOAD_TEST_JWT_SECRET: ${{ secrets.PSSMS_LOAD_TEST_JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run the approved staging scenario
+        shell: bash
+        run: |
+          args=(--remote --output=load-test-result.json)
+          if [ "${{ inputs.profile }}" != "all" ]; then
+            args+=(--profile="${{ inputs.profile }}")
+          fi
+          node scripts/load-test.js "${args[@]}"
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-load-test-${{ github.run_id }}
+          path: load-test-result.json
+          if-no-files-found: warn
