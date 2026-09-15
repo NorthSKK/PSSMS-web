@@ -39,6 +39,10 @@ const professionalDevelopment = require('../functions/professionalDevelopment');
 const license = require('../lib/license');
 const storage = require('../lib/storage');
 const types = require('../lib/storage/types');
+const {
+  professionalDevelopmentEnabled,
+  PROFESSIONAL_DEVELOPMENT_DISABLED_MESSAGE,
+} = require('../lib/featureFlags');
 
 /**
  * โควตาต่อคนต่อชั่วโมง — **นับเป็นไบต์ ไม่ใช่จำนวนครั้ง**
@@ -112,6 +116,15 @@ function guardTeacher(req, res, next) {
 function guardTeacherOnly(req, res, next) {
   if (String(req.user?.role || '').trim().toUpperCase() !== 'TEACHER') {
     return res.status(403).json({ __error: 'เฉพาะครูเท่านั้น' });
+  }
+  next();
+}
+
+function guardProfessionalDevelopmentEnabled(req, res, next) {
+  if (!professionalDevelopmentEnabled()) {
+    // 404 avoids advertising a disabled per-school capability while preserving
+    // a useful JSON message for the SPA.
+    return res.status(404).json({ __error: PROFESSIONAL_DEVELOPMENT_DISABLED_MESSAGE });
   }
   next();
 }
@@ -251,7 +264,7 @@ router.post('/project/:id', requireAuth, guardTeacher,
 
 // Personal professional-development attachments.  The domain function checks
 // ownership again; this route only accepts the binary safely.
-router.post('/professional-development/:id(\\d+)', requireAuth, guardTeacherOnly, guardLicenceWritable,
+router.post('/professional-development/:id(\\d+)', requireAuth, guardProfessionalDevelopmentEnabled, guardTeacherOnly, guardLicenceWritable,
   receive({ maxMB: professionalDevelopment.MAX_ATTACH_MB, allowed: professionalDevelopment.ATTACH_EXTS }),
   async (req, res) => {
     try { res.json({ __result: await professionalDevelopment.attachProfessionalDevelopmentFile(req.params.id, req.file, req.user) }); }
@@ -260,7 +273,7 @@ router.post('/professional-development/:id(\\d+)', requireAuth, guardTeacherOnly
 
 // The PDF never enters attachment storage for scanning: it is held only in the
 // multipart request, forwarded to an explicitly configured AI boundary, then dropped.
-router.post('/professional-development/scan', requireAuth, guardTeacherOnly, guardLicenceWritable,
+router.post('/professional-development/scan', requireAuth, guardProfessionalDevelopmentEnabled, guardTeacherOnly, guardLicenceWritable,
   receive({ maxMB: 10, allowed: ['pdf'], requiresStorage: false }),
   async (req, res) => {
     try { res.json({ __result: await professionalDevelopment.scanProfessionalDevelopmentPdf(req.file, req.user) }); }
@@ -303,6 +316,9 @@ const SOURCES = {
 // ตัวอ่าน PDF ใช้ route นี้เพื่อให้ pdf.js อ่านผ่าน origin เดียวกับเว็บ — แก้ CORS ของ
 // presigned S3/R2 โดยไม่ต้องเปิด bucket เป็นสาธารณะ. ตั๋วออกหลังตรวจสิทธิ์ใน GAS แล้ว.
 router.get('/proxy/:kind/:id', async (req, res) => {
+  if (req.params.kind === 'professional-development' && !professionalDevelopmentEnabled()) {
+    return res.status(404).send(PROFESSIONAL_DEVELOPMENT_DISABLED_MESSAGE);
+  }
   const sql = SOURCES[req.params.kind];
   const id = parseInt(req.params.id, 10);
   if (!sql || !Number.isInteger(id)) return res.status(400).send('คำขอไม่ถูกต้อง');

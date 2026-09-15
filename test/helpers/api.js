@@ -9,6 +9,10 @@
 process.env.NODE_ENV = 'test';
 require('dotenv').config();
 
+// ฟีเจอร์นี้ opt-in ต่อ deployment; ชุด integration test หลักต้องเปิดอย่างชัดเจน
+// เพื่อครอบ flow เดิม ขณะที่ professional_development_flag.test.js ทดสอบค่าปิดแยก.
+process.env.PROFESSIONAL_DEVELOPMENT_ENABLED = 'true';
+
 // อัปโหลด PDF เปิดเฉพาะเมื่อตั้งที่เก็บไว้ (lib/storage/disk.js) — เทสต์ต้องเปิดไว้เสมอ
 // จะได้ครอบทั้ง flow แม้ production จะพักฟีเจอร์นี้ไว้
 if (!process.env.MEDIA_STORAGE_DIR) {

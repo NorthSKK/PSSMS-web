@@ -7,6 +7,23 @@ const vm = require('node:vm');
 
 const src = (name) => fs.readFileSync(path.join(__dirname, '../src', name), 'utf8');
 
+test('เมนูพัฒนาวิชาชีพใช้ feature flag สด และหน้าล่าสุดต้องถอยกลับเมื่อโรงเรียนปิด', () => {
+  const core = src('Scripts_Core.html');
+
+  assert.match(core, /function _loadAppSystemConfig\(/,
+    'ต้องอ่าน config จาก server ก่อน render เมนู ไม่ใช้ค่าค้างจาก localStorage');
+  assert.match(core, /_loadAppSystemConfig\([\s\S]{0,900}getSystemConfig\(\)/);
+  assert.match(core, /professionalDevelopmentEnabled && !isManagement/,
+    'เมนูครูต้องขึ้นเฉพาะโรงเรียนที่เปิด feature');
+  assert.match(core, /function _resolveInitialAppPage\(/);
+  assert.match(core, /lastPage === 'Page_Professional_Development'[\s\S]{0,180}!professionalDevelopmentEnabled/,
+    'หน้าล่าสุดของ feature ที่ปิดต้องไม่ถูกเปิดจาก cache');
+  assert.match(core, /function _guardFeaturePage\(/,
+    'การเรียก loadPage ตรงต้องมี client guard และถอยกลับหน้า dashboard');
+  assert.match(core, /_setupIdlePrefetch\(role, professionalDevelopmentEnabled\)/,
+    'โรงเรียนที่ปิดต้องไม่ prefetch หน้าที่เรียกไม่ได้');
+});
+
 test('หน้าพัฒนาวิชาชีพมีสถานะโหลด ผิดพลาด ลองใหม่ และจำนวนผลลัพธ์', () => {
   const page = src('Page_Professional_Development.html');
   const script = src('Scripts_Professional_Development.html');

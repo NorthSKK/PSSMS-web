@@ -807,7 +807,55 @@ window.openProblemReportModal = function() {
 // ==========================================
 // 3. Routing & Menu
 // ==========================================
+var _appConfigRequestSequence = 0;
+window.__PSSMS_FEATURES = { professionalDevelopment: false };
+
+function _professionalDevelopmentEnabled(config) {
+  return !!(config && config.features && config.features.professionalDevelopment === true);
+}
+
+function _defaultStartPage(user) {
+  var role = String((user && user.role) || '').toUpperCase();
+  if (role === 'ADMIN') return 'Page_Dashboard_Admin';
+  if (role === 'EXECUTIVE') return 'Page_Dashboard_Executive';
+  if (role === 'STUDENT') return 'Page_Dashboard_Student';
+  return 'Page_Dashboard_Teacher';
+}
+
+function _resolveInitialAppPage(user, startPage, lastPage, lastPageUser, professionalDevelopmentEnabled) {
+  var meId = String((user && user.id) || '');
+  var sameUser = lastPage && lastPageUser && lastPageUser === meId;
+  if (!sameUser) return startPage;
+  if (lastPage === 'Page_Professional_Development' && !professionalDevelopmentEnabled) return startPage;
+  return lastPage;
+}
+
+function _loadAppSystemConfig(user) {
+  var requestSequence = ++_appConfigRequestSequence;
+  // ค่า feature ห้ามค้างข้าม login/deployment: ปิดไว้ก่อนจน server ยืนยันรอบนี้
+  window.__PSSMS_FEATURES = { professionalDevelopment: false };
+  document.getElementById('login-section').classList.add('d-none');
+  document.getElementById('main-app').classList.add('d-none');
+  showLoader(true);
+  google.script.run.withSuccessHandler(function(config) {
+    if (requestSequence !== _appConfigRequestSequence) return;
+    showLoader(false);
+    _renderAppWithConfig(user, config || {});
+  }).withFailureHandler(function() {
+    if (requestSequence !== _appConfigRequestSequence) return;
+    showLoader(false);
+    // โหลด config ไม่ได้ให้เปิดระบบส่วนอื่นตามปกติ แต่ไม่เปิด feature เฉพาะโรงเรียน
+    _renderAppWithConfig(user, { features: { professionalDevelopment: false } });
+  }).getSystemConfig();
+}
+
 function renderApp(user) {
+  _loadAppSystemConfig(user);
+}
+
+function _renderAppWithConfig(user, systemConfig) {
+  var professionalDevelopmentEnabled = _professionalDevelopmentEnabled(systemConfig);
+  window.__PSSMS_FEATURES = { professionalDevelopment: professionalDevelopmentEnabled };
   window.currentUser = user;
   document.getElementById('login-section').classList.add('d-none');
   document.getElementById('main-app').classList.remove('d-none');
@@ -912,7 +960,7 @@ function renderApp(user) {
       <li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #6f42c1;" onclick="loadPage('Page_Savings')"><i class="fas fa-piggy-bank me-2" style="font-size: 0.7rem;"></i>ระบบออมเงิน</a></li>
       <li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #e83e8c;" onclick="loadPage('Page_Calendar')"><i class="fas fa-calendar-alt me-2" style="font-size: 0.7rem;"></i>ปฏิทินปฏิบัติงาน</a></li>
     `;
-    if (!isManagement) {
+    if (professionalDevelopmentEnabled && !isManagement) {
       menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: var(--p-accent);" onclick="loadPage('Page_Professional_Development')"><i class="fas fa-award me-2" style="font-size: 0.7rem;"></i>พัฒนาวิชาชีพ</a></li>`;
     }
   }
@@ -924,17 +972,16 @@ function renderApp(user) {
   // แล้วเจอ error สิทธิ์เต็มหน้าจอ ทั้งที่เมนูตัวเองไม่มีหน้านั้นด้วยซ้ำ
   const lastPage = localStorage.getItem('pssms_last_page');
   const lastPageUser = localStorage.getItem('pssms_last_page_user');
-  const meId = String((user && user.id) || '');
-  if (lastPage && lastPageUser && lastPageUser === meId) loadPage(lastPage);
-  else {
+  const initialPage = _resolveInitialAppPage(user, startPage, lastPage, lastPageUser, professionalDevelopmentEnabled);
+  if (initialPage !== lastPage) {
     localStorage.removeItem('pssms_last_page');
     localStorage.removeItem('pssms_last_page_user');
-    loadPage(startPage);
   }
+  loadPage(initialPage);
   setTimeout(preloadTeacherDataBackground, 2000);
   setTimeout(_syncSchoolBrandingFromServer, 1000);
   _setupMenuPrefetch();
-  _setupIdlePrefetch(role);
+  _setupIdlePrefetch(role, professionalDevelopmentEnabled);
 }
 
 function _syncSchoolBrandingFromServer() {
@@ -972,7 +1019,7 @@ function _setupMenuPrefetch() {
   });
 }
 
-function _setupIdlePrefetch(role) {
+function _setupIdlePrefetch(role, professionalDevelopmentEnabled) {
   var rolePages = {
     ADMIN:     ['Page_Admin_Users','Page_Student_Watch','Page_Academic','Page_Score_Entry','Page_Calendar','Page_Budget'],
     TEACHER:   ['Page_Academic','Page_Score_Entry','Page_Calendar','Page_Teacher_Timetable','Page_Lesson_History','Page_Professional_Development'],
@@ -980,6 +1027,9 @@ function _setupIdlePrefetch(role) {
     EXECUTIVE: ['Page_Admin_Settings','Page_Score_Entry','Page_Academic_Report','Page_Admin_Timetable','Page_Admin_Curriculum','Page_Admin_Clubs','Page_Teaching_Media','Page_Student_Watch','Page_Teacher_Progress','Page_Budget','Page_Personnel','Page_Admin_Users','Page_Leave_Request','Page_Leave_Admin','Page_Substitute_Admin','Page_General','Page_Project_Documents','Page_Savings','Page_Calendar']
   };
   var pages = rolePages[(role || '').toUpperCase()] || [];
+  if (!professionalDevelopmentEnabled) {
+    pages = pages.filter(function(pageName) { return pageName !== 'Page_Professional_Development'; });
+  }
   if (!pages.length) return;
   var _idle = (typeof requestIdleCallback !== 'undefined')
     ? function(cb) { requestIdleCallback(cb, {timeout: 2000}); }
@@ -1095,7 +1145,16 @@ function _setBodyDept(pageName) {
   if (dept) document.body.classList.add('dept-' + dept);
 }
 
+function _guardFeaturePage(pageName) {
+  if (pageName !== 'Page_Professional_Development') return pageName;
+  if (window.__PSSMS_FEATURES && window.__PSSMS_FEATURES.professionalDevelopment === true) return pageName;
+  localStorage.removeItem('pssms_last_page');
+  localStorage.removeItem('pssms_last_page_user');
+  return _defaultStartPage(window.currentUser || getSessionUser());
+}
+
 function loadPage(pageName) {
+  pageName = _guardFeaturePage(pageName);
   // 🌟 1. ล้างตัวแปร Global (State Reset) ป้องกันข้อมูลข้ามวิชา/ข้ามหน้า
   // -- ระบบเช็คชื่อ --
   currentStudents = [];

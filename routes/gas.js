@@ -4,6 +4,10 @@ const jwt = require('jsonwebtoken');
 const { adminOnly, managementOnly, teacherOrManagement, adminOrExecutive, staffOnly, isManagement, verifyTeacherOwnsSubject } = require('../lib/permissions');
 const cache = require('../lib/cache');
 const license = require('../lib/license');
+const {
+  professionalDevelopmentEnabled,
+  PROFESSIONAL_DEVELOPMENT_DISABLED_MESSAGE,
+} = require('../lib/featureFlags');
 
 // Functions that invalidate timetable-related caches on success
 const TIMETABLE_WRITE_FNS = new Set([
@@ -427,6 +431,14 @@ router.post('/:fnName', async (req, res) => {
     } catch {
       return res.json({ __error: 'Token invalid or expired' });
     }
+  }
+
+  // ฟีเจอร์นี้เปิดเป็นราย deployment เท่านั้น. ซ่อนเมนูฝั่งหน้าเว็บอย่างเดียวไม่พอ
+  // เพราะผู้ใช้ยังเรียก GAS หรือโหลด partial page ตรงจาก console ได้.
+  const requestsProfessionalDevelopment = TEACHER_ONLY.has(fnName) ||
+    (fnName === 'getPage' && args[0] === 'Page_Professional_Development');
+  if (requestsProfessionalDevelopment && !professionalDevelopmentEnabled()) {
+    return res.json({ __error: PROFESSIONAL_DEVELOPMENT_DISABLED_MESSAGE });
   }
 
   // Role-based authorization

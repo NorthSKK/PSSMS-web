@@ -1,6 +1,7 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 const { appInfo } = require('../lib/appInfo');
+const { professionalDevelopmentEnabled } = require('../lib/featureFlags');
 
 module.exports = async function getSystemConfig() {
   const cached = cache.get('system_config');
@@ -34,6 +35,11 @@ module.exports = async function getSystemConfig() {
 
   // ค่าเล็ก ๆ สำหรับให้ศูนย์กลางตรวจรุ่นที่ deployment นี้ใช้อยู่ โดยไม่เปิดข้อมูลโรงเรียน.
   config.appInfo = appInfo();
+  // Feature flags เปิดเผยได้: มีไว้ให้ SPA ซ่อน navigation ก่อนผู้ใช้กด และ backend
+  // ยังตรวจซ้ำทุก endpoint อยู่เสมอ จึงไม่ใช้ค่านี้เป็น authorization boundary.
+  config.features = {
+    professionalDevelopment: professionalDevelopmentEnabled(),
+  };
 
   cache.set('system_config', config, 300);
   return config;
