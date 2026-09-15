@@ -35,6 +35,8 @@ const mediaCards = require('../functions/mediaCards');
 const sarabun = require('../functions/sarabun');
 const projects = require('../functions/projectDocuments');
 const problemReports = require('../functions/problemReports');
+const professionalDevelopment = require('../functions/professionalDevelopment');
+const license = require('../lib/license');
 const storage = require('../lib/storage');
 const types = require('../lib/storage/types');
 
@@ -105,6 +107,22 @@ function guardTeacher(req, res, next) {
   } catch (e) {
     res.status(403).json({ __error: e.message });
   }
+}
+
+function guardTeacherOnly(req, res, next) {
+  if (String(req.user?.role || '').trim().toUpperCase() !== 'TEACHER') {
+    return res.status(403).json({ __error: 'เฉพาะครูเท่านั้น' });
+  }
+  next();
+}
+
+async function guardLicenceWritable(req, res, next) {
+  if (!await license.isLocked()) return next();
+  const { until } = await license.read();
+  return res.status(423).json({
+    __error: `หมดอายุการใช้งานเมื่อ ${until} ระบบอยู่ในโหมดอ่านอย่างเดียว บันทึกข้อมูลใหม่ไม่ได้`,
+    __licenseLocked: true,
+  });
 }
 
 /**
@@ -231,6 +249,24 @@ router.post('/project/:id', requireAuth, guardTeacher,
     }
   });
 
+// Personal professional-development attachments.  The domain function checks
+// ownership again; this route only accepts the binary safely.
+router.post('/professional-development/:id(\\d+)', requireAuth, guardTeacherOnly, guardLicenceWritable,
+  receive({ maxMB: professionalDevelopment.MAX_ATTACH_MB, allowed: professionalDevelopment.ATTACH_EXTS }),
+  async (req, res) => {
+    try { res.json({ __result: await professionalDevelopment.attachProfessionalDevelopmentFile(req.params.id, req.file, req.user) }); }
+    catch (e) { console.error('[media:professional-development]', e.message); res.status(400).json({ __error: e.message }); }
+  });
+
+// The PDF never enters attachment storage for scanning: it is held only in the
+// multipart request, forwarded to an explicitly configured AI boundary, then dropped.
+router.post('/professional-development/scan', requireAuth, guardTeacherOnly, guardLicenceWritable,
+  receive({ maxMB: 10, allowed: ['pdf'], requiresStorage: false }),
+  async (req, res) => {
+    try { res.json({ __result: await professionalDevelopment.scanProfessionalDevelopmentPdf(req.file, req.user) }); }
+    catch (e) { console.error('[media:professional-development-scan]', e.message); res.status(400).json({ __error: e.message }); }
+  });
+
 // ---------- แจ้งปัญหาการใช้งาน ----------
 // ทุกบทบาทที่ล็อกอินส่งภาพได้ แต่ route นี้ไม่มีทางอ่านภาพคืนจาก deployment
 // ของโรงเรียน: ภาพถูก relay ไปยัง back office กลางหลังตรวจ JWT + เจ้าของรายงานแล้ว.
@@ -259,6 +295,9 @@ const SOURCES = {
           WHERE f.id=$1 AND c.deleted_at IS NULL`,
   sarabun: `SELECT file_key, file_name FROM sarabun WHERE id=$1`,
   project: `SELECT file_key, file_name FROM project_files WHERE id=$1`,
+  'professional-development': `SELECT f.file_key, f.file_name
+    FROM professional_development_attachments f JOIN professional_development_activities a ON a.id=f.activity_id
+    WHERE f.id=$1 AND a.deleted_at IS NULL`,
 };
 
 // ตัวอ่าน PDF ใช้ route นี้เพื่อให้ pdf.js อ่านผ่าน origin เดียวกับเว็บ — แก้ CORS ของ

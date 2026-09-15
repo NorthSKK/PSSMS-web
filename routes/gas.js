@@ -68,6 +68,17 @@ const STAFF_ONLY = new Set([
   'getSarabunHistory', 'getSarabunFileTicket', 'getProjectDocuments', 'getProjectFileTicket',
 ]);
 
+// Personal portfolio: deliberately stricter than teacherOrManagement.  Admin and
+// Executive must not be able to browse a teacher's professional record.
+const TEACHER_ONLY = new Set([
+  'getProfessionalDevelopmentActivities', 'getProfessionalDevelopmentActivity',
+  'saveProfessionalDevelopmentActivity', 'deleteProfessionalDevelopmentActivity',
+  'getDeletedProfessionalDevelopmentActivities', 'restoreProfessionalDevelopmentActivity',
+  'getProfessionalDevelopmentFileTicket', 'deleteProfessionalDevelopmentFile',
+  'getProfessionalDevelopmentPeople', 'getProfessionalDevelopmentOptions', 'getProfessionalDevelopmentExport',
+  'getProfessionalDevelopmentNotifications', 'markProfessionalDevelopmentNotificationRead',
+]);
+
 // ข้อมูลภาพรวมทั้งโรงเรียน — Management เท่านั้น
 const ADMIN_OR_EXECUTIVE = new Set([
   'getExecutiveDashboardBundle',
@@ -116,6 +127,12 @@ const READONLY_ALLOWED = new Set([
     'getImportSpec', 'getSetupChecklist', 'getLicenseInfo',
     'getTeacherSubjects',
     'getTeacherTimetable', 'getTeacherTimetableByDate', 'getTeacherTimetableWithStatus',
+    // Personal portfolio remains readable in licence read-only mode.  Mutation
+    // endpoints (save/delete/restore/mark-read) deliberately stay blocked.
+    'getProfessionalDevelopmentActivities', 'getProfessionalDevelopmentActivity',
+    'getDeletedProfessionalDevelopmentActivities', 'getProfessionalDevelopmentFileTicket',
+    'getProfessionalDevelopmentPeople', 'getProfessionalDevelopmentOptions', 'getProfessionalDevelopmentExport',
+    'getProfessionalDevelopmentNotifications',
     'getTeachersForTimetable', 'getTodayAttendanceHistory', 'getTodayMorningSummary',
     'getTodoList',
     // Reporting a broken system must remain available while the school is in
@@ -149,6 +166,7 @@ const pp5 = require('../functions/generatePP5Template');
 const mediaCards = require('../functions/mediaCards');
 const savings = require('../functions/savings');
 const problemReports = require('../functions/problemReports');
+const professionalDevelopment = require('../functions/professionalDevelopment');
 
 const handlers = {
   // Auth
@@ -303,6 +321,21 @@ const handlers = {
   deleteProjectFile:               (args, user) => projects.deleteProjectFile(args, user),
   getProjectFileTicket:            (args, user) => projects.getProjectFileTicket(args, user),
 
+  // Personal teacher professional-development portfolio
+  getProfessionalDevelopmentActivities: (args, user) => professionalDevelopment.getProfessionalDevelopmentActivities(args, user),
+  getProfessionalDevelopmentActivity: (args, user) => professionalDevelopment.getProfessionalDevelopmentActivity(args, user),
+  getProfessionalDevelopmentOptions: (args, user) => professionalDevelopment.getProfessionalDevelopmentOptions(args, user),
+  saveProfessionalDevelopmentActivity: (args, user) => professionalDevelopment.saveProfessionalDevelopmentActivity(args, user),
+  deleteProfessionalDevelopmentActivity: (args, user) => professionalDevelopment.deleteProfessionalDevelopmentActivity(args, user),
+  getDeletedProfessionalDevelopmentActivities: (args, user) => professionalDevelopment.getDeletedProfessionalDevelopmentActivities(args, user),
+  restoreProfessionalDevelopmentActivity: (args, user) => professionalDevelopment.restoreProfessionalDevelopmentActivity(args, user),
+  getProfessionalDevelopmentFileTicket: (args, user) => professionalDevelopment.getProfessionalDevelopmentFileTicket(args, user),
+  deleteProfessionalDevelopmentFile: (args, user) => professionalDevelopment.deleteProfessionalDevelopmentFile(args, user),
+  getProfessionalDevelopmentPeople: (args, user) => professionalDevelopment.getProfessionalDevelopmentPeople(args, user),
+  getProfessionalDevelopmentExport: (args, user) => professionalDevelopment.getProfessionalDevelopmentExport(args, user),
+  getProfessionalDevelopmentNotifications: (args, user) => professionalDevelopment.getProfessionalDevelopmentNotifications(args, user),
+  markProfessionalDevelopmentNotificationRead: (args, user) => professionalDevelopment.markProfessionalDevelopmentNotificationRead(args, user),
+
   // Budget
   getBudgets:                      (args) => budget.getBudgets(args),
   saveBudget:                      (args, user) => budget.saveBudget(args, user),
@@ -399,6 +432,7 @@ router.post('/:fnName', async (req, res) => {
   // Role-based authorization
   try {
     if (fnName === 'getLicenseInfo') adminOnly(user);
+    else if (TEACHER_ONLY.has(fnName) && String(user?.role || '').trim().toUpperCase() !== 'TEACHER') throw new Error('เฉพาะครูเท่านั้น');
     else if (MANAGEMENT_ONLY.has(fnName)) managementOnly(user);
     else if (ADMIN_OR_EXECUTIVE.has(fnName)) adminOrExecutive(user);
     else if (STAFF_ONLY.has(fnName)) staffOnly(user);

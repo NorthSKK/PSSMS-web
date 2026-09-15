@@ -347,7 +347,7 @@ web/
 
 ## PostgreSQL Schema
 
-24 tables. PK ที่ระบุคือ composite/primary keys ที่สำคัญต่อ `ON CONFLICT`.
+PK ที่ระบุคือ composite/primary keys ที่สำคัญต่อ `ON CONFLICT`.
 
 ### Indexes (non-PK)
 
@@ -418,6 +418,28 @@ web/
 | `calendar_events` | ปฏิทินกิจกรรม |
 | `maintenance` | บำรุงรักษา |
 | `problem_reports` | คำแจ้งปัญหาที่ส่งออกไปหลังบ้านกลาง — เก็บไว้เป็น**หลักฐานการส่ง** ไม่ใช่กล่องข้อความของโรงเรียน · `delivery_status` มีแค่ `pending` / `delivered` |
+
+### Professional development portfolio
+
+| Table | Note |
+|---|---|
+| `professional_development_activities` | บันทึกพัฒนาวิชาชีพส่วนตัวของครู · `owner_id` เป็น snapshot id ไม่มี FK · soft delete ด้วย `deleted_at` และกู้ได้ 30 วัน |
+| `professional_development_participants` | ผู้ร่วม teacher/student/external · `label`/`class_name` เก็บ snapshot ตอนบันทึก |
+| `professional_development_attachments` | metadata ไฟล์ใน object storage · ต้องลบ storage สำเร็จก่อน purge แถวกิจกรรม |
+| `professional_development_notifications` | เตือน follow-up หลังจบ 2 วัน เฉพาะร่างหรือรายการเสร็จสิ้นที่ยังไม่มีรายละเอียด |
+
+`saveProfessionalDevelopmentActivity([payload], user)` บันทึก activity + participants
+ใน transaction เดียวกัน; ตอน update ล็อกแถวด้วย `FOR UPDATE`.
+ถ้า `hours` ว่าง/null และมีเวลาเริ่มกับสิ้นสุด ระบบคำนวณชั่วโมงจาก instant หลังแปล
+`datetime-local` เป็นเวลาไทยแล้วและปัด 2 ตำแหน่ง; ค่าที่ครูกรอกเองมีลำดับสูงกว่า
+เพื่อให้หักเวลาพักได้. RPC อ่าน
+`getProfessionalDevelopmentActivities`, `getProfessionalDevelopmentActivity`,
+`getDeletedProfessionalDevelopmentActivities`, `getProfessionalDevelopmentPeople`,
+`getProfessionalDevelopmentFileTicket`, `getProfessionalDevelopmentNotifications` และ
+`getProfessionalDevelopmentExport` อยู่ใน `READONLY_ALLOWED`; RPC ที่เขียนทั้งหมดถูกบล็อก.
+REST `POST /api/media/professional-development/:id` และ
+`POST /api/media/professional-development/scan` ต้องผ่าน licence write guard
+**ก่อนรับ body** เสมอ เพราะ scan มีค่าใช้จ่าย.
 
 ---
 
@@ -2031,6 +2053,8 @@ test/
 ├── substituteAuto.test.js  preview/apply จัดสอนแทนอัตโนมัติ
 ├── license.test.js      สถานะ licence + READONLY_ALLOWED (พิมพ์ ปพ.5 ต้องได้เสมอ)
 ├── media_cards.test.js / media_upload.test.js / storage.test.js
+├── professional_development.test.js  เวลาไทย, ownership, atomic save, reminder, purge/restore
+├── openai_pdf_scan.test.js  request contract ของ AI PDF scan
 ├── sarabun.test.js      สิทธิ์ทะเบียนสารบรรณ + ไฟล์แนบ
 ├── problem_reports.test.js  แจ้งปัญหา — สิทธิ์แนบไฟล์ + ปลายทางล่มต้องไม่พังทั้งคำขอ
 ├── dev_lock.test.js     ตัวกันสอง process แตะ DB dev พร้อมกัน
@@ -2095,6 +2119,11 @@ test/
 | `functions/getLeaveBundle.js` | format ค่า `DATE` จาก DB เหมือนกัน |
 | `functions/leave.js` (ลูปสร้างคาบสอนแทน) | `getDay()` กับ `toISOString()` อยู่ในลูปเดียว ตกลงกันได้ทั้ง UTC และ +07 |
 | `lib/sessionCalendar.js` | ยึด UTC ทั้งลูปตั้งแต่ต้นจนจบ |
+
+**`datetime-local` จาก browser ไม่มี timezone** — professional development ตีความ
+`YYYY-MM-DDTHH:mm[:ss]` เป็น `Asia/Bangkok` (`+07:00`) ก่อนเก็บ `TIMESTAMPTZ`
+เสมอ; ค่าที่มี offset/`Z` มาแล้วใช้ offset นั้นตรงๆ. การเทียบวันเตือน
+ต้องแปล `TIMESTAMPTZ AT TIME ZONE 'Asia/Bangkok'` ก่อน cast เป็น `date`.
 
 `functions/missing.js` `getAvailableSubstitutes` ใช้ `new Date(dateStr).getDay()` ซึ่ง
 บังเอิญตรงทั้งบน UTC และ +07 (พังเฉพาะ TZ ฝั่งลบ) — ฟังก์ชันนี้เป็น legacy ที่รอรื้ออยู่แล้ว

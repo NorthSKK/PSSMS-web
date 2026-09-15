@@ -312,6 +312,44 @@ select.form-select {
 .pssms-progress { height: 6px; border-radius: 999px; background: var(--p-sec); overflow: hidden; }
 .pssms-progress-bar { height: 100%; background: var(--p-accent); border-radius: 999px; transition: width .3s; }
 
+/* พอร์ตพัฒนาวิชาชีพ — ใช้ภาษาภาพเดียวกับหน้าฝ่ายบุคคล */
+.pd-toolbar { padding: .85rem 1rem; }
+.pd-result-summary { min-height: 1.1rem; color: var(--p-text-muted); font-size: .76rem; }
+.pd-group-title { display:flex; align-items:center; gap:.5rem; color:var(--p-text-muted); font-size:.78rem; font-weight:700; border-bottom:1px solid var(--p-border); padding-bottom:.4rem; }
+.pd-group-title span { min-width:20px; padding:1px 6px; text-align:center; border-radius:999px; background:var(--p-accent-soft); color:var(--p-accent); }
+.pd-activity-card { display:flex; flex-direction:column; transition:border-color .15s,box-shadow .15s,transform .15s; }
+.pd-activity-card:hover { border-color:var(--p-border-strong); box-shadow:0 5px 18px rgba(24,31,40,.06); transform:translateY(-1px); }
+.pd-activity-card h6 { color:var(--p-text); line-height:1.45; }
+.pd-type { color:var(--p-accent); font-size:.76rem; font-weight:600; }
+.pd-icon-btn { width:32px; height:32px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; }
+.pd-meta { display:grid; gap:.35rem; color:var(--p-text-muted); font-size:.78rem; }
+.pd-meta > div { display:grid; grid-template-columns:18px minmax(0,1fr); align-items:start; }
+.pd-meta i { color:var(--p-accent); margin-top:.18rem; }
+.pd-card-footer { display:flex; flex-wrap:wrap; gap:.8rem; margin-top:auto; padding-top:.9rem; color:var(--p-text-muted); font-size:.75rem; }
+.pd-card-footer i { color:var(--p-accent); }
+.pd-loading-card { min-height:190px; }
+.pd-notification { display:flex; align-items:center; gap:.75rem; padding:.75rem 1rem; background:var(--p-accent-soft); font-size:.8rem; }
+.pd-notification > i { color:var(--p-accent); }
+.pd-form-section { border:1px solid var(--p-border); border-radius:var(--p-radius); padding:1rem; margin-bottom:1rem; background:var(--p-surface); }
+.pd-ai-panel { background:var(--p-accent-soft); }
+.pd-section-heading { display:flex; align-items:center; gap:.7rem; margin-bottom:.75rem; }
+.pd-section-heading h6 { margin:0; color:var(--p-text); font-weight:700; }
+.pd-section-heading .pssms-icon-circle { width:32px; height:32px; }
+.pd-person-chip { display:inline-flex; align-items:center; gap:.3rem; border:1px solid var(--p-border); background:var(--p-dom); color:var(--p-text); border-radius:999px; padding:.32rem .55rem .32rem .7rem; font-size:.75rem; }
+.pd-person-chip .btn-close { font-size:.5rem; margin-left:.15rem; }
+.pd-file-row { display:flex; align-items:center; gap:.5rem; padding:.5rem 0; border-bottom:1px solid var(--p-border); }
+.pd-file-row > i { color:var(--p-accent); }
+.pd-selected-files { display:grid; gap:.35rem; }
+.pd-selected-summary { color:var(--p-accent); font-size:.78rem; font-weight:700; }
+.pd-selected-row { display:grid; grid-template-columns:18px minmax(0,1fr); align-items:center; padding:.4rem .55rem; border:1px solid var(--p-border); border-radius:8px; background:var(--p-dom); color:var(--p-text); font-size:.76rem; }
+.pd-selected-row > i { color:var(--p-accent); }
+.pd-selected-row small { grid-column:2; color:var(--bs-danger); }
+.pd-selected-row.is-error { border-color:color-mix(in srgb,var(--bs-danger) 45%,var(--p-border)); }
+.pd-draft-preview { border:1px solid var(--p-border-strong); border-radius:calc(var(--p-radius) - 2px); padding:.8rem; background:var(--p-surface); }
+.pd-draft-row { display:grid; grid-template-columns:minmax(100px,28%) minmax(0,1fr); gap:.75rem; padding:.35rem 0; border-bottom:1px solid var(--p-border); font-size:.76rem; }
+.pd-draft-row span { color:var(--p-text-muted); }
+.pd-draft-row strong { color:var(--p-text); font-weight:500; white-space:pre-wrap; overflow-wrap:anywhere; }
+
 /* Number badge */
 .pssms-badge {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1205,6 +1243,11 @@ body.dark-mode .pssms-dept-general {
   .pssms-page { padding: 1rem; }
   .pssms-page-header { gap: .75rem; }
   .pssms-page-header .pssms-actions { width: 100%; }
+  .pd-page .pssms-actions > .btn { flex:1 1 0; }
+  .pd-form-section { padding:.85rem; }
+  .pd-file-row { flex-wrap:wrap; }
+  .pd-file-row .flex-grow-1 { flex-basis:calc(100% - 28px); }
+  .pd-draft-row { grid-template-columns:1fr; gap:.1rem; }
 
   #user-display > .d-flex { gap: .5rem !important; }
   #user-display .fw-bold { max-width: 43vw; font-size: .86rem !important; }

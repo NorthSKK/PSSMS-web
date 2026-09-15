@@ -912,6 +912,9 @@ function renderApp(user) {
       <li class="mb-1"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #6f42c1;" onclick="loadPage('Page_Savings')"><i class="fas fa-piggy-bank me-2" style="font-size: 0.7rem;"></i>ระบบออมเงิน</a></li>
       <li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: #e83e8c;" onclick="loadPage('Page_Calendar')"><i class="fas fa-calendar-alt me-2" style="font-size: 0.7rem;"></i>ปฏิทินปฏิบัติงาน</a></li>
     `;
+    if (!isManagement) {
+      menuHTML += `<li class="mb-2"><a href="javascript:void(0)" class="nav-link-sub py-1" style="font-size: 0.85rem; color: var(--p-accent);" onclick="loadPage('Page_Professional_Development')"><i class="fas fa-award me-2" style="font-size: 0.7rem;"></i>พัฒนาวิชาชีพ</a></li>`;
+    }
   }
 
   document.getElementById('menu-list').innerHTML = menuHTML;
@@ -972,7 +975,7 @@ function _setupMenuPrefetch() {
 function _setupIdlePrefetch(role) {
   var rolePages = {
     ADMIN:     ['Page_Admin_Users','Page_Student_Watch','Page_Academic','Page_Score_Entry','Page_Calendar','Page_Budget'],
-    TEACHER:   ['Page_Academic','Page_Score_Entry','Page_Calendar','Page_Teacher_Timetable','Page_Lesson_History'],
+    TEACHER:   ['Page_Academic','Page_Score_Entry','Page_Calendar','Page_Teacher_Timetable','Page_Lesson_History','Page_Professional_Development'],
     STUDENT:   ['Page_Student_Academic','Page_Student_Timetable','Page_Student_Clubs','Page_Teaching_Media','Page_Student_Savings','Page_Student_Calendar'],
     EXECUTIVE: ['Page_Admin_Settings','Page_Score_Entry','Page_Academic_Report','Page_Admin_Timetable','Page_Admin_Curriculum','Page_Admin_Clubs','Page_Teaching_Media','Page_Student_Watch','Page_Teacher_Progress','Page_Budget','Page_Personnel','Page_Admin_Users','Page_Leave_Request','Page_Leave_Admin','Page_Substitute_Admin','Page_General','Page_Project_Documents','Page_Savings','Page_Calendar']
   };
@@ -1082,6 +1085,7 @@ var PAGE_DEPT = {
   Page_Savings:'general',
   Page_Teaching_Media:'academic',
   Page_Teacher_Progress:'academic',
+  Page_Professional_Development:'general',
   Page_Student_Watch:'academic'
 };
 var _DEPT_CLASSES = ['dept-academic','dept-budget','dept-personnel','dept-general'];
@@ -1208,6 +1212,7 @@ function setupPageContent(pageName, html) {
   if(pageName === 'Page_Leave_Admin')   initLeaveAdminPage();
   if(pageName === 'Page_Substitute_Admin') initSubstituteAdminPage();
   if(pageName === 'Page_Teaching_Media') initTeachingMediaPage();
+  if(pageName === 'Page_Professional_Development') initProfessionalDevelopmentPage();
 }
 
 // ==========================================

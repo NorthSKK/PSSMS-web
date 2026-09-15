@@ -9,7 +9,8 @@
  */
 const { test, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const { call, ok, stop } = require('./helpers/api');
+const http = require('http');
+const { call, ok, stop, TOKENS, baseURL } = require('./helpers/api');
 const { query } = require('../lib/db');
 const license = require('../lib/license');
 
@@ -81,6 +82,59 @@ test('พ้นผ่อนผัน — พิมพ์ ปพ.5 และ expo
   for (const fn of ['generatePP5Template', 'exportClubsForTerm', 'getPrintConfigData']) {
     const res = await call(fn, [], 'admin');
     assert.notEqual(res.__licenseLocked, true, `${fn} ต้องไม่โดนกำแพงค่าบริการ`);
+  }
+});
+
+test('พ้นผ่อนผัน — พอร์ตฟอลิโอพัฒนาวิชาชีพยังเปิดอ่านได้ครบ', async () => {
+  const created = await ok('saveProfessionalDevelopmentActivity', [{
+    title: 'อบรมทดสอบ licence', type: 'อบรม', startsAt: '2026-09-14T09:00',
+  }], 'teacher1');
+  try {
+    await setLicense(iso(-20));
+    for (const [fn, args] of [
+      ['getProfessionalDevelopmentActivities', []],
+      ['getProfessionalDevelopmentActivity', [created.id]],
+      ['getDeletedProfessionalDevelopmentActivities', []],
+      ['getProfessionalDevelopmentPeople', [[]]],
+      ['getProfessionalDevelopmentOptions', []],
+      ['getProfessionalDevelopmentNotifications', []],
+      ['getProfessionalDevelopmentExport', [created.id]],
+    ]) {
+      const res = await call(fn, args, 'teacher1');
+      assert.notEqual(res.__licenseLocked, true, `${fn} ต้องอ่านได้`);
+      assert.equal(res.__error, undefined, `${fn}: ${res.__error || ''}`);
+    }
+    const missingTicket = await call('getProfessionalDevelopmentFileTicket', [2147483647], 'teacher1');
+    assert.notEqual(missingTicket.__licenseLocked, true, 'การออกตั๋วไฟล์ต้องผ่านถึง domain แม้ไฟล์ไม่มี');
+    assert.match(missingTicket.__error, /ไม่พบไฟล์/);
+    assert.equal((await call('saveProfessionalDevelopmentActivity', [{
+      title: 'ห้ามบันทึก', type: 'อบรม', startsAt: '2026-09-14T09:00',
+    }], 'teacher1')).__licenseLocked, true);
+  } finally {
+    await query('DELETE FROM professional_development_activities WHERE id=$1', [created.id]);
+  }
+});
+
+function postWithoutBody(pathname) {
+  return baseURL().then(base => new Promise((resolve, reject) => {
+    const req = http.request(`${base}${pathname}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${TOKENS.teacher1}` },
+    }, res => {
+      let raw = '';
+      res.on('data', chunk => raw += chunk);
+      res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(raw) }));
+    });
+    req.on('error', reject);
+    req.end();
+  }));
+}
+
+test('พ้นผ่อนผัน — REST แนบไฟล์และ AI scan ถูกปิดก่อนรับไฟล์', async () => {
+  await setLicense(iso(-20));
+  for (const pathname of ['/api/media/professional-development/1', '/api/media/professional-development/scan']) {
+    const res = await postWithoutBody(pathname);
+    assert.equal(res.status, 423);
+    assert.equal(res.body.__licenseLocked, true);
   }
 });
 

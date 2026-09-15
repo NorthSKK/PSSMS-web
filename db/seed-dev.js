@@ -167,6 +167,8 @@ async function seed() {
 
   // ล้างเฉพาะตารางข้อมูล — system_settings / curriculum / print_config ก๊อปมาจาก prod ไว้แล้ว
   const wipe = [
+    'professional_development_notifications', 'professional_development_attachments',
+    'professional_development_participants', 'professional_development_activities',
     'score_history', 'score_database', 'qualitative_assess', 'grade_summary', 'subject_config',
     'attendance', 'academic_records', 'detailed_lesson_records', 'morning_activity',
     'club_members', 'club_advisors', 'clubs',
