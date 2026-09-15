@@ -124,7 +124,26 @@ test('เปิดข้อมูลเดิมไม่เขียนทั�
   assert.match(script, /pdHours'\,'hours/);
   assert.match(script, /_pdSetHoursHint\(false\)/);
   assert.match(script, /hasDraftHours/);
-  assert.match(script, /if\(!hasDraftHours&&timeChanged\)\{[^}]*_pdRecalculateHours\(\)/);
+  assert.match(script, /if\(!hasDraftHours&&appliedTimes\.startsAt&&appliedTimes\.endsAt\)\{[^}]*_pdRecalculateHours\(\)/);
+});
+
+test('คำเตือนวันที่ปีปนกันจาก AI แสดงเด่นในกรอบร่างก่อนนำไปใช้', () => {
+  const script = src('Scripts_Professional_Development.html');
+  const box = { innerHTML: '' };
+  const context = {
+    document: {
+      getElementById: (id) => id === 'pdScanDraft' ? box : null,
+      createElement: () => ({ textContent: '', get innerHTML() { return this.textContent; } }),
+    },
+  };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  context.PD_STATE.draft = { startsAt: '2025-09-15T08:30', endsAt: null };
+  context.PD_STATE.scanWarnings = ['วันเวลาสิ้นสุดก่อนวันเวลาเริ่ม ระบบจึงเว้นไว้'];
+  context._pdRenderDraft();
+
+  assert.match(box.innerHTML, /alert-warning/);
+  assert.match(box.innerHTML, /วันเวลาสิ้นสุดก่อนวันเวลาเริ่ม/);
+  assert.match(box.innerHTML, /ตรวจสอบวันและเวลา/);
 });
 
 test('ผลค้นหาว่างมีทางล้างตัวกรองและ fallback ยืนยันก่อนลบ', () => {
@@ -140,6 +159,78 @@ test('ร่าง AI แสดงรายช่อง เลือกเติ
   assert.match(script, /pdApplyDraft\(\\?'overwrite\\?'\)/);
   assert.match(script, /pdUndoDraft/);
   assert.match(script, /PD_STATE\.draftUndo/);
+});
+
+test('ร่าง AI ที่แก้ปี พ.ศ. แล้วไม่ล้างเวลาที่ผู้ใช้กรอกเมื่อปลายทางไม่ปลอดภัย และไม่คำนวณชั่วโมงข้ามปี', () => {
+  const script = src('Scripts_Professional_Development.html');
+  const elements = {
+    pdTitle: { value: '' }, pdType: { value: 'อบรม' },
+    pdStartsAt: { value: '2026-09-15T08:30' },
+    pdEndsAt: { value: '2026-09-15T16:00' },
+    pdLocation: { value: '' }, pdOrganizer: { value: '' }, pdObjective: { value: '' }, pdDetails: { value: '' },
+    pdHours: { value: '6' }, pdExpenses: { value: '' }, pdStatus: { value: 'ร่าง' },
+    pdHoursHelp: { textContent: '' },
+  };
+  const context = { document: { getElementById: (id) => elements[id] } };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  context._pdRenderDraft = () => {};
+  context._pdToast = () => {};
+  context.PD_STATE.draft = { startsAt: '2025-09-15T08:30', endsAt: null, hours: null };
+  context.PD_STATE.scanWarnings = ['วันเวลาสิ้นสุดที่ AI อ่านได้ไม่ถูกต้อง กรุณาตรวจและกรอกใหม่'];
+
+  context.pdApplyDraft('overwrite');
+
+  assert.equal(elements.pdStartsAt.value, '2025-09-15T08:30');
+  assert.equal(elements.pdEndsAt.value, '2026-09-15T16:00', 'ค่าว่างจาก AI ต้องไม่ล้างค่าที่ผู้ใช้กรอก');
+  assert.equal(elements.pdHours.value, '6', 'ห้ามคำนวณชั่วโมงจากวันที่คนละชุดจนได้ค่ามหาศาล');
+});
+
+test('ถ้าผล AI เก่าหรือ proxy ส่งปี พ.ศ. ดิบ หน้าเว็บไม่ใส่ปีนั้นใน datetime-local', () => {
+  const script = src('Scripts_Professional_Development.html');
+  const elements = {
+    pdStartsAt: { value: '2026-09-15T08:30' }, pdEndsAt: { value: '' },
+    pdHours: { value: '6' }, pdHoursHelp: { textContent: '' },
+  };
+  const context = { document: { getElementById: (id) => elements[id] } };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  context._pdDraftMap = () => ({ startsAt: ['pdStartsAt', 'วันเวลาเริ่ม'], endsAt: ['pdEndsAt', 'วันเวลาสิ้นสุด'] });
+  context._pdRenderDraft = () => {};
+  context._pdToast = () => {};
+  context.PD_STATE.draft = { startsAt: '2568-09-15T08:30', endsAt: '2025-09-15T16:00' };
+  context.pdApplyDraft('overwrite');
+  assert.equal(elements.pdStartsAt.value, '2026-09-15T08:30');
+  assert.equal(elements.pdEndsAt.value, '2025-09-15T16:00');
+  assert.equal(elements.pdHours.value, '6');
+});
+
+test('บันทึกฟอร์มปีปนกันไม่ได้และบอกให้ตรวจปี ค.ศ. กับเวลาสิ้นสุดอย่างชัดเจน', () => {
+  const script = src('Scripts_Professional_Development.html');
+  const input = (value) => {
+    const flags = new Set();
+    return { value, classList: { add: (v) => flags.add(v), remove: (v) => flags.delete(v), contains: (v) => flags.has(v) }, checkValidity: () => true, focus: () => {} };
+  };
+  const elements = {
+    pdTitle: input('อบรม'), pdStartsAt: input('2021-09-15T08:30'),
+    pdEndsAt: input('2026-09-15T16:00'), pdHours: input('6'), pdExpenses: input(''),
+    pdFormError: input(''),
+  };
+  const context = { document: { getElementById: (id) => elements[id] } };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  assert.equal(context._pdValidate(), false);
+  assert.match(elements.pdFormError.textContent, /ปี ค\.ศ\./);
+  assert.match(elements.pdFormError.textContent, /สิ้นสุด/);
+});
+
+test('เวลาในฟอร์มคนละหลายปีไม่แทนชั่วโมงที่ผู้ใช้กรอกด้วยค่าสูงผิดปกติ', () => {
+  const script = src('Scripts_Professional_Development.html');
+  const elements = {
+    pdStartsAt: { value: '2021-09-15T08:30' }, pdEndsAt: { value: '2026-09-15T16:00' },
+    pdHours: { value: '6' }, pdHoursHelp: { textContent: '' },
+  };
+  const context = { document: { getElementById: (id) => elements[id] } };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  assert.equal(context._pdRecalculateHours(), false);
+  assert.equal(elements.pdHours.value, '6');
 });
 
 test('การ์ดกิจกรรมมีชื่อ accessible และสรุปจำนวนผู้ร่วมกับไฟล์แนบ', () => {

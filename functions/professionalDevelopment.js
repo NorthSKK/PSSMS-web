@@ -166,8 +166,69 @@ const PD_DRAFT_SCHEMA = {
 function scanPrompt() {
   return 'อ่านข้อความและภาพใน PDF ทุกหน้า แล้วสร้างร่างกิจกรรมพัฒนาวิชาชีพเป็น JSON ตาม schema เท่านั้น. ' +
     'เอกสารนี้อาจเป็น PDF ที่สแกนเป็นรูป ไม่มี text layer: ให้อ่านตัวอักษรจากภาพด้วย ไม่ใช่สรุปว่าไม่มีข้อมูลทันที. ' +
-    'ห้ามแต่งข้อมูล: ถ้าอ่านไม่ออกหรือไม่พบข้อมูลให้ใช้สตริงว่างหรือ null. วันที่เวลาใช้ ISO 8601 หากระบุได้. ' +
+    'ห้ามแต่งข้อมูล: ถ้าอ่านไม่ออกหรือไม่พบข้อมูลให้ใช้สตริงว่างหรือ null. ' +
+    'วันที่เวลาใช้ ISO 8601 ตามเวลาประเทศไทย (Asia/Bangkok, UTC+7) และใช้ปีคริสต์ศักราช (ค.ศ.) เท่านั้น; ถ้าเอกสารใช้ พ.ศ. ให้ลบ 543 ก่อนตอบ. ' +
     'ประเภทต้องเลือกจาก อบรม, สัมมนา, ประชุม, ไปราชการ, ศึกษาดูงาน; สถานะให้เป็น ร่าง.';
+}
+
+function normalizedScanDate(value) {
+  if (value == null || String(value).trim() === '') return null;
+  const raw = String(value).trim();
+  let match = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[ T](\d{1,2})[:.](\d{2})(?::(\d{2}))?)?$/.exec(raw);
+  let year, month, day, hour, minute, second, offset = '';
+  if (match) {
+    [, day, month, year, hour = '00', minute = '00', second = '00'] = match;
+  } else {
+    match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?(Z|[+-]\d{2}:?\d{2})?$/.exec(raw);
+    if (!match) return null;
+    [, year, month, day, hour = '00', minute = '00', second = '00', offset = ''] = match;
+  }
+  year = Number(year);
+  if (year >= 2400 && year <= 2999) year -= 543;
+  month = Number(month); day = Number(day); hour = Number(hour); minute = Number(minute); second = Number(second);
+  if (year < 1 || year > 2399 || month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+  const pad = number => String(number).padStart(2, '0');
+  if (offset) {
+    const isoOffset = offset === 'Z' ? 'Z' : (offset.includes(':') ? offset : `${offset.slice(0, 3)}:${offset.slice(3)}`);
+    const instant = new Date(`${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}${isoOffset}`);
+    if (Number.isNaN(instant.valueOf())) return null;
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(instant);
+    const part = type => parts.find(item => item.type === type)?.value || '';
+    return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
+  }
+  const calendarCheck = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (calendarCheck.getUTCFullYear() !== year || calendarCheck.getUTCMonth() !== month - 1 || calendarCheck.getUTCDate() !== day) return null;
+  return `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}`;
+}
+
+function normalizeScanDraft(rawDraft) {
+  const draft = { ...rawDraft };
+  const warnings = [];
+  for (const field of ['startsAt', 'endsAt']) {
+    const original = draft[field];
+    draft[field] = normalizedScanDate(original);
+    if (original != null && String(original).trim() && !draft[field]) warnings.push(`${field === 'startsAt' ? 'วันเวลาเริ่ม' : 'วันเวลาสิ้นสุด'}ที่ AI อ่านได้ไม่ถูกต้อง กรุณาตรวจและกรอกใหม่`);
+  }
+  if (draft.startsAt && draft.endsAt) {
+    const spanMs = Date.parse(`${draft.endsAt}:00Z`) - Date.parse(`${draft.startsAt}:00Z`);
+    if (spanMs < 0) {
+      draft.endsAt = null;
+      warnings.push('วันเวลาสิ้นสุดก่อนวันเวลาเริ่ม ระบบจึงเว้นวันเวลาสิ้นสุดไว้ กรุณาตรวจและกรอกใหม่');
+    } else if (spanMs > 366 * 24 * 60 * 60 * 1000) {
+      draft.endsAt = null;
+      warnings.push('ช่วงเวลากิจกรรมยาวผิดปกติ ระบบจึงเว้นวันเวลาสิ้นสุดไว้ กรุณาตรวจและกรอกใหม่');
+    }
+  }
+  if (draft.hours != null && draft.hours !== '') {
+    const hours = Number(draft.hours);
+    if (!Number.isFinite(hours) || hours < 0 || hours > 9999.99) {
+      draft.hours = null;
+      warnings.push('จำนวนชั่วโมงที่ AI อ่านได้ไม่ถูกต้อง ระบบจึงเว้นไว้ กรุณาตรวจและกรอกใหม่');
+    } else {
+      draft.hours = hours;
+    }
+  }
+  return { draft, warnings };
 }
 
 async function scanWithOpenAI(file, user) {
@@ -220,7 +281,7 @@ async function scanProfessionalDevelopmentPdf(file,user) {
   const endpoint = String(process.env.PD_AI_SCAN_URL || '').trim();
   if (!endpoint) {
     const draft = await scanWithOpenAI(file, user);
-    if (draft) return { status: 'success', draft };
+    if (draft) return { status: 'success', ...normalizeScanDraft(draft) };
     throw new Error('ยังไม่ได้ตั้งค่า AI PDF scan — ใส่ OPENAI_API_KEY หรือ PD_AI_SCAN_URL ใน .env');
   }
   let url; try { url = new URL(endpoint); } catch { throw new Error('PD_AI_SCAN_URL ไม่ถูกต้อง'); }
@@ -229,6 +290,6 @@ async function scanProfessionalDevelopmentPdf(file,user) {
   if (!response.ok) throw new Error(`AI PDF scan ไม่สำเร็จ (${response.status})`);
   const result = await response.json();
   if (!result || typeof result !== 'object') throw new Error('AI PDF scan ส่งผลลัพธ์ไม่ถูกต้อง');
-  return { status:'success', draft:result.draft || result };
+  return { status:'success', ...normalizeScanDraft(result.draft || result) };
 }
 module.exports={MAX_ATTACH_MB,MAX_ATTACHMENTS,ATTACH_EXTS,UPLOAD_DISABLED_MESSAGE,getProfessionalDevelopmentOptions,getProfessionalDevelopmentActivities,getProfessionalDevelopmentActivity,saveProfessionalDevelopmentActivity,deleteProfessionalDevelopmentActivity,getDeletedProfessionalDevelopmentActivities,restoreProfessionalDevelopmentActivity,attachProfessionalDevelopmentFile,getProfessionalDevelopmentFileTicket,deleteProfessionalDevelopmentFile,getProfessionalDevelopmentPeople,getProfessionalDevelopmentExport,getProfessionalDevelopmentNotifications,markProfessionalDevelopmentNotificationRead,scanProfessionalDevelopmentPdf,purgeExpired};
