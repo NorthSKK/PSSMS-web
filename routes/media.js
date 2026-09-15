@@ -271,10 +271,10 @@ router.post('/professional-development/:id(\\d+)', requireAuth, guardProfessiona
     catch (e) { console.error('[media:professional-development]', e.message); res.status(400).json({ __error: e.message }); }
   });
 
-// The PDF never enters attachment storage for scanning: it is held only in the
-// multipart request, forwarded to an explicitly configured AI boundary, then dropped.
+// Scanned PDFs and camera photos never enter attachment storage: each is held
+// only in the multipart request and forwarded to the configured AI boundary.
 router.post('/professional-development/scan', requireAuth, guardProfessionalDevelopmentEnabled, guardTeacherOnly, guardLicenceWritable,
-  receive({ maxMB: 10, allowed: ['pdf'], requiresStorage: false }),
+  receive({ maxMB: 10, allowed: ['pdf', 'jpg', 'png', 'webp'], requiresStorage: false }),
   async (req, res) => {
     try { res.json({ __result: await professionalDevelopment.scanProfessionalDevelopmentPdf(req.file, req.user) }); }
     catch (e) { console.error('[media:professional-development-scan]', e.message); res.status(400).json({ __error: e.message }); }

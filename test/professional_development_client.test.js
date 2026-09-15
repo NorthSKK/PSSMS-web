@@ -83,7 +83,7 @@ test('ฟอร์มแสดงไฟล์ที่เลือก ใช้�
   assert.match(page, />บันทึกร่าง</);
   assert.match(script, /getProfessionalDevelopmentOptions/);
   assert.match(script, /function _pdRenderSelectedFiles/);
-  assert.match(script, /เลือกแล้ว '\+files\.length\+' ไฟล์/);
+  assert.match(script, /รอแนบหลังบันทึก '\+files\.length\+' ไฟล์/);
   assert.match(script, /pendingFiles=failed\.map/);
   assert.match(script, /x\.name\+' — '\+x\.reason/);
   assert.match(script, /_pdSave\('ร่าง'\)/);
@@ -240,4 +240,133 @@ test('การ์ดกิจกรรมมีชื่อ accessible แล�
   assert.match(script, /aria-label="ย้าย/);
   assert.match(script, /participantCount/);
   assert.match(script, /attachmentCount/);
+});
+
+test('หน้าโทรศัพท์ถ่ายรูปหรือเลือกไฟล์แล้วสแกนอัตโนมัติ ยังไม่บันทึกกิจกรรมทันที', async () => {
+  const page = src('Page_Professional_Development.html');
+  const script = src('Scripts_Professional_Development.html');
+  assert.match(page, /id="pdScanCamera"[^>]*accept="image\/jpeg,image\/png,image\/webp"[^>]*capture="environment"/);
+  assert.match(page, /id="pdScanFile"[^>]*application\/pdf,image\/jpeg,image\/png,image\/webp/);
+  assert.match(page, /ถ่ายรูปเอกสาร/);
+  assert.match(page, /ส่งให้ AI อ่านอัตโนมัติ/);
+  assert.match(page, /รอแนบเป็นหลักฐานเมื่อบันทึก/);
+  assert.match(script, /onchange=_pdPickedScanFile/);
+
+  const classes = () => ({ add() {}, remove() {}, contains() { return false; } });
+  const ids = ['pdTitle', 'pdType', 'pdStartsAt', 'pdEndsAt', 'pdLocation', 'pdOrganizer',
+    'pdObjective', 'pdDetails', 'pdHours', 'pdExpenses', 'pdStatus', 'pdId',
+    'pdScanStatus', 'pdScanBtn', 'pdScanCamera', 'pdScanFile', 'pdHoursHelp'];
+  const elements = Object.fromEntries(ids.map((id) => [id, { value: '', innerHTML: '', classList: classes() }]));
+  elements.pdType.value = 'อบรม'; elements.pdStatus.value = 'ร่าง';
+  const image = { name: 'camera.jpg', type: 'image/jpeg', size: 2000, lastModified: 12 };
+  const calls = [];
+  const context = {
+    document: {
+      getElementById: (id) => elements[id],
+      createElement: () => ({ textContent: '', get innerHTML() { return this.textContent; } }),
+    },
+    localStorage: { getItem: () => 'test-jwt' },
+    FormData: class { append(name, file) { calls.push([name, file]); } },
+    fetch: (url) => {
+      calls.push(url);
+      return Promise.resolve({ json: () => Promise.resolve({ status: 'success',
+        draft: { title: 'อบรมวิทย์', startsAt: '2025-09-15T08:30', endsAt: null,
+          location: 'ห้องประชุม' }, warnings: ['โปรดตรวจเวลาสิ้นสุด'] }) });
+    },
+  };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  context._pdRenderDraft = () => {};
+  context._pdRenderSelectedFiles = () => {};
+  context._pdToast = () => {};
+  context.PD_STATE.optionsLoaded = true;
+  context.PD_STATE.options.uploadEnabled = true;
+  elements.pdScanCamera.files = [image];
+  context._pdPickedScanFile({ target: elements.pdScanCamera });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(calls[0][1], image);
+  assert.equal(calls[1], '/api/media/professional-development/scan');
+  assert.equal(elements.pdTitle.value, 'อบรมวิทย์');
+  assert.equal(elements.pdStartsAt.value, '2025-09-15T08:30');
+  assert.equal(elements.pdEndsAt.value, '', 'AI ส่งวันที่ไม่ปลอดภัยต้องไม่เติม');
+  assert.equal(context.PD_STATE.pendingFiles.length, 1, 'ภาพรอแนบหลังผู้ใช้กดบันทึก');
+  assert.equal(elements.pdId.value, '', 'การสแกนไม่กดบันทึกเอง');
+  assert.match(elements.pdScanStatus.innerHTML, /เติมข้อมูล/);
+  elements.pdTitle.value = 'ครูแก้ชื่อเอง';
+  context.pdUndoDraft();
+  assert.equal(elements.pdTitle.value, 'ครูแก้ชื่อเอง', 'ย้อนกลับต้องไม่ล้างข้อมูลที่ครูแก้หลังสแกน');
+  assert.equal(elements.pdLocation.value, '', 'ย้อนกลับได้เฉพาะค่าที่ AI เติม');
+});
+
+test('สแกนเอกสารในกิจกรรมเดิมเติมเฉพาะช่องว่าง ไม่เขียนทับข้อมูลที่ครูแก้ระหว่างรอผล', () => {
+  const script = src('Scripts_Professional_Development.html');
+  const elements = {
+    pdTitle: { value: 'ชื่อกิจกรรมเดิม' }, pdLocation: { value: 'ครูเพิ่งแก้สถานที่' },
+    pdOrganizer: { value: '' }, pdHoursHelp: { textContent: '' },
+  };
+  const context = { document: { getElementById: (id) => elements[id] } };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  context._pdDraftMap = () => ({ title: ['pdTitle', 'ชื่อ'], location: ['pdLocation', 'สถานที่'], organizer: ['pdOrganizer', 'ผู้จัด'] });
+  context._pdRenderDraft = () => {}; context._pdToast = () => {};
+  context.PD_STATE.draft = { title: 'ชื่อ AI', location: 'สถานที่ AI', organizer: 'หน่วยงาน AI' };
+  const count = context.pdApplyDraft('empty', true, { title: 'ชื่อกิจกรรมเดิม', location: '', organizer: '' });
+  assert.equal(count, 1);
+  assert.equal(elements.pdTitle.value, 'ชื่อกิจกรรมเดิม');
+  assert.equal(elements.pdLocation.value, 'ครูเพิ่งแก้สถานที่');
+  assert.equal(elements.pdOrganizer.value, 'หน่วยงาน AI');
+});
+
+test('ภาพที่ AI อ่านรายละเอียดไม่ได้ไม่เติมฟอร์มหรือแนบเป็นหลักฐานเอง และให้ลองใหม่', async () => {
+  const script = src('Scripts_Professional_Development.html');
+  const classes = () => ({ add() {}, remove() {}, contains() { return false; } });
+  const elements = Object.fromEntries(['pdScanStatus','pdScanBtn','pdScanCamera','pdScanFile',
+    'pdTitle','pdType','pdStartsAt','pdEndsAt','pdLocation','pdOrganizer','pdObjective',
+    'pdDetails','pdHours','pdExpenses','pdStatus'].map((id) => [id,
+    { value: '', innerHTML: '', classList: classes() }]));
+  const context = {
+    document: { getElementById: (id) => elements[id],
+      createElement: () => ({ textContent: '', get innerHTML() { return this.textContent; } }) },
+    localStorage: { getItem: () => 'test-jwt' },
+    FormData: class { append() {} },
+    fetch: () => Promise.resolve({ json: () => Promise.resolve({ status: 'success', draft: { type: 'อบรม', status: 'ร่าง' }, warnings: [] }) }),
+  };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  context._pdRenderDraft = () => {};
+  context.PD_STATE.scanFile = { name: 'blur.jpg', type: 'image/jpeg', size: 1000 };
+  context._pdScan();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(elements.pdScanStatus.innerHTML, /ลองถ่ายใหม่/);
+  assert.equal(context.PD_STATE.pendingFiles.length, 0);
+  assert.equal(context.PD_STATE.scanAppliedOnce, false);
+});
+
+test('ภาพสแกนเป็นหลักฐานรอแนบเฉพาะเมื่อเปิดอัปโหลดและมีที่ว่าง ลบจากคิวได้', () => {
+  const script = src('Scripts_Professional_Development.html');
+  const box = { innerHTML: '' };
+  const context = {
+    document: {
+      getElementById: (id) => id === 'pdSelectedFiles' ? box : null,
+      createElement: () => ({ textContent: '', get innerHTML() { return this.textContent; } }),
+    },
+  };
+  vm.runInNewContext(script.replace(/^\s*<script>|<\/script>\s*$/g, ''), context);
+  const image = { name: 'proof.png', type: 'image/png', size: 1234, lastModified: 4 };
+  context.PD_STATE.scannedEvidence = image;
+  context.PD_STATE.optionsLoaded = true;
+  context.PD_STATE.options.uploadEnabled = false;
+  context._pdMaybeQueueScanEvidence();
+  assert.equal(context.PD_STATE.pendingFiles.length, 0);
+  context.PD_STATE.options.uploadEnabled = true;
+  context.PD_STATE.options.maxFilesPerActivity = 1;
+  context.PD_STATE.attachments = [{ id: 9 }];
+  context._pdMaybeQueueScanEvidence();
+  assert.equal(context.PD_STATE.pendingFiles.length, 0);
+  context.PD_STATE.attachments = [];
+  context._pdMaybeQueueScanEvidence();
+  context._pdMaybeQueueScanEvidence();
+  assert.equal(context.PD_STATE.pendingFiles.length, 1, 'ภาพเดียวไม่เข้าคิวซ้ำ');
+  assert.match(box.innerHTML, /proof\.png/);
+  assert.match(box.innerHTML, /เอาออก/);
+  context.pdRemovePendingFile(0);
+  assert.equal(context.PD_STATE.pendingFiles.length, 0);
 });

@@ -164,8 +164,8 @@ const PD_DRAFT_SCHEMA = {
 };
 
 function scanPrompt() {
-  return 'อ่านข้อความและภาพใน PDF ทุกหน้า แล้วสร้างร่างกิจกรรมพัฒนาวิชาชีพเป็น JSON ตาม schema เท่านั้น. ' +
-    'เอกสารนี้อาจเป็น PDF ที่สแกนเป็นรูป ไม่มี text layer: ให้อ่านตัวอักษรจากภาพด้วย ไม่ใช่สรุปว่าไม่มีข้อมูลทันที. ' +
+  return 'อ่านข้อความและภาพในเอกสาร PDF หรือภาพถ่าย แล้วสร้างร่างกิจกรรมพัฒนาวิชาชีพเป็น JSON ตาม schema เท่านั้น. ' +
+    'PDF อาจสแกนเป็นรูป ไม่มี text layer; ภาพถ่ายอาจเอียงหรือมีเงา: ให้อ่านตัวอักษรจากภาพด้วย ไม่ใช่สรุปว่าไม่มีข้อมูลทันที. ' +
     'ห้ามแต่งข้อมูล: ถ้าอ่านไม่ออกหรือไม่พบข้อมูลให้ใช้สตริงว่างหรือ null. ' +
     'วันที่เวลาใช้ ISO 8601 ตามเวลาประเทศไทย (Asia/Bangkok, UTC+7) และใช้ปีคริสต์ศักราช (ค.ศ.) เท่านั้น; ถ้าเอกสารใช้ พ.ศ. ให้ลบ 543 ก่อนตอบ. ' +
     'ประเภทต้องเลือกจาก อบรม, สัมมนา, ประชุม, ไปราชการ, ศึกษาดูงาน; สถานะให้เป็น ร่าง.';
@@ -245,16 +245,18 @@ async function scanWithOpenAI(file, user) {
       safety_identifier: safeId,
       input: [{ role: 'user', content: [
         { type: 'input_text', text: scanPrompt() },
-        { type: 'input_file', filename: clean(file.originalname, 255) || 'document.pdf',
-          // Responses expects an inline file as a data URL, not bare base64.
-          file_data: `data:application/pdf;base64,${file.buffer.toString('base64')}` },
+        file.type.ext === 'pdf'
+          ? { type: 'input_file', filename: /\.pdf$/i.test(clean(file.originalname, 255)) ? clean(file.originalname, 255) : 'document.pdf',
+              // Responses expects an inline file as a data URL, not bare base64.
+              file_data: `data:application/pdf;base64,${file.buffer.toString('base64')}` }
+          : { type: 'input_image', image_url: `data:${file.type.mime};base64,${file.buffer.toString('base64')}` },
       ] }],
       text: { format: { type: 'json_schema', name: 'professional_development_draft', strict: true, schema: PD_DRAFT_SCHEMA } },
     }),
   });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new Error(`OpenAI PDF scan ไม่สำเร็จ (${response.status})${body ? ': ' + body.slice(0, 300) : ''}`);
+    throw new Error(`OpenAI สแกนเอกสารไม่สำเร็จ (${response.status})${body ? ': ' + body.slice(0, 300) : ''}`);
   }
   const result = await response.json();
   // SDKs expose output_text, but raw REST responses may only put it inside the
@@ -270,26 +272,38 @@ async function scanWithOpenAI(file, user) {
   try { draft = JSON.parse(text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '').trim()); }
   catch {
     const reason = result.incomplete_details?.reason || result.status || 'unknown';
-    throw new Error(`OpenAI PDF scan ส่งร่างที่ไม่ใช่ JSON (${reason})`);
+    throw new Error(`OpenAI สแกนเอกสารส่งร่างที่ไม่ใช่ JSON (${reason})`);
   }
-  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) throw new Error('OpenAI PDF scan ส่งร่างไม่ถูกต้อง');
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) throw new Error('OpenAI สแกนเอกสารส่งร่างไม่ถูกต้อง');
   return draft;
 }
 
 async function scanProfessionalDevelopmentPdf(file,user) {
+  if (!Buffer.isBuffer(file?.buffer) || file.buffer.length > 10 * 1024 * 1024) {
+    throw new Error('ไฟล์สแกนใหญ่เกิน 10 MB หรืออ่านไฟล์ไม่ได้');
+  }
+  // Route.receive already sniffs magic bytes; repeat here so callers of the
+  // domain function cannot relabel arbitrary bytes as a supported image/PDF.
+  const type = storageTypes.detect(file.buffer, ['pdf', 'jpg', 'png', 'webp']);
+  if (!type) throw new Error('รองรับเฉพาะไฟล์ PDF / JPEG / PNG / WebP');
+  const scannedFile = { ...file, type };
   // โรงเรียนที่มี proxy ของตัวเองยังใช้ต่อได้; หากไม่มีให้ใช้ OpenAI โดยตรงเพื่อไม่ต้อง deploy service เพิ่ม.
   const endpoint = String(process.env.PD_AI_SCAN_URL || '').trim();
   if (!endpoint) {
-    const draft = await scanWithOpenAI(file, user);
+    const draft = await scanWithOpenAI(scannedFile, user);
     if (draft) return { status: 'success', ...normalizeScanDraft(draft) };
-    throw new Error('ยังไม่ได้ตั้งค่า AI PDF scan — ใส่ OPENAI_API_KEY หรือ PD_AI_SCAN_URL ใน .env');
+    throw new Error('ยังไม่ได้ตั้งค่า AI สแกนเอกสาร — ใส่ OPENAI_API_KEY หรือ PD_AI_SCAN_URL ใน .env');
   }
   let url; try { url = new URL(endpoint); } catch { throw new Error('PD_AI_SCAN_URL ไม่ถูกต้อง'); }
   if (url.protocol !== 'https:') throw new Error('PD_AI_SCAN_URL ต้องเป็น HTTPS');
-  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...(process.env.PD_AI_SCAN_TOKEN ? { authorization: `Bearer ${process.env.PD_AI_SCAN_TOKEN}` } : {}) }, body: JSON.stringify({ document_base64: file.buffer.toString('base64'), filename: clean(file.originalname,255), requested_by: idOf(user) }), signal: AbortSignal.timeout(30000) });
-  if (!response.ok) throw new Error(`AI PDF scan ไม่สำเร็จ (${response.status})`);
+  const proxyDocument = { document_base64: file.buffer.toString('base64'), filename: clean(file.originalname,255), requested_by: idOf(user) };
+  // Keep the original PDF proxy contract byte-for-byte; image-aware proxies
+  // can inspect these additional metadata fields without trusting filenames.
+  if (type.ext !== 'pdf') { proxyDocument.mime_type = type.mime; proxyDocument.detected_ext = type.ext; }
+  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...(process.env.PD_AI_SCAN_TOKEN ? { authorization: `Bearer ${process.env.PD_AI_SCAN_TOKEN}` } : {}) }, body: JSON.stringify(proxyDocument), signal: AbortSignal.timeout(30000) });
+  if (!response.ok) throw new Error(`AI สแกนเอกสารไม่สำเร็จ (${response.status})`);
   const result = await response.json();
-  if (!result || typeof result !== 'object') throw new Error('AI PDF scan ส่งผลลัพธ์ไม่ถูกต้อง');
+  if (!result || typeof result !== 'object') throw new Error('AI สแกนเอกสารส่งผลลัพธ์ไม่ถูกต้อง');
   return { status:'success', ...normalizeScanDraft(result.draft || result) };
 }
 module.exports={MAX_ATTACH_MB,MAX_ATTACHMENTS,ATTACH_EXTS,UPLOAD_DISABLED_MESSAGE,getProfessionalDevelopmentOptions,getProfessionalDevelopmentActivities,getProfessionalDevelopmentActivity,saveProfessionalDevelopmentActivity,deleteProfessionalDevelopmentActivity,getDeletedProfessionalDevelopmentActivities,restoreProfessionalDevelopmentActivity,attachProfessionalDevelopmentFile,getProfessionalDevelopmentFileTicket,deleteProfessionalDevelopmentFile,getProfessionalDevelopmentPeople,getProfessionalDevelopmentExport,getProfessionalDevelopmentNotifications,markProfessionalDevelopmentNotificationRead,scanProfessionalDevelopmentPdf,purgeExpired};
