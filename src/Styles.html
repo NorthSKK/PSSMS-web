@@ -337,6 +337,15 @@ select.form-select {
 .pd-section-heading .pssms-icon-circle { width:32px; height:32px; }
 .pd-person-chip { display:inline-flex; align-items:center; gap:.3rem; border:1px solid var(--p-border); background:var(--p-dom); color:var(--p-text); border-radius:999px; padding:.32rem .55rem .32rem .7rem; font-size:.75rem; }
 .pd-person-chip .btn-close { font-size:.5rem; margin-left:.15rem; }
+.pd-participant-summary { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem .8rem; color:var(--p-text-muted); font-size:.78rem; }
+.pd-participant-summary > span { padding:.25rem .55rem; border-radius:999px; background:var(--p-dom); }
+.pd-people-picker { padding:.8rem; border:1px solid var(--p-border); border-radius:10px; background:var(--p-dom); }
+.pd-people-checklist { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:.4rem; max-height:240px; overflow:auto; }
+.pd-person-option { display:grid; grid-template-columns:20px minmax(0,1fr); align-items:center; gap:.35rem; padding:.5rem .6rem; border:1px solid var(--p-border); border-radius:8px; color:var(--p-text); cursor:pointer; font-size:.78rem; }
+.pd-person-option:hover,.pd-person-option.is-selected { border-color:var(--p-accent); background:var(--p-accent-soft); }
+.pd-person-option small { grid-column:2; color:var(--p-text-muted); font-size:.68rem; }
+.pd-external-panel { border:1px solid var(--p-border); border-radius:8px; padding:.65rem .8rem; color:var(--p-text); }
+.pd-external-panel summary { cursor:pointer; font-size:.8rem; font-weight:600; }
 .pd-file-row { display:flex; align-items:center; gap:.5rem; padding:.5rem 0; border-bottom:1px solid var(--p-border); }
 .pd-file-row > i { color:var(--p-accent); }
 .pd-selected-files { display:grid; gap:.35rem; }
