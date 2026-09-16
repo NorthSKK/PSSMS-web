@@ -2,6 +2,25 @@ const { query } = require('../lib/db');
 const { isManagement, verifyTeacherOwnsSubject, verifySessionOwner, verifyAttendanceBatchOwner, verifyMorningBatchOwner } = require('../lib/permissions');
 const { slotsFromRows, expandSlots } = require('../lib/sessionCalendar');
 const { schoolToday } = require('../lib/schoolDate');
+const autoMs = require('./autoMs');
+
+/**
+ * เช็คชื่อเสร็จ = % เวลาเรียนขยับ → จังหวะเดียวที่ต้องทบทวน มส. อัตโนมัติ
+ * ทำเฉพาะวิชา×ห้องที่เพิ่งเช็ค ไม่ใช่ทั้งโรงเรียน (ดู functions/autoMs.js)
+ *
+ * ⚠️ **ห้ามให้ขั้นนี้ล้มทั้งคำขอ** — ครูต้องเช็คชื่อได้เสมอแม้ grade_summary มีปัญหา
+ * (ล้อ `attStats` ใน functions/scores.js ที่ยอมให้รายงานเวลาเรียนพังโดยไม่ล้มทั้งหน้า)
+ *
+ * เรียกผ่าน `autoMs.syncAutoMs` ไม่ใช่ตัวที่ destructure ไว้ เพื่อให้เทสสลับตัวจริง
+ * เป็นตัวที่ throw ได้ แล้วยืนยันว่าการเช็คชื่อยังสำเร็จ
+ */
+async function _syncAutoMsQuietly(target) {
+  try {
+    await autoMs.syncAutoMs(target);
+  } catch (e) {
+    console.error('[autoMs] ทบทวน มส. อัตโนมัติไม่สำเร็จ:', (e && e.message) || e);
+  }
+}
 
 async function saveAttendanceBatch([list], user) {
   if (!Array.isArray(list) || list.length === 0) return { status: 'success', saved: 0 };
@@ -32,6 +51,10 @@ async function saveAttendanceBatch([list], user) {
   } finally {
     client.release();
   }
+  await _syncAutoMsQuietly({
+    subjectCode: first.subjectCode, className: first.className,
+    term: first.term, year: first.year,
+  });
   return { status: 'success', saved: list.length, sessionId };
 }
 
@@ -310,6 +333,9 @@ async function saveMassiveAttendanceGrid([subjectCode, subjectName, className, t
       );
     }
   }
+
+  // โฮมรูมถูกคัดออกใน autoMs.isGradedSubject อยู่แล้ว ไม่ต้องเช็ค isHR ซ้ำที่นี่
+  await _syncAutoMsQuietly({ subjectCode, className, term, year });
 
   return { status: 'success', message: 'บันทึกตารางเช็คชื่อสำเร็จ' };
 }

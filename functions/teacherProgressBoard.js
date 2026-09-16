@@ -62,9 +62,11 @@ async function _loadBoard() {
     query(`SELECT subject_code, class_name FROM subject_config WHERE term=$1 AND year=$2`, [term, year]),
     // grade_summary ไม่มีคอลัมน์ห้อง — ห้องมาจาก users.department ของนักเรียน
     query(
+      // ⚠️ ไม่นับแถวที่ระบบเติม มส. ให้จากเวลาเรียน (ms_source='auto') — คอลัมน์นี้
+      // วัด "ครูกรอกคะแนนไปกี่คน" ถ้านับแถวของระบบด้วย ครูจะดูเหมือนทำงานเสร็จเอง
       `SELECT g.subject_code, u.department AS class, COUNT(*) AS cnt
        FROM grade_summary g JOIN users u ON u.username = g.student_id
-       WHERE g.term=$1 AND g.year=$2
+       WHERE g.term=$1 AND g.year=$2 AND g.ms_source IS DISTINCT FROM 'auto'
        GROUP BY g.subject_code, u.department`,
       [term, year]
     ),

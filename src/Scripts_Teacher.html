@@ -582,6 +582,7 @@ window.renderRiskCards = function(details) {
     }
 
     let grouped = {};
+    let autoByClass = {};
     details.forEach(r => {
         let cls = r.className || 'ไม่ระบุห้อง';
         let subKey = `${r.subjectCode}|||${r.subjectName}`; 
@@ -590,7 +591,10 @@ window.renderRiskCards = function(details) {
         if(!grouped[cls]) grouped[cls] = {};
         if(!grouped[cls][subKey]) grouped[cls][subKey] = { '0': [], 'ร': [], 'มส': [] };
         
-        grouped[cls][subKey][type].push(`<span class="fw-bold text-dark text-nowrap">${r.stdName}</span>`);
+        if (r.auto) autoByClass[cls] = true;
+        grouped[cls][subKey][type].push(
+            `<span class="ams-name"><span class="fw-bold text-dark text-nowrap">${r.stdName}</span>${_riskAutoTag(r)}</span>`
+        );
     });
 
     let html = `<div class="row g-3">`;
@@ -645,13 +649,29 @@ window.renderRiskCards = function(details) {
         
         html += `
                </ul>
-            </div>
+            </div>`;
+        if (autoByClass[cls]) {
+            html += `<div class="card-footer bg-transparent border-0 pt-0 pb-3 px-3">
+                       <span class="ams-note"><i class="fas fa-robot me-1"></i>ป้าย “ระบบเติมให้” = ระบบตั้ง มส. ให้จากเวลาเรียนต่ำกว่า 80% ครูแก้ทับได้ที่หน้า ปพ.5</span>
+                     </div>`;
+        }
+        html += `
           </div>
         </div>`;
     });
     
     html += `</div>`;
     container.innerHTML = html;
+}
+
+// ป้ายบอก "ที่มาของเกรด" ไม่ใช่ระดับความรุนแรง — จึงเงียบกว่าป้าย "ติด มส" เสมอ
+// ⚠️ อ่านจาก r.auto / r.attendancePercent ที่ server ส่งมาเท่านั้น (functions/autoMs.js)
+// ห้ามคำนวณเองว่าแถวไหนเป็นของระบบ — server เป็นคนตัดสินที่เดียว
+function _riskAutoTag(r) {
+    if (!r || !r.auto) return '';
+    const pct = (r.attendancePercent === null || r.attendancePercent === undefined)
+        ? '' : ` · เวลาเรียน ${r.attendancePercent}%`;
+    return `<span class="ams-tag" title="ระบบเติมให้จากเวลาเรียนต่ำกว่า 80% — แก้ได้ที่หน้า ปพ.5"><i class="fas fa-robot"></i>ระบบเติมให้${pct}</span>`;
 }
 
 // 🌟 ฟังก์ชันส่งตัวข้ามมิติไปหน้าบันทึกคะแนน ปพ.5
@@ -675,7 +695,10 @@ window.copyRiskListByClass = function(cls) {
         let sub = `${r.subjectName} (${r.subjectCode})`;
         let type = r.type;
         if (!grouped[sub]) grouped[sub] = { '0': [], 'ร': [], 'มส': [] };
-        grouped[sub][type].push(`${r.stdName}`); 
+        // แถวที่ระบบเติมให้จากเวลาเรียน — บอก % ไปด้วย นักเรียนจะได้รู้ว่าต้องแก้เรื่องอะไร
+        let note = (r.auto && r.attendancePercent !== null && r.attendancePercent !== undefined)
+            ? ` (เวลาเรียน ${r.attendancePercent}%)` : (r.auto ? ' (เวลาเรียนไม่ถึง 80%)' : '');
+        grouped[sub][type].push(`${r.stdName}${note}`); 
     });
 
     let textToCopy = `🚨 แจ้งเตือนนักเรียนกลุ่มเสี่ยง ห้อง ${cls} 🚨\n`;

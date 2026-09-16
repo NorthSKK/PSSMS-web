@@ -27,7 +27,7 @@ async function getTeacherRiskDashboard([teacherId, term, year]) {
             COALESCE(NULLIF(u.full_name,''), att.student_name, gs.student_id) AS std_name,
             gs.subject_code, sc.subject_name,
             COALESCE(NULLIF(att.class,''), NULLIF(hist.old_class,''), u.department, '') AS class_name,
-            gs.grade
+            gs.grade, gs.ms_source, gs.attendance_percent
      FROM grade_summary gs
      LEFT JOIN users u ON u.username = gs.student_id
      LEFT JOIN LATERAL (
@@ -63,6 +63,11 @@ async function getTeacherRiskDashboard([teacherId, term, year]) {
     subjectName: r.subject_name || '',
     stdName: r.std_name || '',
     type: r.grade === '0' ? '0' : r.grade === 'ร' ? 'ร' : 'มส',
+    // ระบบเติม มส. ให้เองเพราะเวลาเรียน <80% ครูยังไม่ได้ตัดสิน (functions/autoMs.js)
+    // หน้าเว็บใช้ติดป้าย "ระบบเติมให้จากเวลาเรียน" — ห้ามคำนวณซ้ำฝั่ง client
+    auto: String(r.ms_source || '') === 'auto',
+    attendancePercent: r.attendance_percent === null || r.attendance_percent === undefined
+      ? null : Number(r.attendance_percent),
   }));
 
   const summary = {

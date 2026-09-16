@@ -134,6 +134,17 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year], us
     }
   } catch (_) { /* attendance optional — don't fail the whole request */ }
 
+  // มส. ที่ระบบเติมให้จากเวลาเรียน (functions/autoMs.js) — หน้า ปพ.5 ใช้แยกให้ออกว่า
+  // `มส` ในช่อง remark ตัวไหนเป็นของระบบ (ป้าย "ระบบเติมให้จากเวลาเรียน")
+  // key เป็น normID เหมือน existingScores/attStats ในไฟล์นี้ **ไม่ใช่ id ดิบ**
+  const autoMsRes = await query(
+    `SELECT student_id FROM grade_summary
+      WHERE subject_code=$1 AND term=$2 AND year=$3 AND ms_source='auto'`,
+    [subjectCode, term, year]
+  );
+  const autoMs = {};
+  for (const r of autoMsRes.rows) autoMs[normID(r.student_id)] = true;
+
   return {
     config: configObj,
     students,
@@ -142,6 +153,7 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year], us
     attStats,
     attDetails,
     attSessions,
+    autoMs,
   };
 }
 
@@ -262,7 +274,10 @@ async function _writeGradeRows(gradeRows, subjectCode, term, year) {
      ON CONFLICT(student_id,subject_code,term,year) DO UPDATE
        SET total_score=EXCLUDED.total_score,
            grade=EXCLUDED.grade,
-           remedial_status=EXCLUDED.remedial_status`,
+           remedial_status=EXCLUDED.remedial_status,
+           -- ครูกดบันทึก ปพ.5 = แถวนี้เป็นของครูแล้ว มส. อัตโนมัติต้องไม่แตะอีก
+           -- ทั้งเขียนทับและถอนคืน (ดู functions/autoMs.js)
+           ms_source=NULL`,
     [
       filtered.map(r => toStr(r.studentId)),
       Array(n).fill(subjectCode),
@@ -366,10 +381,14 @@ async function saveAllInOneWithConfig([payload], user) {
     // A student whose grade is no longer determinable must not keep an old row:
     // clearing a ร/มส remark used to leave the stale grade behind forever, so the
     // risk card kept reporting a student the teacher had already un-flagged.
+    // ⚠️ ห้ามลบแถวที่ระบบเติมให้จากเวลาเรียน — นักเรียนที่ยังกรอกคะแนนไม่ครบแต่
+    // เวลาเรียนต่ำกว่า 80% ต้องคง มส. ไว้ ไม่งั้นทุกครั้งที่ autosave ของ ปพ.5 ทำงาน
+    // แถว auto จะถูกล้างทิ้งแล้วรอจนกว่าจะมีการเช็คชื่อครั้งถัดไปถึงจะกลับมา
     if (incompleteIds.length > 0) {
       await query(
         `DELETE FROM grade_summary
-          WHERE subject_code=$1 AND term=$2 AND year=$3 AND student_id = ANY($4)`,
+          WHERE subject_code=$1 AND term=$2 AND year=$3 AND student_id = ANY($4)
+            AND ms_source IS DISTINCT FROM 'auto'`,
         [subjectCode, String(term), String(year), incompleteIds]
       );
     }

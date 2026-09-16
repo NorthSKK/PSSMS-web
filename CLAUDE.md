@@ -300,6 +300,8 @@ web/
 │   └── assets.js                non-GAS-style routes
 │                                (`/manual` กับ `/api/app-info` อยู่ใน server.js ไม่ใช่ที่นี่)
 ├── functions/                   one file per logical domain
+│   ├── autoMs.js               ⭐ มส. อัตโนมัติจากเวลาเรียน — กติกา "ใครชนะใคร"
+│   │                              อยู่ที่นี่ที่เดียว (hook ตอนเช็คชื่อ + backfill ใช้ร่วมกัน)
 │   ├── attendanceReport.js      ⭐ shared formula: getSemesterReport,
 │   │                              getAllSubjectsReport, getTeacherAtRiskDashboard
 │   ├── attendance.js            saveAttendanceBatch, lesson record, grids
@@ -399,7 +401,7 @@ PK ที่ระบุคือ composite/primary keys ที่สำคั�
 | `score_database` | uid, student_id, subject_code, indicator_id, **score TEXT**, term, year | PK `(student_id, subject_code, indicator_id, term, year)` — `score` เป็น TEXT เพราะ remark indicator เก็บ `'-'`/`'ร'`/`'มส'` |
 | `score_history` | id, timestamp, teacher_id, student_id, subject_code, indicator_id, **old_score TEXT, new_score TEXT**, term, year | audit log, scores เป็น TEXT |
 | `qualitative_assess` | student_id, subject_code, term, year, **char1-4, char_total, char_grade, read1-4, read_total, read_grade, comp** | PK `(student_id, subject_code, term, year)` |
-| `grade_summary` | student_id, subject_code, total_score, grade, remedial_status, attendance_percent, term, year | ใช้สำหรับ grade-based risk card (0, ร, มส.) |
+| `grade_summary` | student_id, subject_code, total_score, grade, remedial_status, attendance_percent, term, year, **ms_source** | ใช้สำหรับ grade-based risk card (0, ร, มส.) · `ms_source='auto'` = ระบบเติม มส. ให้จากเวลาเรียน <80% (ถอนคืนเองได้) · NULL = ครูเขียน ระบบห้ามแตะ (`db/migrations/2026-09-16-grade-summary-ms-source.sql`) |
 | `print_config` | header config สำหรับพิมพ์ ปพ.5 — `sys_data` (jsonb) เก็บ `school_name` `school_address` `principal_name` `measure_head` `head_*` กรอกจากการ์ด "ส่วนจัดการของผู้ดูแลระบบ" บนหน้า `Page_Score_Entry` · ⚠️ **`savePrintConfigData` เขียน `sys_data` ทับทั้งก้อน ไม่ได้ merge** ฟิลด์ที่ฟอร์มไม่ส่งมาหายทันทีที่กดบันทึก เพิ่มฟิลด์ใหม่ต้องแตะ 3 ที่: markup, ตัวโหลด, `sysObj` ตอน save (เทส `test/print_config.test.js`) |
 
 ### Clubs
@@ -777,6 +779,80 @@ calculateGrade: ≥80→4  ≥75→3.5  ≥70→3  ≥65→2.5  ≥60→2  ≥55
 เหตุผลที่ต้อง DELETE ไม่ใช่แค่ skip: ครูตั้ง remark `มส` (bypass gate → เขียนแถว)
 แล้วเปลี่ยนใจยกเลิกกลับเป็น `-` ถ้าแค่ skip แถว `มส` เดิมจะค้างตลอดไป
 การ์ด "นักเรียนกลุ่มเสี่ยง" ก็จะรายงานเด็กที่ครูปลดธงไปแล้ว
+
+⚠️ **`DELETE` ตัวนี้ต้องไม่แตะแถว `ms_source='auto'`** — นักเรียนที่กรอกคะแนนยังไม่ครบ
+แต่เวลาเรียนต่ำกว่า 80% ต้องคง มส. ที่ระบบเติมให้ไว้ ไม่งั้นทุกครั้งที่ autosave ของ ปพ.5
+ทำงาน (ทุก 3 วิ) แถวจะถูกล้างแล้วรอจนกว่าจะมีการเช็คชื่อครั้งถัดไปถึงจะกลับมา
+
+### มส. อัตโนมัติจากเวลาเรียน — `functions/autoMs.js`
+
+การ์ด "นักเรียนกลุ่มเสี่ยง (0, ร, มส.)" อ่านจาก `grade_summary` ส่วนการ์ด
+"กระดานแจ้งเตือนกลุ่มเสี่ยง" คำนวณสดจากเวลาเรียน — เดิมสองการ์ดไม่ตรงกันทั้งเทอม
+เพราะ `grade_summary` มีแถวก็ต่อเมื่อครูเปิดหน้า ปพ.5 แล้วกดบันทึก (หน้านั้นเติม
+`มส` ให้ช่อง remark อยู่แล้วเมื่อ %<80 แต่ค่าอยู่แค่ใน DOM)
+
+`syncAutoMs({subjectCode, className, term, year})` เขียน/ถอน `มส` ให้เอง ·
+`planAutoMs(...)` เป็นตัวเดียวกันแบบอ่านอย่างเดียว (dry-run ของ backfill ใช้ตัวนี้)
+
+**ลำดับที่ชนะกัน:**
+
+| กรณี | ระบบทำอะไร |
+|---|---|
+| ครูตั้ง remark เองใน `score_database` (`indicator_id='remark'` ค่าไม่ใช่ `''`/`'-'`) | **ไม่แตะ** |
+| มีแถว `grade_summary` ที่ `ms_source` ไม่ใช่ `'auto'` | **ไม่แตะ** ทั้งเขียนและลบ |
+| เวลาเรียน < 80% | upsert `grade='มส'` `remedial_status='มส'` `attendance_percent` `ms_source='auto'` |
+| เวลาเรียน ≥ 80% และแถวเดิมเป็น `'auto'` | **DELETE ทิ้ง** ไม่ใช่ปล่อยค้าง |
+
+- **จังหวะที่ทำงาน = หลังเช็คชื่อสำเร็จ** (`saveAttendanceBatch`,
+  `saveMassiveAttendanceGrid`) เฉพาะวิชา×ห้องที่เพิ่งเช็ค ไม่ใช่ทั้งโรงเรียน
+  ⚠️ ครอบ try/catch แล้ว log อย่างเดียว (`_syncAutoMsQuietly`) — **ครูต้องเช็คชื่อได้เสมอ**
+  แม้ `grade_summary` มีปัญหา (ล้อ `attStats` ใน `functions/scores.js`)
+- ⚠️ **สูตร % มาจาก `getSemesterReport` เท่านั้น ห้ามเขียนใหม่** —
+  `totalCoursePeriods = periodsPerWeek × 20`, `totalMissed = absent + leave`
+  **ห้ามใช้ `COUNT(*)` ของ attendance เป็นตัวหาร**
+- ⚠️ **id ต้องเป็นรหัสดิบ (`'01903'`)** — `getSemesterReport` คืน `s.id` ดิบ ส่วน
+  `attStats` ใน `functions/scores.js` key ด้วย `normID()` ผสมสองแบบ = lookup ไม่เจอแบบเงียบ ๆ
+- โฮมรูม (`HR`), แนะแนว/วิถีพุทธ (`-`) และชุมนุม (`CLUB_*`) ไม่เข้าระบบนี้ —
+  `isGradedSubject()` ตัดออกด้วย `subjectPrefixOf()` ที่คืน `''` ให้ทั้งสามแบบ
+- ครูกดบันทึก ปพ.5 แล้วแถวกลายเป็นของครูทันที (`_writeGradeRows` ตั้ง `ms_source=NULL`
+  ใน `DO UPDATE`) จากนั้นระบบไม่แตะอีกตลอดไป · `db/backfill-grade-summary.js` ก็เช่นกัน
+- **ตัวนับ "กรอกคะแนนแล้ว" ของกระดานติดตามงานครูต้องกรอง `ms_source='auto'` ออก** —
+  ไม่งั้นครูจะดูเหมือนทำงานเสร็จเองทั้งที่ยังไม่ได้กรอกอะไร
+- เทสอยู่ที่ `test/auto_ms.test.js` (ฝั่ง server) และ `test/client_guards.test.js`
+  (ฝั่งหน้าเว็บ — ล็อกว่าป้ายอ่านจาก field ไม่ใช่เดาจาก %)
+
+#### ฝั่งหน้าเว็บ — บอกครูว่าแถวไหนระบบเติมให้
+
+⚠️ **ห้ามคำนวณฝั่ง client ว่าแถวไหนเป็นของระบบ** — server ตัดสินที่เดียวใน
+`functions/autoMs.js` หน้าเว็บอ่าน field ที่ส่งมาอย่างเดียว · ของเดิมเดาเอง
+(`autoMS = pct < 80 && ยังไม่มี remark`) ซึ่งโกหกสองทาง: ขึ้นไอคอนทั้งที่ยังไม่มีอะไร
+ถูกบันทึกลง `grade_summary` เลย และขึ้นให้แถวที่ระบบจงใจไม่แตะ (ครูตั้ง remark เองไว้)
+
+| ที่ | อ่านจาก | สิ่งที่ครูเห็น |
+|---|---|---|
+| การ์ด "นักเรียนกลุ่มเสี่ยง (0, ร, มส.)" (`renderRiskCards` · `Scripts_Teacher.html`) | `details[].auto` + `details[].attendancePercent` | ชิป `🤖 ระบบเติมให้ · เวลาเรียน 78.33%` ต่อท้ายชื่อ + เชิงอรรถใต้การ์ด |
+| ปุ่มคัดลอกรายชื่อส่ง LINE (`copyRiskListByClass`) | field เดียวกัน | `- ชื่อนักเรียน (เวลาเรียน 78.33%)` |
+| ช่อง remark หน้า ปพ.5 (`renderAllInOneTable` · `Scripts_Score.html`) | `autoMs[normID]` → `currentAutoMs` | ไอคอน 🤖 มุมช่อง + `title` บอกที่มา · select โชว์ `มส` ให้ตรงกับ DB |
+
+- **`autoMs` key ด้วย `normID`** เหมือน `attStats`/`existingScores` ในไฟล์เดียวกัน
+  (`'01903'` → `'1903'`) ผสมกับ id ดิบเมื่อไหร่ = lookup ไม่เจอแบบเงียบ ๆ
+- `currentAutoMs` ประกาศข้าง `currentAttStats` และต้องถูกล้างใน `loadPage`
+  (`Scripts_Core.html`) คู่กัน ไม่งั้นค่าของวิชาก่อนหน้าค้างข้ามหน้า
+- **ครูแก้ทับได้เสมอ** — select ยังแก้ได้ตามปกติ พอครูเลือกเอง `updateRemarkInstant`
+  ยิงไป backend แล้วแถวเปลี่ยนเจ้าของ (`ms_source=NULL`) ระบบไม่แตะอีก
+- ⚠️ **ป้ายนี้บอก "ที่มาของเกรด" ไม่ใช่ระดับความรุนแรง** จึงต้องเงียบกว่าป้าย `ติด มส`
+  เดิมเสมอ · CSS `ams-*` ใน `Styles.html` ใช้ token `--p-chip-bg` / `--p-chip-text` /
+  `--p-border-strong` ล้วน เพราะทั้งหมดถูกนิยามใหม่ใน `body.dark-mode` อยู่แล้ว
+  **ห้ามใช้ `table-warning` / `bg-info` / `text-dark` / `alert-*` ของ bootstrap**
+- เชิงอรรถขึ้นเฉพาะการ์ดห้องที่มีแถว auto จริง (`autoByClass[cls]`) ไม่ใช่ทุกใบ
+
+```bash
+node db/backfill-auto-ms.js                    # dry-run (default)
+node db/backfill-auto-ms.js --term=1 --year=2569
+node db/backfill-auto-ms.js --apply            # เขียนจริง
+```
+ไล่ทุกคู่ (วิชา × ห้อง) ที่มีการเช็คชื่อแล้วส่งให้ `planAutoMs`/`syncAutoMs` ตัดสิน
+**ห้ามก๊อปสูตรไปไว้ในสคริปต์**
 
 ### Backfill `grade_summary`
 ```bash
@@ -2038,6 +2114,8 @@ test/
 ├── permissions.test.js  auth, ADMIN_ONLY, ownership, admin bypass
 ├── attendance.test.js   session overwrite, teacher_id จาก JWT, getSemesterReport, 'โดด'
 ├── scores.test.js       ล้างคะแนน=ลบแถว, completeness gate, remark, leading zero
+├── auto_ms.test.js      มส. อัตโนมัติ — ครูชนะระบบ, ถอนคืนเมื่อ %กลับขึ้น, HR/CLUB ไม่โดน,
+│                        เช็คชื่อยังสำเร็จแม้ขั้นนี้พัง (คืน attendance ของ seed ใน after())
 ├── student_watch.test.js  4 อาการ, อันดับสะสม, ช่วงเวลา/เดือน, วิชาที่หาย
 ├── progress_board.test.js กระดานติดตามงานครู (HR จาก morning_activity, สิทธิ์)
 ├── school_date.test.js  "วันนี้" ตามเวลาไทย — **ผ่านทุก TZ** (`TZ=UTC npm test`)
@@ -2046,7 +2124,8 @@ test/
 ├── timetable_admin.test.js  แก้/ลบคาบเรียน — ช่องว่างต้องถูกปฏิเสธ ไม่ใช่เขียนทับเงียบ ๆ
 ├── student_clubs.test.js  ลงทะเบียนชุมนุม + ห้ามมี `<script>` ในไฟล์ Page_*.html
 ├── client_guards.test.js  กติกาฝั่งหน้าเว็บที่ไม่มีอะไรจับตอน build (ตัวเริ่มหน้ามีจริง,
-│                          oninput ของช่องคะแนน, ไม่ยิงซ้ำ error สิทธิ์, หน้าล่าสุดผูกกับเจ้าของ)
+│                          oninput ของช่องคะแนน, ไม่ยิงซ้ำ error สิทธิ์, หน้าล่าสุดผูกกับเจ้าของ,
+│                          ป้าย มส. อัตโนมัติอ่านจาก field ไม่ใช่เดาจาก %)
 ├── setup_checklist.test.js  รายการตั้งค่าเริ่มต้นของโรงเรียนใหม่
 ├── print_config.test.js  หัวกระดาษ ปพ.5 — ฟิลด์หายเมื่อฟอร์มไม่ส่งมา
 ├── substitute_timetable.test.js  คาบสอนแทนในตารางวันนี้ + สิทธิ์เช็คชื่อของครูสอนแทน

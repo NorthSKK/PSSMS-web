@@ -219,6 +219,9 @@ CREATE TABLE IF NOT EXISTS grade_summary (
   attendance_percent  NUMERIC,
   term                TEXT NOT NULL,
   year                TEXT NOT NULL,
+  -- 'auto' = ระบบเติม มส. ให้จากเวลาเรียน <80% (functions/autoMs.js) ถอนคืนเองได้
+  -- NULL   = ครูเป็นคนเขียน — ระบบห้ามแตะทั้งเขียนทับและลบ
+  ms_source           TEXT,
   PRIMARY KEY (student_id, subject_code, term, year)
 );
 

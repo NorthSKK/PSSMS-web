@@ -93,6 +93,43 @@ test('ช่องกรอกคะแนนต้องใช้ oninput ไ�
   assert.ok(/oninput="calcEvalRow\(/.test(score), 'ช่องประเมินต้องเรียก calcEvalRow ผ่าน oninput');
 });
 
+// ── ป้าย "ระบบเติมให้" ต้องอ่านจาก server ห้ามเดาจาก % ฝั่งหน้าเว็บ ──────────
+//
+// เดิมหน้า ปพ.5 ตั้ง `autoMS = (pct < 80 && ยังไม่มี remark)` เองบนหน้าจอ แล้วโชว์
+// ไอคอน 🤖 ทั้งที่ยังไม่มีอะไรถูกบันทึกลง grade_summary เลย และขึ้นให้แถวที่ระบบ
+// จงใจไม่แตะด้วย (ครูตั้ง remark เองไว้) ตอนนี้ server ตัดสินที่เดียวใน
+// functions/autoMs.js แล้วส่งมาเป็น field — ฝั่งนี้มีหน้าที่แสดงอย่างเดียว
+test('ป้าย มส. อัตโนมัติต้องอ่านจาก field ที่ server ส่งมา', () => {
+  const score = read('Scripts_Score.html');
+  assert.ok(/let currentAutoMs = \{\};/.test(score), 'ต้องมีตัวแปรเก็บ autoMs จาก server');
+  assert.ok(/currentAutoMs = res\.autoMs \|\| \{\};/.test(score),
+    'ต้องรับค่ามาจาก res.autoMs ของ getAllInOneScoreGridData');
+  assert.ok(/let autoMS = currentAutoMs\[safeStdId\] === true;/.test(score),
+    'autoMS ต้องมาจาก currentAutoMs ไม่ใช่เดาจาก pct');
+  assert.ok(!/autoMS\s*=\s*true/.test(score),
+    'ห้ามตั้ง autoMS = true เองฝั่งหน้าเว็บ (เท่ากับกลับไปเดาจาก pct)');
+  assert.ok(/title="ระบบเติมให้จากเวลาเรียนต่ำกว่า 80%[^"]*"/.test(score),
+    'ไอคอน 🤖 ต้องมี title ภาษาไทยบอกที่มาและบอกว่าแก้ได้');
+
+  const teacher = read('Scripts_Teacher.html');
+  assert.ok(/function _riskAutoTag\(/.test(teacher), 'การ์ดกลุ่มเสี่ยงต้องมีตัวสร้างป้ายที่มา');
+  assert.ok(/r\.auto/.test(teacher) && /r\.attendancePercent/.test(teacher),
+    'ป้ายต้องอ่านจาก r.auto / r.attendancePercent ที่ server ส่งมา');
+  const tag = teacher.slice(teacher.indexOf('function _riskAutoTag('));
+  const body = tag.slice(0, tag.indexOf('\n}'));
+  assert.ok(!/\b80\b/.test(body.replace(/title="[^"]*"/g, '')),
+    '_riskAutoTag ต้องไม่คำนวณเกณฑ์ 80% เอง อ่าน r.auto อย่างเดียว');
+  assert.ok(!/(table-warning|bg-info|alert-)/.test(
+    teacher.slice(teacher.indexOf('ams-tag') - 400, teacher.indexOf('ams-tag') + 400)),
+    'ป้ายต้องไม่ใช้สี hardcode โหมดสว่างของ bootstrap');
+
+  const styles = read('Styles.html');
+  assert.ok(/\.ams-tag\s*\{/.test(styles), 'ต้องมี CSS ของป้าย ams-tag');
+  const css = styles.slice(styles.indexOf('.ams-tag {'), styles.indexOf('.ams-tag i'));
+  assert.ok(/var\(--p-chip-bg\)/.test(css) && /var\(--p-chip-text\)/.test(css),
+    'ป้ายต้องใช้ token ที่ถูกนิยามใหม่ใน body.dark-mode ไม่ใช่สีคงที่โหมดสว่าง');
+});
+
 // ── error จากเซิร์ฟเวอร์ห้ามถูกยิงซ้ำแบบ "สัญญาณขัดข้อง" ─────────────────────
 //
 // เจอตอน ผอ. เปิดหน้าสารบรรณ: error สิทธิ์ถูกยิงซ้ำ 3 รอบพร้อมขึ้น

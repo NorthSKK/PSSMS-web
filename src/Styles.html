@@ -1949,6 +1949,21 @@ body.dark-mode .pssms-dept-general {
 }
 .badge.sw-badge-skip { background: var(--sw-skip); }
 
+/* ── ป้าย "ระบบเติมให้" บนการ์ดนักเรียนกลุ่มเสี่ยง (มส. อัตโนมัติจากเวลาเรียน) ──
+   บอก **ที่มาของเกรด** ไม่ใช่ระดับความรุนแรง จึงต้องเงียบกว่าป้าย "ติด มส" เสมอ
+   ใช้ token ล้วน (--p-chip-*) เพราะทั้งสองค่าถูกนิยามใหม่ใน body.dark-mode อยู่แล้ว
+   — ห้ามใช้ badge สี hardcode ของ bootstrap ที่อ่านไม่ออกในโหมดมืด */
+.ams-name { white-space: nowrap; }
+.ams-tag {
+  display: inline-block; margin-left: .25rem;
+  font-size: .62rem; font-weight: 600; padding: 0 7px;
+  border-radius: 999px; white-space: nowrap; vertical-align: middle;
+  background: var(--p-chip-bg); color: var(--p-chip-text);
+  border: 1px solid var(--p-border-strong);
+}
+.ams-tag i { margin-right: .2rem; opacity: .8; }
+.ams-note { display: block; font-size: .68rem; line-height: 1.4; color: var(--p-text-muted); }
+
 .sw-tag-away { background: var(--sw-away); }
 .sw-tag-fled { background: var(--sw-fled); }
 .sw-tag-skip { background: var(--sw-skip); }
