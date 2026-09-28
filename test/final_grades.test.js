@@ -78,6 +78,8 @@ test('กดสรุปแล้ว เด็กที่มีช่องว�
   const risk = await ok('getTeacherRiskDashboard', ['teacher1', TERM, YEAR], 'teacher1');
   const zeros = risk.details.filter(d => d.subjectCode === SUB && d.type === '0');
   assert.equal(zeros.length, M6_STUDENTS.length - 1);
+  // ใบพิมพ์แบบรายงานมีคอลัมน์รหัสประจำตัว — ต้องเป็นรหัสดิบมี 0 นำหน้า
+  assert.deepEqual(zeros.map(z => z.stdId).sort(), M6_STUDENTS.filter(id => id !== '01903'));
   const ms = risk.details.find(d => d.subjectCode === SUB && d.type === 'มส');
   assert.equal(ms && ms.auto, true, 'มส. อัตโนมัติต้องคงอยู่');
 });

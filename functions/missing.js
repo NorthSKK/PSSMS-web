@@ -13,7 +13,7 @@ const { MAX_SUBSTITUTE_PER_DAY } = require('./substitutePolicy');
 
 // ============================================================
 // getTeacherRiskDashboard — grade-based risk (0, ร, มส)
-// returns { status, summary: {zero,r,ms}, details: [{className,subjectCode,subjectName,stdName,type}] }
+// returns { status, summary: {zero,r,ms}, details: [{stdId,className,subjectCode,subjectName,stdName,type}] }
 // ============================================================
 async function getTeacherRiskDashboard([teacherId, term, year]) {
   // LEFT JOIN users — เดิมเป็น INNER ทำให้นักเรียนที่ถูก promote/ลบออกจาก users
@@ -58,6 +58,8 @@ async function getTeacherRiskDashboard([teacherId, term, year]) {
   );
 
   const details = rows.map(r => ({
+    // รหัสดิบ ('01903') — ใบพิมพ์แบบรายงานมีคอลัมน์รหัสประจำตัว เดิมไม่ได้ส่งมาเลยขึ้น '-' ทุกแถว
+    stdId: r.student_id || '',
     className: r.class_name || '',
     subjectCode: r.subject_code || '',
     subjectName: r.subject_name || '',

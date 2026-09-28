@@ -803,19 +803,98 @@ window.copyRiskListByClass = function(cls) {
 // ==========================================
 // 🖨️ ระบบพิมพ์รายงานนักเรียนกลุ่มเสี่ยง (0, ร, มส.) (แนวนอน)
 // ==========================================
+// ==========================================
+// 🖨️ พิมพ์แบบรายงาน — เลือกวิชา×ห้องก่อนพิมพ์
+// บางวิชาเป็นซ่อมเสริม ไม่ต้องส่งรายงาน ครูติ๊กออกได้ · จำตัวที่ติ๊กออกไว้ในเครื่อง
+// (localStorage ต่อครู — ความสะดวกของคนกด ไม่ใช่ข้อมูลที่ต้องแชร์) รอบหน้าไม่ต้องติ๊กใหม่
+// ==========================================
+const _rpKey = (s) => `${s.subjectCode}|${s.className}`;
+function _rpSkipStoreKey() {
+    const u = getSessionUser();
+    return `pssms_risk_print_skip_${u ? u.id : ''}`;
+}
+function _rpLoadSkip() {
+    try { return new Set(JSON.parse(localStorage.getItem(_rpSkipStoreKey()) || '[]')); } catch (e) { return new Set(); }
+}
+function _rpSaveSkip(set) {
+    try { localStorage.setItem(_rpSkipStoreKey(), JSON.stringify(Array.from(set))); } catch (e) {}
+}
+
+function _rpEnsureModal() {
+    if (document.getElementById('riskPrintPickModal')) return;
+    const el = document.createElement('div');
+    el.innerHTML =
+      '<div class="modal fade" id="riskPrintPickModal" tabindex="-1">' +
+        '<div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">' +
+          '<div class="modal-header"><h5 class="modal-title"><i class="fas fa-print me-2"></i>เลือกวิชาที่จะพิมพ์</h5>' +
+            '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+          '<div class="modal-body">' +
+            '<span class="ams-note mb-2">ติ๊กออกวิชาที่ไม่ต้องรายงาน เช่น วิชาซ่อมเสริม · ระบบจำไว้ให้ในเครื่องนี้</span>' +
+            '<div id="rpBody"></div>' +
+          '</div>' +
+          '<div class="modal-footer">' +
+            '<button type="button" class="btn btn-soft btn-sm" data-bs-dismiss="modal">ยกเลิก</button>' +
+            '<button type="button" class="btn btn-danger btn-sm" id="rpConfirm" onclick="_rpConfirm()">พิมพ์</button>' +
+          '</div>' +
+        '</div></div></div>';
+    document.body.appendChild(el.firstChild);
+}
+
 window.printRiskStudents = function() {
     if (!window.currentRiskDetails || window.currentRiskDetails.length === 0) {
         if(typeof showToast === 'function') showToast('✅ ไม่มีนักเรียนกลุ่มเสี่ยงในขณะนี้ครับ', 'success');
         else showAlert('ไม่มีนักเรียนกลุ่มเสี่ยงในขณะนี้ครับ');
         return;
     }
+    const groups = {};
+    window.currentRiskDetails.forEach(r => {
+        const k = _rpKey(r);
+        if (!groups[k]) groups[k] = { key: k, subjectCode: r.subjectCode, subjectName: r.subjectName, className: r.className, n: 0 };
+        groups[k].n++;
+    });
+    window._rpGroups = Object.values(groups).sort((a, b) =>
+        a.subjectCode.localeCompare(b.subjectCode) || String(a.className).localeCompare(String(b.className)));
+    const skip = _rpLoadSkip();
 
+    _rpEnsureModal();
+    document.getElementById('rpBody').innerHTML = window._rpGroups.map((g, i) =>
+        `<label class="d-flex align-items-center gap-2 border-bottom py-2 small" style="cursor:pointer;">
+           <input type="checkbox" class="form-check-input rp-pick" data-idx="${i}" ${skip.has(g.key) ? '' : 'checked'} onchange="_rpCount()">
+           <span class="flex-grow-1"><b>${_riskEsc(g.subjectName || g.subjectCode)}</b>
+             <span class="text-muted">(${_riskEsc(g.subjectCode)})</span> · ห้อง ${_riskEsc(g.className || '-')}</span>
+           <span class="rw-chip">${g.n} คน</span>
+         </label>`).join('');
+    _rpCount();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('riskPrintPickModal')).show();
+};
+
+function _rpCount() {
+    const picked = Array.from(document.querySelectorAll('#rpBody .rp-pick:checked'))
+        .reduce((n, el) => n + window._rpGroups[Number(el.dataset.idx)].n, 0);
+    const btn = document.getElementById('rpConfirm');
+    btn.disabled = picked === 0;
+    btn.textContent = `พิมพ์ ${picked} รายการ`;
+}
+
+window._rpConfirm = function() {
+    const skip = _rpLoadSkip();
+    const keep = new Set();
+    document.querySelectorAll('#rpBody .rp-pick').forEach(el => {
+        const g = window._rpGroups[Number(el.dataset.idx)];
+        if (el.checked) { keep.add(g.key); skip.delete(g.key); } else skip.add(g.key);
+    });
+    _rpSaveSkip(skip);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('riskPrintPickModal')).hide();
+    _printRiskReport(window.currentRiskDetails.filter(r => keep.has(_rpKey(r))));
+};
+
+function _printRiskReport(details) {
     const user = getSessionUser();
     const term = user ? user.currentTerm : '-';
     const year = user ? user.currentYear : '-';
     const teacherName = user ? user.name : '-';
 
-    let sortedData = [...window.currentRiskDetails].sort((a, b) => {
+    let sortedData = [...details].sort((a, b) => {
         if(a.className !== b.className) return a.className.localeCompare(b.className);
         if(a.subjectCode !== b.subjectCode) return a.subjectCode.localeCompare(b.subjectCode);
         if(a.type !== b.type) return a.type.localeCompare(b.type);
@@ -920,7 +999,7 @@ window.printRiskStudents = function() {
     doc.open();
     doc.write(html);
     doc.close();
-};
+}
 
 // ==========================================
 // Teacher Clubs Page (Page_Teacher_Clubs)
