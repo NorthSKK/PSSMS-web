@@ -401,7 +401,7 @@ PK ที่ระบุคือ composite/primary keys ที่สำคั�
 | `score_database` | uid, student_id, subject_code, indicator_id, **score TEXT**, term, year | PK `(student_id, subject_code, indicator_id, term, year)` — `score` เป็น TEXT เพราะ remark indicator เก็บ `'-'`/`'ร'`/`'มส'` |
 | `score_history` | id, timestamp, teacher_id, student_id, subject_code, indicator_id, **old_score TEXT, new_score TEXT**, term, year | audit log, scores เป็น TEXT |
 | `qualitative_assess` | student_id, subject_code, term, year, **char1-4, char_total, char_grade, read1-4, read_total, read_grade, comp** | PK `(student_id, subject_code, term, year)` |
-| `grade_summary` | student_id, subject_code, total_score, grade, remedial_status, attendance_percent, term, year, **ms_source** | ใช้สำหรับ grade-based risk card (0, ร, มส.) · `ms_source='auto'` = ระบบเติม มส. ให้จากเวลาเรียน <80% (ถอนคืนเองได้) · NULL = ครูเขียน ระบบห้ามแตะ (`db/migrations/2026-09-16-grade-summary-ms-source.sql`) |
+| `grade_summary` | student_id, subject_code, total_score, grade, remedial_status, attendance_percent, term, year, **ms_source** | ใช้สำหรับ grade-based risk card (0, ร, มส.) · `ms_source='auto'` = ระบบเติม มส. ให้จากเวลาเรียน <80% (ถอนคืนเองได้) · `'final'` = ครูกด "สรุปเกรดส่งรายงาน" (`functions/finalGrades.js`) autosave ห้ามลบ · NULL = autosave ของ ปพ.5 เขียน ระบบห้ามแตะ (`db/migrations/2026-09-16-grade-summary-ms-source.sql`) |
 | `print_config` | header config สำหรับพิมพ์ ปพ.5 — `sys_data` (jsonb) เก็บ `school_name` `school_address` `principal_name` `measure_head` `head_*` กรอกจากการ์ด "ส่วนจัดการของผู้ดูแลระบบ" บนหน้า `Page_Score_Entry` · ⚠️ **`savePrintConfigData` เขียน `sys_data` ทับทั้งก้อน ไม่ได้ merge** ฟิลด์ที่ฟอร์มไม่ส่งมาหายทันทีที่กดบันทึก เพิ่มฟิลด์ใหม่ต้องแตะ 3 ที่: markup, ตัวโหลด, `sysObj` ตอน save (เทส `test/print_config.test.js`) |
 
 ### Clubs
@@ -467,6 +467,8 @@ async function fnName([arg1, arg2, arg3]) { ... }
   `[studentId, remark, term, year]` (4 ตัว) → `remark` รับค่า subjectCode ไป
   ส่วนค่าจริงหล่นหาย. คืน `{success, val}` เพราะ frontend เช็ค `res.success`
   ไม่ใช่ `res.status` (ต่างจาก write function อื่น)
+- `finalizeGrades(subjectCode, className, term, year)` — **4 args** ทีละ วิชา×ห้อง
+  · `getFinalGradePreview(teacherId, term, year)` — 3 args
 - `registerToClub(studentId, clubId)` — **2 args** · `unregisterFromClub(studentId)` — **1 arg**
   ชื่อ/ห้อง/เทอม/ปี **ไม่รับจาก client** — ชื่อกับห้องอ่านสดจาก `users` เทอม/ปีจากค่า active
   ตัวตนผ่าน `resolveStudentId` (นักเรียนลงให้ตัวเองเท่านั้น) · เดิม backend รับ 7 ตัว
@@ -780,9 +782,29 @@ calculateGrade: ≥80→4  ≥75→3.5  ≥70→3  ≥65→2.5  ≥60→2  ≥55
 แล้วเปลี่ยนใจยกเลิกกลับเป็น `-` ถ้าแค่ skip แถว `มส` เดิมจะค้างตลอดไป
 การ์ด "นักเรียนกลุ่มเสี่ยง" ก็จะรายงานเด็กที่ครูปลดธงไปแล้ว
 
-⚠️ **`DELETE` ตัวนี้ต้องไม่แตะแถว `ms_source='auto'`** — นักเรียนที่กรอกคะแนนยังไม่ครบ
-แต่เวลาเรียนต่ำกว่า 80% ต้องคง มส. ที่ระบบเติมให้ไว้ ไม่งั้นทุกครั้งที่ autosave ของ ปพ.5
-ทำงาน (ทุก 3 วิ) แถวจะถูกล้างแล้วรอจนกว่าจะมีการเช็คชื่อครั้งถัดไปถึงจะกลับมา
+⚠️ **`DELETE` ตัวนี้ลบได้เฉพาะแถว `ms_source IS NULL`** — ไม่แตะ `'auto'` (นักเรียนที่กรอก
+คะแนนยังไม่ครบแต่เวลาเรียนต่ำกว่า 80% ต้องคง มส. ไว้ ไม่งั้นทุก 3 วิแถวถูกล้างแล้วรอจนเช็คชื่อ
+ครั้งถัดไป) และไม่แตะ `'final'` (ครูกดสรุปเกรดยืนยันแล้วว่าช่องว่าง = 0 ลบเมื่อไหร่ เกรด 0
+หายทั้งห้องทันทีที่แก้ช่องเดียว)
+
+### สรุปเกรดส่งรายงาน — `functions/finalGrades.js`
+
+gate ข้างบนทำให้เด็กที่**ไม่ส่งงาน/ไม่มาสอบไม่เคยขึ้น "ติด 0"** แม้ท้ายเทอม ทั้งที่หน้า ปพ.5
+แสดง 0 (calcRow นับช่องว่าง = 0) — ระบบแยก "ยังไม่ได้กรอก" กับ "ไม่ส่ง" เองไม่ได้
+ครูจึงต้องกดยืนยันเอง · ปุ่ม **สรุปเกรดส่งรายงาน** บนการ์ดนักเรียนกลุ่มเสี่ยง
+
+| RPC | args | |
+|---|---|---|
+| `getFinalGradePreview` | `(teacherId, term, year)` | อ่านอย่างเดียว ทุก วิชา×ห้อง ที่สอน + ยอด 0/ร/มส/ช่องว่าง · id จาก JWT ถ้าไม่ใช่ Admin/Executive |
+| `finalizeGrades` | `(subjectCode, className, term, year)` | เขียนทีละ วิชา×ห้อง · `verifyTeacherOwnsSubject` |
+
+- **คิดใหม่ทั้งห้องจาก `score_database` ฝั่ง server** สูตรเดียวกับ calcRow (`computeGrade`)
+  ไม่รับเกรดจาก client · รายชื่อ = `users` ที่ `department` = ห้อง, `status='ปกติ'`
+- กดได้ตลอด กดซ้ำ = คิดใหม่จากคะแนนล่าสุด (แก้แถวเก่าที่ผิดด้วย) · ไม่แตะแถว `'auto'`
+- เขียน `ms_source='final'` · autosave ยังเขียนทับได้เมื่อเด็กคนนั้นกรอกครบ (กลายเป็น NULL)
+  แต่ถ้าแก้คะแนนแล้วยังไม่ครบ แถว final **ค้างค่าเดิมจนกว่าครูจะกดสรุปอีกครั้ง**
+- หน้าเว็บยิงทีละห้องเรียงกัน ล้มห้องเดียวไม่ล้มทั้งชุด แล้วล้าง cache การ์ดใน sessionStorage
+- เทส `test/final_grades.test.js`
 
 ### มส. อัตโนมัติจากเวลาเรียน — `functions/autoMs.js`
 
@@ -2140,6 +2162,7 @@ test/
 ├── permissions.test.js  auth, ADMIN_ONLY, ownership, admin bypass
 ├── attendance.test.js   session overwrite, teacher_id จาก JWT, getSemesterReport, 'โดด'
 ├── scores.test.js       ล้างคะแนน=ลบแถว, completeness gate, remark, leading zero
+├── final_grades.test.js  สรุปเกรดท้ายเทอม — ช่องว่าง = 0, autosave ไม่ลบแถว final, แถว auto ไม่โดน
 ├── risk_watch.test.js  ป้ายเฝ้าระวังกลางเทอม — ขาดงานนับในห้องเดียวกัน, เกรดที่ตัดสินแล้วไม่มีป้ายซ้อน,
 │                        id จาก JWT
 ├── auto_ms.test.js      มส. อัตโนมัติ — ครูชนะระบบ, ถอนคืนเมื่อ %กลับขึ้น, HR/CLUB ไม่โดน,

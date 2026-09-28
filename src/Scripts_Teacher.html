@@ -609,6 +609,130 @@ function _riskAutoTag(r) {
     return `<span class="ams-tag" title="ระบบเติมให้จากเวลาเรียนต่ำกว่า 80% — แก้ได้ที่หน้า ปพ.5"><i class="fas fa-robot"></i>ระบบเติมให้${pct}</span>`;
 }
 
+// ==========================================
+// 📝 สรุปเกรดส่งรายงาน (functions/finalGrades.js)
+// autosave ของ ปพ.5 เขียนเกรดเฉพาะเด็กที่กรอกครบ เด็กที่ไม่ส่งงาน/ไม่มาสอบจึงไม่เคยขึ้น
+// "ติด 0" — ปุ่มนี้ให้ครูยืนยันว่าช่องว่าง = 0 แล้ว server คิดเกรดใหม่ทั้งห้องเอง
+// โมดัลสร้าง DOM เองแปะที่ body (ล้อ _impEnsureModal) — SPA สลับหน้าแล้ว markup ในหน้าหายตาม
+// ==========================================
+function _fgEnsureModal() {
+    if (document.getElementById('finalGradeModal')) return;
+    const el = document.createElement('div');
+    el.innerHTML =
+      '<div class="modal fade" id="finalGradeModal" tabindex="-1">' +
+        '<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
+          '<div class="modal-header"><h5 class="modal-title"><i class="fas fa-file-signature me-2"></i>สรุปเกรดส่งรายงาน</h5>' +
+            '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+          '<div class="modal-body">' +
+            '<span class="ams-note mb-3">ระบบจะคิดเกรดใหม่ทั้งห้องจากคะแนนที่บันทึกไว้ <b>ช่องที่ยังว่างนับเป็น 0</b> ' +
+            'เหมือนหน้า ปพ.5 · กดซ้ำได้ทุกเมื่อ ระบบคิดใหม่จากคะแนนล่าสุดทุกครั้ง · มส. ที่ระบบเติมจากเวลาเรียนไม่ถูกแตะ</span>' +
+            '<div id="fgBody"></div>' +
+          '</div>' +
+          '<div class="modal-footer">' +
+            '<button type="button" class="btn btn-soft btn-sm" data-bs-dismiss="modal">ยกเลิก</button>' +
+            '<button type="button" class="btn btn-danger btn-sm" id="fgConfirm" onclick="_fgSubmit()" disabled>สรุปเกรด</button>' +
+          '</div>' +
+        '</div></div></div>';
+    document.body.appendChild(el.firstChild);
+}
+
+window.openFinalGradeModal = function() {
+    const user = getSessionUser();
+    if (!user) return;
+    _fgEnsureModal();
+    document.getElementById('fgBody').innerHTML = _skelCards(3, 40);
+    const btn = document.getElementById('fgConfirm');
+    btn.disabled = true;
+    btn.textContent = 'สรุปเกรด';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('finalGradeModal')).show();
+
+    google.script.run.withSuccessHandler(function(res) {
+        window._fgPairs = (res && res.pairs) || [];
+        _fgRender();
+    }).withFailureHandler(function(err) {
+        document.getElementById('fgBody').innerHTML =
+          `<div class="text-danger small py-3">โหลดรายวิชาไม่สำเร็จ: ${_riskEsc(err && err.message)}</div>`;
+    }).getFinalGradePreview(user.id, user.currentTerm, user.currentYear);
+};
+
+function _fgRender() {
+    const pairs = window._fgPairs || [];
+    const body = document.getElementById('fgBody');
+    if (!pairs.length) {
+        body.innerHTML = '<div class="text-muted small py-3">ไม่พบรายวิชาที่มีเกรดในตารางสอนภาคเรียนนี้</div>';
+        return;
+    }
+    body.innerHTML = pairs.map((p, i) => {
+        const label = `<b>${_riskEsc(p.subjectName || p.subjectCode)}</b> <span class="text-muted">(${_riskEsc(p.subjectCode)})</span> · ห้อง ${_riskEsc(p.className)}`;
+        if (p.noConfig) {
+            return `<div class="border-bottom py-2 small opacity-50">${label}<span class="ams-note">ยังไม่ได้ตั้งค่าโครงสร้างวิชาในหน้า ปพ.5</span></div>`;
+        }
+        const blanks = p.blanks ? `<span class="rw-chip" title="มีช่องคะแนนว่าง ระบบจะนับเป็น 0">ช่องว่าง ${p.blanks} คน</span>` : '';
+        return `<label class="d-flex align-items-start gap-2 border-bottom py-2 small" style="cursor:pointer;">
+                  <input type="checkbox" class="form-check-input mt-1 fg-pick" data-idx="${i}" checked onchange="_fgCount()">
+                  <span class="flex-grow-1">${label} · ${p.students} คน
+                    <span class="d-flex flex-wrap gap-1 mt-1">
+                      <span class="rw-chip">ติด 0: ${p.zero}</span><span class="rw-chip">ร: ${p.r}</span><span class="rw-chip">มส: ${p.ms}</span>${blanks}
+                    </span>
+                  </span>
+                </label>`;
+    }).join('');
+    _fgCount();
+}
+
+function _fgCount() {
+    const n = document.querySelectorAll('#fgBody .fg-pick:checked').length;
+    const btn = document.getElementById('fgConfirm');
+    btn.disabled = n === 0;
+    btn.textContent = `สรุปเกรด ${n} ห้อง`;
+}
+
+// ยิงทีละห้องเรียงกัน — ห้องหนึ่งล้มไม่ล้มทั้งชุด แล้วบอกให้ครบว่าห้องไหนไม่ผ่านเพราะอะไร
+window._fgSubmit = function() {
+    const user = getSessionUser();
+    const picks = Array.from(document.querySelectorAll('#fgBody .fg-pick:checked'))
+        .map(el => window._fgPairs[Number(el.dataset.idx)]);
+    if (!user || !picks.length) return;
+    const btn = document.getElementById('fgConfirm');
+    btn.disabled = true;
+    const done = [], failed = [];
+
+    const next = function(i) {
+        if (i >= picks.length) return _fgFinish(user, done, failed);
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>กำลังสรุป ${i + 1}/${picks.length}`;
+        const p = picks[i];
+        google.script.run.withSuccessHandler(function(res) {
+            if (res && res.status === 'success') done.push(p); else failed.push({ p, msg: (res && res.message) || '' });
+            next(i + 1);
+        }).withFailureHandler(function(err) {
+            failed.push({ p, msg: (err && err.message) || '' });
+            next(i + 1);
+        }).finalizeGrades(p.subjectCode, p.className, user.currentTerm, user.currentYear);
+    };
+    next(0);
+};
+
+function _fgFinish(user, done, failed) {
+    // การ์ดอ่านจาก sessionStorage ก่อนเสมอ — ไม่ล้าง ครูจะเห็นยอดเดิมแล้วคิดว่ากดไม่ติด
+    Object.keys(sessionStorage)
+        .filter(k => k.indexOf(`grade_risk_v2_${user.id}_`) === 0 || k.indexOf(`grade_risk_v3_${user.id}_`) === 0 || k.indexOf(`risk_watch_v1_${user.id}_`) === 0)
+        .forEach(k => sessionStorage.removeItem(k));
+
+    if (failed.length) {
+        document.getElementById('fgBody').innerHTML =
+          `<div class="small mb-2">สรุปแล้ว ${done.length} ห้อง · <b class="text-danger">ไม่สำเร็จ ${failed.length} ห้อง</b></div>` +
+          failed.map(f => `<div class="border-bottom py-1 small">${_riskEsc(f.p.subjectCode)} ห้อง ${_riskEsc(f.p.className)} — ${_riskEsc(f.msg)}</div>`).join('');
+        const btn = document.getElementById('fgConfirm');
+        btn.textContent = 'ปิด';
+        btn.disabled = false;
+        btn.onclick = function() { bootstrap.Modal.getOrCreateInstance(document.getElementById('finalGradeModal')).hide(); btn.onclick = _fgSubmit; };
+    } else {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('finalGradeModal')).hide();
+        if (typeof showToast === 'function') showToast(`✅ สรุปเกรดแล้ว ${done.length} ห้อง`, 'success');
+    }
+    if (document.getElementById('dashTeacherName')) initTeacherDashboard();
+}
+
 // 🌟 ฟังก์ชันส่งตัวข้ามมิติไปหน้าบันทึกคะแนน ปพ.5
 window.jumpToScoreEntry = function(subjectCode, className) {
     sessionStorage.setItem('pending_score_subject', subjectCode);

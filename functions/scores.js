@@ -384,11 +384,13 @@ async function saveAllInOneWithConfig([payload], user) {
     // ⚠️ ห้ามลบแถวที่ระบบเติมให้จากเวลาเรียน — นักเรียนที่ยังกรอกคะแนนไม่ครบแต่
     // เวลาเรียนต่ำกว่า 80% ต้องคง มส. ไว้ ไม่งั้นทุกครั้งที่ autosave ของ ปพ.5 ทำงาน
     // แถว auto จะถูกล้างทิ้งแล้วรอจนกว่าจะมีการเช็คชื่อครั้งถัดไปถึงจะกลับมา
+    // ⚠️ ห้ามลบแถว 'final' ด้วย — ครูกด "สรุปเกรดส่งรายงาน" ยืนยันแล้วว่าช่องว่าง = 0
+    // (functions/finalGrades.js) ลบทิ้งเมื่อไหร่ เกรด 0 หายทั้งห้องทันทีที่แก้ช่องเดียว
     if (incompleteIds.length > 0) {
       await query(
         `DELETE FROM grade_summary
           WHERE subject_code=$1 AND term=$2 AND year=$3 AND student_id = ANY($4)
-            AND ms_source IS DISTINCT FROM 'auto'`,
+            AND ms_source IS NULL`,
         [subjectCode, String(term), String(year), incompleteIds]
       );
     }

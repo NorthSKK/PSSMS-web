@@ -99,9 +99,14 @@
         <h5 class="fw-bold text-danger mb-1"><i class="fas fa-exclamation-triangle me-2"></i>นักเรียนกลุ่มเสี่ยง (0, ร, มส.)</h5>
         <p class="text-muted small mb-0">สรุปนักเรียนที่ติดแล้ว และนักเรียนที่ต้องเฝ้าระวังจากคะแนนเก็บ งานที่ยังไม่ส่ง และเวลาเรียน ในวิชาของคุณ (ภาคเรียนปัจจุบัน)</p>
       </div>
-      <button class="btn btn-outline-danger shadow-sm rounded-pill fw-bold px-4 py-2" onclick="printRiskStudents()">
-        <i class="fas fa-print me-2"></i>พิมพ์แบบรายงาน
-      </button>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-danger shadow-sm rounded-pill fw-bold px-4 py-2" onclick="openFinalGradeModal()" title="ท้ายเทอม: ยืนยันให้ช่องคะแนนที่ว่างนับเป็น 0 แล้วคิดเกรดทั้งห้อง">
+          <i class="fas fa-file-signature me-2"></i>สรุปเกรดส่งรายงาน
+        </button>
+        <button class="btn btn-outline-danger shadow-sm rounded-pill fw-bold px-4 py-2" onclick="printRiskStudents()">
+          <i class="fas fa-print me-2"></i>พิมพ์แบบรายงาน
+        </button>
+      </div>
     </div>
     
     <div class="card-body px-4">

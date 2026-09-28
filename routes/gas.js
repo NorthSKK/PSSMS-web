@@ -65,6 +65,8 @@ const TEACHER_OR_MANAGEMENT = new Set([
   'saveProjectDocument', 'deleteProjectDocument', 'deleteProjectFile',
   // ไฟล์ในการ์ดสื่อ — ตัวฟังก์ชันเช็คต่ออีกชั้นว่าเป็นการ์ดของครูคนนั้นจริง (_loadOwned)
   'deleteMediaFile', 'renameMediaFile', 'reorderMediaFiles',
+  // สรุปเกรดท้ายเทอม — ตัวฟังก์ชันเช็คต่อด้วย verifyTeacherOwnsSubject รายวิชา×ห้อง
+  'getFinalGradePreview', 'finalizeGrades',
 ]);
 
 // บุคลากรทั้งหมด (ครู + Admin + Executive) — กันแค่ "ไม่ใช่นักเรียน"
@@ -128,6 +130,7 @@ const READONLY_ALLOWED = new Set([
     'getStudentsByClub', 'getSubjectConfig', 'getSystemConfig',
     'getTeacherAtRiskDashboard', 'getTeacherDashboardBundle', 'getTeacherListForClubDropdown',
     'getTeacherListForDropdown', 'getTeacherProgressBoard', 'getTeacherRiskDashboard',
+    'getFinalGradePreview',
     'getImportSpec', 'getSetupChecklist', 'getLicenseInfo',
     'getTeacherSubjects',
     'getTeacherTimetable', 'getTeacherTimetableByDate', 'getTeacherTimetableWithStatus',
@@ -156,6 +159,7 @@ const timetableAdmin = require('../functions/timetable_admin');
 const config = require('../functions/config');
 const lessonRecords = require('../functions/lesson_records');
 const scores = require('../functions/scores');
+const finalGrades = require('../functions/finalGrades');
 const morning = require('../functions/morning');
 const leaveWrite = require('../functions/leave');
 const substituteAuto = require('../functions/substituteAuto');
@@ -270,6 +274,8 @@ const handlers = {
   getAllInOneScoreGridData:         (args, user) => scores.getAllInOneScoreGridData(args, user),
   saveAllInOneScores:              (args, user) => scores.saveAllInOneScores(args, user),
   saveAllInOneWithConfig:          (args, user) => scores.saveAllInOneWithConfig(args, user),
+  getFinalGradePreview:            (args, user) => finalGrades.getFinalGradePreview(args, user),
+  finalizeGrades:                  (args, user) => finalGrades.finalizeGrades(args, user),
 
   // Academic reports
   getAllSubjectsReport:             require('../functions/getAllSubjectsReport'),
