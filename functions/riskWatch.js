@@ -7,8 +7,8 @@ const { getTeacherAtRiskDashboard } = require('./attendanceReport');
 //
 // grade_summary only holds grades that are decided (completeness gate), so
 // mid-term the card is empty by design. This computes live — never writes —
-// three watch signals per student × subject, for students with no decided
-// grade in that subject yet:
+// three watch signals per student × subject, for students the card does not
+// already list as ติด 0/ร/มส in that subject:
 //
 //   missing       blank score in a component someone in the same class
 //                 already has a score for  → heading for ร
@@ -118,11 +118,15 @@ async function getTeacherRiskWatch([teacherId, term, year]) {
        FROM score_database WHERE subject_code = ANY($1) AND term=$2 AND year=$3`,
       [codes, term, year]
     ),
-    // Any grade_summary row = the grade is decided (by the teacher or by autoMs)
-    // and the card already shows it — no forecast on top.
+    // Only a risk grade (0/ร/มส) means the card already shows the student — no
+    // forecast on top. A passing grade does NOT silence the watch: "สรุปเกรดส่งรายงาน"
+    // writes a row for every student in the class and can be pressed any time, so
+    // "has a row" used to wipe every watch chip in the class (missing work, 80–85%
+    // attendance) the moment a teacher pressed it.
     query(
       `SELECT student_id, subject_code FROM grade_summary
-       WHERE subject_code = ANY($1) AND term=$2 AND year=$3`,
+       WHERE subject_code = ANY($1) AND term=$2 AND year=$3
+         AND grade IN ('0','ร','มส','มส.')`,
       [codes, term, year]
     ),
     query(

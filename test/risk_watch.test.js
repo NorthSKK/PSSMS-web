@@ -116,9 +116,23 @@ test('ขาดงาน / คะแนนเก็บต่ำ ขึ้นป�
   assert.equal(s2.className, CLS);
 
   assert.equal(itemOf(data, '01901'), undefined, 'ส่งครบ คะแนนดี ไม่ต้องขึ้น');
-  assert.equal(itemOf(data, '01903'), undefined, 'มีแถว grade_summary แล้ว');
+  assert.equal(itemOf(data, '01903'), undefined, 'ติด 0 แล้ว การ์ดโชว์อยู่แล้ว');
   assert.equal(itemOf(data, '01904'), undefined, 'ครูตั้ง remark แล้ว');
   assert.equal(data.summary.r >= 1 && data.summary.zero >= 1, true);
+});
+
+test('เกรดผ่านแล้ว (เช่นหลังกดสรุปเกรด) ป้ายเฝ้าระวังยังอยู่ — ซ่อนเฉพาะคนที่ติด 0/ร/มส', async () => {
+  // 01902 ขาดชิ้นที่ 2 แต่มีแถวเกรด 1 จากการกดสรุปเกรด → ยังต้องเห็นว่าขาดงาน
+  await query(
+    `INSERT INTO grade_summary(student_id,subject_code,total_score,grade,term,year,ms_source)
+     VALUES('01902',$1,50,'1',$2,$3,'final')`, [SUB, TERM, YEAR]);
+  try {
+    const s2 = itemOf(await watchOf('teacher1'), '01902');
+    assert.ok(s2, 'เกรด 1 ต้องไม่ทำให้ป้ายเฝ้าระวังหาย');
+    assert.deepEqual(s2.missing, ['ชิ้นงานที่ 2']);
+  } finally {
+    await query(`DELETE FROM grade_summary WHERE student_id='01902' AND subject_code=$1`, [SUB]);
+  }
 });
 
 test('เวลาเรียน ≤ 85% ขึ้นป้ายเฝ้าระวัง มส.', async () => {
