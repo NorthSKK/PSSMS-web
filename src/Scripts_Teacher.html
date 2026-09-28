@@ -590,7 +590,7 @@ function _riskWatchChips(w) {
     let out = '';
     if (w.missing && w.missing.length) out += `<span class="rw-chip" title="ยังไม่มีคะแนน: ${_riskEsc(w.missing.join(', '))}">ขาดงาน ${w.missing.length} ชิ้น</span>`;
     if (w.scorePct !== null && w.scorePct !== undefined) out += `<span class="rw-chip" title="คิดจากชิ้นที่มีคะแนนแล้วเท่านั้น">คะแนนเก็บ ${w.scorePct}%</span>`;
-    if (w.attendancePct !== null && w.attendancePct !== undefined) out += `<span class="rw-chip" title="ต่ำกว่า 80% = มส.">เวลาเรียน ${w.attendancePct}%</span>`;
+    if (w.attendancePct !== null && w.attendancePct !== undefined) out += `<span class="rw-chip" title="นับจากคาบที่สอนไปแล้ว · ทั้งเทอมต้องได้ 80% ขึ้นไป ไม่งั้นติด มส.">เวลาเรียน ${w.attendancePct}% · ขาด/ลา ${w.attendanceMissed} จาก ${w.attendanceTaught} คาบ</span>`;
     return out;
 }
 
@@ -598,7 +598,7 @@ function _riskWatchText(w) {
     const parts = [];
     if (w.missing && w.missing.length) parts.push(`ขาดงาน: ${w.missing.join(', ')}`);
     if (w.scorePct !== null && w.scorePct !== undefined) parts.push(`คะแนนเก็บ ${w.scorePct}%`);
-    if (w.attendancePct !== null && w.attendancePct !== undefined) parts.push(`เวลาเรียน ${w.attendancePct}%`);
+    if (w.attendancePct !== null && w.attendancePct !== undefined) parts.push(`เวลาเรียน ${w.attendancePct}% ขาด/ลา ${w.attendanceMissed} จาก ${w.attendanceTaught} คาบ`);
     return parts.join(' · ');
 }
 

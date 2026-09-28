@@ -40,11 +40,38 @@ async function resetScores() {
   await query(`DELETE FROM grade_summary WHERE subject_code=$1 AND term=$2 AND year=$3`, [SUB, TERM, YEAR]);
 }
 
-before(resetScores);
+// เช็คชื่อ ว30205 ตั้งเป็นรูปของ seed (2 คาบ · 01903 ขาดทั้งคู่ คนอื่นมา) แล้วคืนของเดิมตอนจบ
+// ไฟล์เทสก่อนหน้าทิ้งคาบค้างไว้ได้ ตัวหาร "คาบที่สอนไปแล้ว" จะเพี้ยน
+let _attBackup = [];
+const ATT_COLS = 'date,term,year,subject_code,subject_name,class,period,student_id,student_name,status,session_id,teacher_id';
+async function insertAtt(r) {
+  await query(
+    `INSERT INTO attendance(${ATT_COLS}) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [r.date, r.term, r.year, r.subject_code, r.subject_name, r.class, r.period,
+     r.student_id, r.student_name, r.status, r.session_id, r.teacher_id]);
+}
+
+before(async () => {
+  await resetScores();
+  const { rows } = await query(
+    `SELECT to_char(date,'YYYY-MM-DD') AS date, term, year, subject_code, subject_name, class, period,
+            student_id, student_name, status, session_id, teacher_id
+       FROM attendance WHERE subject_code=$1 AND term=$2 AND year=$3`, [SUB, TERM, YEAR]);
+  _attBackup = rows;
+  await query(`DELETE FROM attendance WHERE subject_code=$1 AND term=$2 AND year=$3`, [SUB, TERM, YEAR]);
+  for (const date of ['2026-05-13', '2026-05-14']) {
+    for (const id of M6_STUDENTS) {
+      await insertAtt({ date, term: TERM, year: YEAR, subject_code: SUB, subject_name: PHYSICS.name,
+        class: CLS, period: '1', student_id: id, student_name: 'ทดสอบ',
+        status: id === '01903' ? 'ขาด' : 'มา', session_id: `${SESSION_TAG}-${date}`, teacher_id: 'teacher1' });
+    }
+  }
+});
 
 after(async () => {
   await resetScores();
-  await query(`DELETE FROM attendance WHERE session_id LIKE $1`, [`${SESSION_TAG}%`]);
+  await query(`DELETE FROM attendance WHERE subject_code=$1 AND term=$2 AND year=$3`, [SUB, TERM, YEAR]);
+  for (const r of _attBackup) await insertAtt(r);
   await stop();
 });
 
@@ -95,9 +122,19 @@ test('ซ่อมกลางภาคนับเป็นมีคะแน�
 
 // ── ผ่าน HTTP + DB ────────────────────────────────────────────────────────
 
-test('seed: ทุกคนได้ 20/25 และยังไม่มีใครได้ชิ้นที่ 2 → ไม่มีป้ายเฝ้าระวัง', async () => {
+test('seed: ทุกคนได้ 20/25 และยังไม่มีใครได้ชิ้นที่ 2 → ไม่มีป้ายคะแนน', async () => {
   const data = await watchOf('teacher1');
-  assert.equal(data.items.filter(i => i.subjectCode === SUB).length, 0);
+  const scoreChips = data.items.filter(i => i.subjectCode === SUB && (i.missing.length || i.scorePct !== null));
+  assert.equal(scoreChips.length, 0);
+});
+
+test('เวลาเรียนคิดจากคาบที่สอนไปแล้ว — ขาด 2 จาก 2 คาบ = 0% แม้ % ทางการยัง ~97', async () => {
+  // seed: 01903 ขาดทั้ง 2 คาบที่เช็คไว้ · ทางการ (60 − 2) / 60 = 96.67% ซึ่งไม่ถึงเกณฑ์ 85
+  const it = itemOf(await watchOf('teacher1'), '01903');
+  assert.ok(it, '01903 ต้องขึ้นป้ายเวลาเรียน');
+  assert.equal(it.attendancePct, 0);
+  assert.equal(it.attendanceMissed, 2);
+  assert.equal(it.attendanceTaught, 2);
 });
 
 test('ขาดงาน / คะแนนเก็บต่ำ ขึ้นป้าย และเกรดที่ตัดสินแล้วไม่มีป้ายซ้อน', async () => {
@@ -152,7 +189,12 @@ test('เวลาเรียน ≤ 85% ขึ้นป้ายเฝ้า�
   }
   const it = itemOf(await watchOf('teacher1'), '01901');
   assert.ok(it, '01901 ต้องขึ้นป้ายเวลาเรียน');
-  assert.equal(it.attendancePct, 85);
+  // ป้ายแสดง % จากคาบที่สอนไปแล้ว ไม่ใช่ 85% ของทั้งเทอม
+  assert.equal(it.attendanceMissed, 9);
+  assert.ok(it.attendanceTaught >= 9);
+  const expected = Math.round(((it.attendanceTaught - 9) / it.attendanceTaught) * 10000) / 100;
+  assert.equal(it.attendancePct, expected);
+  assert.ok(it.attendancePct < 85, 'กลางเทอมต้องต่ำกว่า % ทางการ');
 });
 
 test('ครูส่ง teacherId ของคนอื่นมา ได้ป้ายของตัวเองเท่านั้น', async () => {

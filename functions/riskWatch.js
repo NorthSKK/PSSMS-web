@@ -1,6 +1,6 @@
 const { query } = require('../lib/db');
 const { isGradedSubject } = require('./autoMs');
-const { getTeacherAtRiskDashboard } = require('./attendanceReport');
+const { getAllSubjectsReport } = require('./attendanceReport');
 
 // ============================================================
 // getTeacherRiskWatch — mid-term early warning for the "นักเรียนกลุ่มเสี่ยง" card.
@@ -14,8 +14,13 @@ const { getTeacherAtRiskDashboard } = require('./attendanceReport');
 //                 already has a score for  → heading for ร
 //   scorePct      earned ÷ max over the components this student has scores
 //                 in, < LOW_SCORE_PERCENT  → heading for 0
-//   attendancePct attendance ≤ 85% (formula from attendanceReport.js, not
-//                 re-derived here)          → heading for มส
+//   attendancePct attended ÷ periods taught SO FAR, with attendanceMissed /
+//                 attendanceTaught          → heading for มส
+//                 Shown because the official มส formula divides by the whole
+//                 term (periodsPerWeek × 20) and reads ~90% mid-term for a
+//                 student who missed a third of the classes held. Flagged when
+//                 to-date < 80% OR the official % ≤ 85 (both from
+//                 getAllSubjectsReport — the official formula is not re-derived).
 //
 // ⚠️ score_database has no class column, so "someone in the class has a score"
 // must be computed over the class roster, never over the whole subject code —
@@ -23,7 +28,8 @@ const { getTeacherAtRiskDashboard } = require('./attendanceReport');
 // ============================================================
 
 const LOW_SCORE_PERCENT = 50;      // calculateGrade: < 50 → 0
-const ATTENDANCE_WATCH_PERCENT = 85;
+const ATTENDANCE_WATCH_PERCENT = 85;   // official, whole-term denominator
+const ATTENDANCE_TO_DATE_PERCENT = 80;  // periods taught so far
 
 const normalize = (s) => String(s || '').replace(/[^a-zA-Z0-9ก-๙]/g, '');
 const normID = (id) => String(id || '').replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, '') || '0';
@@ -94,7 +100,7 @@ async function getTeacherRiskWatch([teacherId, term, year]) {
        FROM timetable WHERE teacher_id=$1 AND term=$2 AND year=$3`,
       [tid, term, year]
     ),
-    getTeacherAtRiskDashboard([tid, term, year]),
+    getAllSubjectsReport([tid, term, year]),
   ]);
 
   const pairs = ttRes.rows
@@ -166,7 +172,8 @@ async function getTeacherRiskWatch([teacherId, term, year]) {
       items.set(key, {
         studentId: s.id, stdName: s.name,
         className: p.className, subjectCode: p.subjectCode, subjectName: p.subjectName,
-        missing: [], scorePct: null, attendancePct: null,
+        missing: [], scorePct: null,
+        attendancePct: null, attendanceMissed: null, attendanceTaught: null,
       });
     }
     return items.get(key);
@@ -187,12 +194,19 @@ async function getTeacherRiskWatch([teacherId, term, year]) {
   }
 
   const pairOf = new Map(pairs.map(p => [`${normalize(p.subjectCode)}|${normalize(p.className)}`, p]));
-  for (const a of [...attendance.critical, ...attendance.ms, ...attendance.risk]) {
+  for (const a of attendance) {
     const p = pairOf.get(`${normalize(a.subjectCode)}|${normalize(a.className)}`);
     if (!p || decided.has(`${normID(a.id)}|${p.subjectCode}`)) continue;
-    const pct = Number(a.percent);
-    if (!(pct <= ATTENDANCE_WATCH_PERCENT)) continue;
-    itemFor(p, { id: a.id, name: a.name }).attendancePct = pct;
+    const taught = Number(a.taught) || 0;
+    if (!taught) continue;
+    const missed = (Number(a.absent) || 0) + (Number(a.leave) || 0);   // same totalMissed as the report
+    const toDate = Math.round(((taught - missed) / taught) * 10000) / 100;
+    const official = Number(a.percent);
+    if (!(toDate < ATTENDANCE_TO_DATE_PERCENT || official <= ATTENDANCE_WATCH_PERCENT)) continue;
+    const it = itemFor(p, { id: a.id, name: a.name });
+    it.attendancePct = toDate;
+    it.attendanceMissed = missed;
+    it.attendanceTaught = taught;
   }
 
   const list = [...items.values()].sort((a, b) =>
@@ -217,4 +231,5 @@ module.exports = {
   componentsOf,
   LOW_SCORE_PERCENT,
   ATTENDANCE_WATCH_PERCENT,
+  ATTENDANCE_TO_DATE_PERCENT,
 };
