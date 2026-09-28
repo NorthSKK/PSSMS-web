@@ -733,6 +733,64 @@ function _fgFinish(user, done, failed) {
     if (document.getElementById('dashTeacherName')) initTeacherDashboard();
 }
 
+// ==========================================
+// 👥 กดกล่องตัวเลข ติด 0 / ร / มส บนหัวการ์ด → รายชื่อของประเภทนั้น
+// อ่านจากข้อมูลที่การ์ดวาดอยู่แล้ว (currentRiskDetails + currentRiskWatch) ไม่ยิง request ใหม่
+// ตัวเลขบนกล่องกับจำนวนในหน้าต่างจึงมาจากชุดเดียวกันเสมอ
+// ==========================================
+const _RT_LABEL = { '0': 'ติด 0', 'ร': 'ติด ร', 'มส': 'ติด มส' };
+// ป้ายเฝ้าระวังที่คู่กับแต่ละประเภท — ตรงกับ summary ของ functions/riskWatch.js
+const _RT_WATCH = {
+    '0': w => w.scorePct !== null && w.scorePct !== undefined,
+    'ร': w => w.missing && w.missing.length > 0,
+    'มส': w => w.attendancePct !== null && w.attendancePct !== undefined,
+};
+
+function _rtEnsureModal() {
+    if (document.getElementById('riskTypeModal')) return;
+    const el = document.createElement('div');
+    el.innerHTML =
+      '<div class="modal fade" id="riskTypeModal" tabindex="-1">' +
+        '<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
+          '<div class="modal-header"><h5 class="modal-title" id="rtTitle"></h5>' +
+            '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+          '<div class="modal-body" id="rtBody"></div>' +
+        '</div></div></div>';
+    document.body.appendChild(el.firstChild);
+}
+
+window.openRiskTypeList = function(type) {
+    const decided = (window.currentRiskDetails || []).filter(r => r.type === type);
+    const watch = ((window.currentRiskWatch && window.currentRiskWatch.items) || []).filter(_RT_WATCH[type]);
+    const sortBy = (a, b) => String(a.className).localeCompare(String(b.className)) ||
+        String(a.subjectCode).localeCompare(String(b.subjectCode)) || String(a.stdName).localeCompare(String(b.stdName));
+    const row = (r, i, extra) =>
+        `<tr><td class="text-center text-muted">${i + 1}</td>
+             <td><span class="fw-bold">${_riskEsc(r.stdName)}</span>${extra || ''}</td>
+             <td class="text-nowrap">${_riskEsc(r.className || '-')}</td>
+             <td>${_riskEsc(r.subjectName || r.subjectCode)} <span class="text-muted small">(${_riskEsc(r.subjectCode)})</span></td></tr>`;
+    const table = (rows) =>
+        `<div class="table-responsive"><table class="table table-sm align-middle small mb-3">
+           <thead><tr><th style="width:40px;" class="text-center">ที่</th><th>ชื่อ - สกุล</th><th>ห้อง</th><th>รายวิชา</th></tr></thead>
+           <tbody>${rows}</tbody></table></div>`;
+
+    let html = `<div class="fw-bold mb-2">${_RT_LABEL[type]} แล้ว · ${decided.length} รายการ</div>`;
+    html += decided.length
+        ? table(decided.sort(sortBy).map((r, i) => row(r, i, _riskAutoTag(r))).join(''))
+        : '<div class="text-muted small mb-3">ไม่มี</div>';
+    if (window.currentRiskWatch) {
+        html += `<div class="mb-2"><span class="rw-head"><i class="fas fa-binoculars me-1"></i>เฝ้าระวัง · ${watch.length} รายการ</span></div>`;
+        html += watch.length
+            ? table(watch.sort(sortBy).map((w, i) => row(w, i, `<div class="rw-row">${_riskWatchChips(w)}</div>`)).join(''))
+            : '<div class="text-muted small">ไม่มี</div>';
+    }
+
+    _rtEnsureModal();
+    document.getElementById('rtTitle').textContent = `รายชื่อนักเรียน${_RT_LABEL[type]}`;
+    document.getElementById('rtBody').innerHTML = html;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('riskTypeModal')).show();
+};
+
 // 🌟 ฟังก์ชันส่งตัวข้ามมิติไปหน้าบันทึกคะแนน ปพ.5
 window.jumpToScoreEntry = function(subjectCode, className) {
     sessionStorage.setItem('pending_score_subject', subjectCode);
