@@ -1964,6 +1964,23 @@ body.dark-mode .pssms-dept-general {
 .ams-tag i { margin-right: .2rem; opacity: .8; }
 .ams-note { display: block; font-size: .68rem; line-height: 1.4; color: var(--p-text-muted); }
 
+/* ── ป้าย "เฝ้าระวัง" กลางเทอม (functions/riskWatch.js) ──
+   เป็นการพยากรณ์ ไม่ใช่เกรดที่ตัดสินแล้ว จึงต้องเงียบกว่า badge "ติด 0/ร/มส" เสมอ
+   ครูต้องแยกด้วยตาได้ทันทีว่าคนไหนติดแล้วจริง คนไหนแค่เสี่ยง — token ล้วนเหมือน ams-* */
+.rw-head {
+  display: inline-block; font-size: .68rem; font-weight: 700; padding: 1px 9px;
+  border-radius: 999px; border: 1px dashed var(--p-border-strong);
+  color: var(--p-text-muted); margin-bottom: .25rem;
+}
+.rw-row { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; padding: .15rem 0; }
+.rw-chip {
+  display: inline-block; font-size: .62rem; font-weight: 600; padding: 0 7px;
+  border-radius: 999px; white-space: nowrap;
+  background: var(--p-chip-bg); color: var(--p-chip-text);
+  border: 1px solid var(--p-border-strong);
+}
+.rw-sub { display: block; font-size: .7rem; font-weight: 400; opacity: .8; }
+
 .sw-tag-away { background: var(--sw-away); }
 .sw-tag-fled { background: var(--sw-fled); }
 .sw-tag-skip { background: var(--sw-skip); }

@@ -1179,7 +1179,7 @@ const normalize = (s) => String(s||'').replace(/[^a-zA-Z0-9ก-๙]/g, '');
 ### `getTeacherDashboardBundle([teacherId, term, year])`
 Return:
 ```js
-{ ts, timetable, calendarEvents, riskDashboard, atRiskDashboard, substitutes }
+{ ts, timetable, calendarEvents, riskDashboard, riskWatch, substitutes }
 ```
 - `timetable` — today schedule (จาก `getTeacherTimetableWithStatus`) **รวมคาบสอนแทนของวันนี้แล้ว**
 - `substitutes` — คาบสอนแทน 7 วันข้างหน้า (`getMySubstituteSlots`) → การ์ด
@@ -1189,7 +1189,36 @@ Return:
   - `LEFT JOIN users` (ไม่ใช่ INNER) — นักเรียนที่ promote/ลบไปแล้วต้องยังขึ้นการ์ด
   - ห้องเรียนเอาจาก `attendance.class` ของเทอมนั้น → snapshot ใน `user_history` → `users.department`
     (department ถูกทับตอน promote ใช้ได้เฉพาะปีปัจจุบัน)
-- `atRiskDashboard` — attendance-based จาก `attendanceReport.getTeacherAtRiskDashboard` — แสดงใน "กระดานแจ้งเตือนกลุ่มเสี่ยง"
+- `riskWatch` — ป้าย **เฝ้าระวังกลางเทอม** จาก `functions/riskWatch.js` วาดในการ์ดใบเดียวกัน
+  (หัวข้อถัดไป) · **id มาจาก JWT** ถ้าผู้เรียกไม่ใช่ Admin/Executive เพราะมีคะแนนรายคน
+  · การ์ด "กระดานแจ้งเตือนกลุ่มเสี่ยง" แยกใบเดิม**ถูกยุบรวมแล้ว** (ถอด `atRiskDashboard`
+  ออกจาก bundle) · RPC `getTeacherAtRiskDashboard` ยังอยู่ `riskWatch` เรียกใช้ภายใน
+
+### ป้ายเฝ้าระวังกลางเทอม — `functions/riskWatch.js`
+
+`grade_summary` เก็บเฉพาะเกรดที่ตัดสินแล้ว (completeness gate) การ์ด "นักเรียนกลุ่มเสี่ยง"
+จึงว่างทั้งกลางเทอม**โดยออกแบบ** · `getTeacherRiskWatch([teacherId, term, year])`
+คำนวณสด **ไม่เขียนอะไรลง DB** ให้ป้ายสามอย่างต่อ นักเรียน × วิชา:
+
+| ป้าย | เกณฑ์ | มุ่งไปทาง |
+|---|---|---|
+| `ขาดงาน N ชิ้น` (`missing[]`) | ช่องว่างในชิ้นที่ **มีคนในห้องเดียวกันได้คะแนนแล้วแม้แต่คนเดียว** | ร |
+| `คะแนนเก็บ X%` (`scorePct`) | คะแนนที่ได้ ÷ คะแนนเต็ม **เฉพาะชิ้นที่นักเรียนคนนั้นมีคะแนน** < `LOW_SCORE_PERCENT` (50) | 0 |
+| `เวลาเรียน X%` (`attendancePct`) | ≤ 85% สูตรจาก `getTeacherAtRiskDashboard` ห้ามเขียนใหม่ | มส |
+
+- ชิ้นงาน = `formative_i` ตาม `indicators_json` + `midterm`/`final` เมื่อ ratio ส่วนนั้น > 0
+  (`midterm_re` นับเป็นมีคะแนนกลางภาคและใช้แทนค่าเดิม เหมือน `calcRow`)
+- ⚠️ **"มีคนได้คะแนนแล้ว" ต้องนับในรายชื่อห้องเดียวกัน** — `score_database` ไม่มีคอลัมน์ห้อง
+  นับทั้งรหัสวิชาเมื่อไหร่ ห้อง A กรอกชิ้นที่ 3 แล้ว ห้อง B ทั้งห้องจะขึ้นขาดงาน
+- ช่องว่าง**ไม่นับเป็น 0** ใน `%` — ไปอยู่ที่ `missing` แทน สองป้ายจึงไม่ซ้อนความหมายกัน
+- มีแถว `grade_summary` แล้ว (ครูหรือ autoMs) หรือครูตั้ง remark ไม่ใช่ `-` = ตัดสินแล้ว
+  **ไม่มีป้ายเฝ้าระวังซ้อน** ในวิชานั้น
+- หน้าเว็บ: เลขใหญ่บนหัวการ์ด = ติดแล้ว · บรรทัดล่าง `เฝ้าระวังอีก N รายการ` (`_renderRiskTiles`)
+  **ห้ามรวมสองตัวเลข** ไม่งั้นหัวการ์ดไม่ตรงกับ ปพ.5 · ป้ายใช้ CSS `rw-*` (token ล้วน เงียบกว่า
+  badge ติดแล้วเสมอ) · ชื่อชิ้นงานมาจากครู ต้องผ่าน `_riskEsc()`
+- `window.currentRiskWatch` ตั้งใหม่ทุกครั้งที่เข้าแดชบอร์ด — SPA ไม่ล้าง window ตอนสลับบัญชี
+- ปุ่ม **พิมพ์แบบรายงาน** พิมพ์เฉพาะที่ติดแล้ว (เอกสาร) · ปุ่มคัดลอกส่งไลน์รวมป้ายเฝ้าระวังด้วย
+- เทส `test/risk_watch.test.js`
 
 ### คาบสอนแทนในตารางสอนของครู
 
@@ -1223,18 +1252,15 @@ Return:
 
 ### ปุ่มคัดลอกรายชื่อส่ง LINE / Facebook
 
-ทั้ง 2 การ์ดมีปุ่ม copy รายชื่อเป็น plain text ให้ครูส่งเข้าแชทนักเรียน:
+มีปุ่ม copy รายชื่อเป็น plain text ให้ครูส่งเข้าแชทนักเรียน:
 
 | การ์ด | ฟังก์ชัน | จัดกลุ่มตาม | ปุ่มอยู่ที่ |
 |---|---|---|---|
-| นักเรียนกลุ่มเสี่ยง (เกรด) | `copyRiskListByClass(cls)` | ห้อง → วิชา → ประเภท (0/ร/มส) | header ของการ์ดแต่ละห้อง |
-| กระดานแจ้งเตือน (เวลาเรียน) | `copyAtRiskList(bucket)` | วิชา+ห้อง | header ของ bucket ทั้ง 3 (`critical`/`ms`/`risk`) |
+| นักเรียนกลุ่มเสี่ยง (เกรด + เฝ้าระวัง) | `copyRiskListByClass(cls)` | ห้อง → วิชา → ประเภท (0/ร/มส/เฝ้าระวัง) | header ของการ์ดแต่ละห้อง |
 | รายงานสถิติเวลาเรียน | `copyReportList(groupIdx)` | วิชา+ห้อง | แถบสรุป (ทุกวิชา) + หัวกลุ่มวิชาแต่ละกลุ่ม |
 
-`copyAtRiskList` อ่านจาก `window.currentAtRiskData` ที่
-`renderTeacherAtRiskDashboard()` เก็บไว้ตอน render (แบบเดียวกับ
-`window.currentRiskDetails` ของการ์ดเกรด) ใช้ `navigator.clipboard.writeText`
-+ `showToast` — ถ้า bucket ว่างจะ toast แจ้งแทนการ copy ค่าว่าง
+`copyRiskListByClass` อ่านจาก `window.currentRiskDetails` + `window.currentRiskWatch`
+ที่เก็บไว้ตอน render ใช้ `navigator.clipboard.writeText` + `showToast`
 
 แต่ละ section wrap ด้วย:
 ```js
@@ -2114,6 +2140,8 @@ test/
 ├── permissions.test.js  auth, ADMIN_ONLY, ownership, admin bypass
 ├── attendance.test.js   session overwrite, teacher_id จาก JWT, getSemesterReport, 'โดด'
 ├── scores.test.js       ล้างคะแนน=ลบแถว, completeness gate, remark, leading zero
+├── risk_watch.test.js  ป้ายเฝ้าระวังกลางเทอม — ขาดงานนับในห้องเดียวกัน, เกรดที่ตัดสินแล้วไม่มีป้ายซ้อน,
+│                        id จาก JWT
 ├── auto_ms.test.js      มส. อัตโนมัติ — ครูชนะระบบ, ถอนคืนเมื่อ %กลับขึ้น, HR/CLUB ไม่โดน,
 │                        เช็คชื่อยังสำเร็จแม้ขั้นนี้พัง (คืน attendance ของ seed ใน after())
 ├── student_watch.test.js  4 อาการ, อันดับสะสม, ช่วงเวลา/เดือน, วิชาที่หาย

@@ -185,26 +185,17 @@ function initTeacherDashboard() {
   const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
   const scheduleCacheKey = `today_schedule_v3_${user.id}_${localDate}`;
   const riskCacheKey = `grade_risk_v2_${user.id}_${user.currentTerm}_${user.currentYear}`;
-  const atRiskCacheKey = `risk_dash_${user.id}_${user.currentTerm}_${user.currentYear}`;
+  const watchCacheKey = `risk_watch_v1_${user.id}_${user.currentTerm}_${user.currentYear}`;
 
   // Show cached pieces immediately while bundle loads.
   if (sessionStorage.getItem(scheduleCacheKey)) {
     try { renderTeacherTodaySchedule(JSON.parse(sessionStorage.getItem(scheduleCacheKey))); } catch (e) {}
   }
+  // ตั้งใหม่ทุกครั้ง — SPA ไม่ล้าง window ตอนสลับบัญชี ป้ายของครูคนก่อนจะค้างมาถ้าไม่ทับ
+  try { window.currentRiskWatch = JSON.parse(sessionStorage.getItem(watchCacheKey) || 'null'); }
+  catch (e) { window.currentRiskWatch = null; }
   if (sessionStorage.getItem(riskCacheKey)) {
     try { renderTeacherRiskFromCache(JSON.parse(sessionStorage.getItem(riskCacheKey))); } catch (e) {}
-  }
-  if (sessionStorage.getItem(atRiskCacheKey)) {
-    try {
-      if (document.getElementById('dashTeacherName')) {
-        const c = document.getElementById('atRiskDashboardContainer') || (function() {
-          const pc = document.getElementById('page-content');
-          if (pc) pc.insertAdjacentHTML('beforeend', '<div id="atRiskDashboardContainer" class="mt-4 pb-5"></div>');
-          return document.getElementById('atRiskDashboardContainer');
-        })();
-        if (c) renderTeacherAtRiskDashboard(JSON.parse(sessionStorage.getItem(atRiskCacheKey)), c);
-      }
-    } catch (e) {}
   }
 
   safeRun(2).withSuccessHandler(function(bundle) {
@@ -214,22 +205,17 @@ function initTeacherDashboard() {
       sessionStorage.setItem(scheduleCacheKey, JSON.stringify(bundle.timetable.data));
       if (document.getElementById('dashTeacherName')) renderTeacherTodaySchedule(bundle.timetable.data);
     }
+    // ป้ายเฝ้าระวังต้องพร้อมก่อน render การ์ด — การ์ดใบเดียววาดทั้งเกรดที่ตัดสินแล้วและป้ายเฝ้าระวัง
+    if (bundle.riskWatch && bundle.riskWatch.ok && bundle.riskWatch.data) {
+      window.currentRiskWatch = bundle.riskWatch.data;
+      sessionStorage.setItem(watchCacheKey, JSON.stringify(bundle.riskWatch.data));
+    }
     if (bundle.riskDashboard && bundle.riskDashboard.ok && bundle.riskDashboard.data) {
       const res = bundle.riskDashboard.data;
       if (res.status === 'success') {
         sessionStorage.setItem(riskCacheKey, JSON.stringify(res));
         if (document.getElementById('dashTeacherName')) renderTeacherRiskFromCache(res);
       }
-    }
-    if (bundle.atRiskDashboard && bundle.atRiskDashboard.ok && bundle.atRiskDashboard.data) {
-      sessionStorage.setItem(atRiskCacheKey, JSON.stringify(bundle.atRiskDashboard.data));
-      if (!document.getElementById('dashTeacherName')) return;
-      const c = document.getElementById('atRiskDashboardContainer') || (function() {
-        const pc = document.getElementById('page-content');
-        if (pc) pc.insertAdjacentHTML('beforeend', '<div id="atRiskDashboardContainer" class="mt-4 pb-5"></div>');
-        return document.getElementById('atRiskDashboardContainer');
-      })();
-      if (c) renderTeacherAtRiskDashboard(bundle.atRiskDashboard.data, c);
     }
     if (bundle.calendarEvents && bundle.calendarEvents.ok && bundle.calendarEvents.data) {
       if (document.getElementById('dashTeacherName')) renderDashboardCalendarEvents(bundle.calendarEvents.data);
@@ -259,20 +245,29 @@ function loadTeacherDashboardLegacy(user) {
     }
   } catch (e) { console.error(e); }
   try { loadTeacherRiskDashboard(user.id, user.currentTerm, user.currentYear); } catch(e) { console.error(e); }
-  try { loadTeacherAtRiskDashboard(user.id, user.currentTerm, user.currentYear); } catch(e) { console.error(e); }
   try { loadDashboardCalendarEvents(); } catch(e) { console.error(e); }
 }
 
 // Render helper extracted so bundle path can reuse render logic for risk cache.
 function renderTeacherRiskFromCache(res) {
+  if (!_renderRiskTiles(res.summary)) return;
+  if (typeof renderRiskCards === 'function') renderRiskCards(res.details);
+}
+
+// ตัวเลขใหญ่ = ติดแล้วจริง (grade_summary) · บรรทัดล่าง = เฝ้าระวังกลางเทอม (riskWatch)
+// สองตัวเลขต้องแยกกันเสมอ รวมกันเมื่อไหร่ตัวเลขบนหัวการ์ดจะไม่ตรงกับ ปพ.5
+function _renderRiskTiles(summary) {
   const el0 = document.getElementById('riskCount0');
   const elR = document.getElementById('riskCountR');
   const elMS = document.getElementById('riskCountMS');
-  if (!el0 || !elR || !elMS) return;
-  el0.innerHTML = `<span class="fs-1">${res.summary.zero}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-  elR.innerHTML = `<span class="fs-1">${res.summary.r}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-  elMS.innerHTML = `<span class="fs-1">${res.summary.ms}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-  if (typeof renderRiskCards === 'function') renderRiskCards(res.details);
+  if (!el0 || !elR || !elMS) return false;
+  const watch = (window.currentRiskWatch && window.currentRiskWatch.summary) || null;
+  const tile = (n, w) => `<span class="fs-1">${n}</span> <span class="fs-6 fw-normal">รายการ</span>` +
+    (watch ? `<span class="rw-sub">เฝ้าระวังอีก ${w} รายการ</span>` : '');
+  el0.innerHTML = tile(summary.zero, watch ? watch.zero : 0);
+  elR.innerHTML = tile(summary.r, watch ? watch.r : 0);
+  elMS.innerHTML = tile(summary.ms, watch ? watch.ms : 0);
+  return true;
 }
 
 // Extracted from loadDashboardCalendarEvents so bundle path can reuse render logic.
@@ -436,92 +431,6 @@ function jumpToAttendance(encodedData) {
   loadPage('Page_Academic');
 }
 
-function loadTeacherAtRiskDashboard(teacherId, term, year) {
-  if (!document.getElementById('dashTeacherName')) return; // guard: user navigated away
-  let container = document.getElementById('atRiskDashboardContainer');
-  if (!container) {
-    const pageContent = document.getElementById('page-content');
-    if(pageContent) {
-      pageContent.insertAdjacentHTML('beforeend', '<div id="atRiskDashboardContainer" class="mt-4 animate__animated animate__fadeInUp pb-5"></div>');
-      container = document.getElementById('atRiskDashboardContainer');
-    }
-  }
-  if(!container) return;
-  const riskCacheKey = `risk_dash_${teacherId}_${term}_${year}`;
-  if (sessionStorage.getItem(riskCacheKey)) {
-    renderTeacherAtRiskDashboard(JSON.parse(sessionStorage.getItem(riskCacheKey)), container); return; 
-  }
-  
-  container.innerHTML = _skelCards(4, 40);
-  google.script.run.withSuccessHandler(function(data) {
-    sessionStorage.setItem(riskCacheKey, JSON.stringify(data));
-    renderTeacherAtRiskDashboard(data, container);
-  }).getTeacherAtRiskDashboard(teacherId, term, year);
-}
-
-function renderTeacherAtRiskDashboard(data, container) {
-  const { critical, ms, risk } = data;
-  window.currentAtRiskData = data; // ให้ copyAtRiskList หยิบไปใช้
-  const copyBtn = (bucket) => `<button class="btn btn-sm btn-light text-primary rounded-circle shadow-sm ms-2 py-0 px-1" title="คัดลอกรายชื่อส่งไลน์/เฟซบุ๊ก" onclick="copyAtRiskList('${bucket}')" style="line-height:1.4;"><i class="fas fa-copy" style="font-size:0.75rem;"></i></button>`;
-  const renderList = (arr, colorClass) => {
-    if(arr.length === 0) return `<div class="text-center text-muted small py-4">ยอดเยี่ยม! ไม่มีนักเรียนในกลุ่มนี้ 🎉</div>`;
-    return arr.map(s => `<div class="d-flex justify-content-between align-items-center border-bottom py-2"><div style="flex-grow:1; padding-right:10px;"><div class="fw-bold text-dark" style="font-size: 0.85rem;">${s.id} ${s.name}</div><div class="text-primary" style="font-size: 0.75rem;"><i class="fas fa-book me-1"></i>${s.subjectCode} (${s.className})</div><div class="text-muted" style="font-size: 0.7rem;">สอนไป ${s.taught} คาบ (ขาด <span class="text-danger fw-bold">${s.absent}</span>, ลา <span class="text-info">${s.leave}</span>)</div></div><div><span class="badge bg-${colorClass} rounded-pill shadow-sm" style="font-size: 0.85rem;">${s.percent}%</span></div></div>`).join('');
-  };
-  
-  const html = `<h6 class="fw-bold text-danger mb-3 border-bottom pb-2 border-danger border-2 d-inline-block mt-2"><i class="fas fa-exclamation-triangle me-2"></i>กระดานแจ้งเตือนกลุ่มเสี่ยง (รวมทุกวิชาที่สอน)</h6><div class="row g-3"><div class="col-md-4"><div class="card border-danger shadow-sm h-100"><div class="card-header bg-danger text-white fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-ban me-1"></i> หมดสิทธิ์ (< 60%)</span><span class="d-flex align-items-center"><span class="badge bg-white text-danger">${critical.length}</span>${copyBtn('critical')}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(critical, 'danger')}</div></div></div><div class="col-md-4"><div class="card border-warning shadow-sm h-100"><div class="card-header bg-warning text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-exclamation-circle me-1"></i> ติด มส. (60-79%)</span><span class="d-flex align-items-center"><span class="badge bg-white text-dark">${ms.length}</span>${copyBtn('ms')}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(ms, 'warning text-dark')}</div></div></div><div class="col-md-4"><div class="card border-info shadow-sm h-100"><div class="card-header bg-info text-dark fw-bold small d-flex justify-content-between align-items-center"><span><i class="fas fa-search me-1"></i> กลุ่มเสี่ยง (80-85%)</span><span class="d-flex align-items-center"><span class="badge bg-white text-dark">${risk.length}</span>${copyBtn('risk')}</span></div><div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">${renderList(risk, 'info text-dark')}</div></div></div></div>`;
-  container.innerHTML = html;
-}
-
-// ==========================================
-// 📋 คัดลอกรายชื่อกลุ่มเสี่ยงเวลาเรียน ส่ง LINE / Facebook
-// ==========================================
-window.copyAtRiskList = function(bucket) {
-    const data = window.currentAtRiskData;
-    if (!data) return;
-
-    const labels = {
-      critical: 'หมดสิทธิ์สอบ (เวลาเรียน < 60%)',
-      ms: 'ติด มส. (เวลาเรียน 60-79%)',
-      risk: 'กลุ่มเสี่ยง (เวลาเรียน 80-85%)',
-    };
-    const arr = data[bucket] || [];
-    if (arr.length === 0) {
-        if (typeof showToast === 'function') showToast('ไม่มีนักเรียนในกลุ่มนี้', 'info');
-        else showAlert('ไม่มีนักเรียนในกลุ่มนี้');
-        return;
-    }
-
-    // จัดกลุ่มตามวิชา+ห้อง — ครูส่งเข้ากลุ่มแชทของห้องนั้น ๆ
-    let grouped = {};
-    arr.forEach(s => {
-        const key = `${s.subjectName || s.subjectCode}|||${s.subjectCode}|||${s.className || 'ไม่ระบุห้อง'}`;
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(s);
-    });
-
-    let textToCopy = `🚨 แจ้งเตือนเวลาเรียน — ${labels[bucket] || bucket} 🚨\n`;
-    textToCopy += `----------------------------------\n`;
-
-    Object.keys(grouped).sort().forEach(key => {
-        const [subName, subCode, cls] = key.split('|||');
-        textToCopy += `📚 ${subName} (${subCode}) — ห้อง ${cls}\n`;
-        grouped[key].forEach(s => {
-            textToCopy += `   - ${s.id} ${s.name} — ${s.percent}% (ขาด ${s.absent}, ลา ${s.leave})\n`;
-        });
-        textToCopy += `\n`;
-    });
-
-    textToCopy += `----------------------------------\n`;
-    textToCopy += `⚠️ รบกวนนักเรียนที่มีรายชื่อ ติดต่อครูผู้สอนด่วนครับ!`;
-
-    navigator.clipboard.writeText(textToCopy).then(() => {
-        if (typeof showToast === 'function') showToast(`✅ คัดลอกรายชื่อ ${arr.length} คน สำเร็จ!`, 'success');
-        else showAlert(`คัดลอกรายชื่อ ${arr.length} คน สำเร็จ!`);
-    }).catch(err => {
-        showAlert('❌ เบราว์เซอร์ไม่รองรับการคัดลอก กรุณาเปลี่ยนเบราว์เซอร์ครับ: ' + err);
-    });
-}
-
 // ==========================================
 // 🚨 ดึงข้อมูลกลุ่มเสี่ยงมาแสดงที่ Dashboard (จัดกลุ่มตามห้อง + รวบรายชื่อเด็ก)
 // ==========================================
@@ -534,11 +443,7 @@ function loadTeacherRiskDashboard(teacherId, term, year) {
 
   const cacheKey = `grade_risk_v3_${teacherId}_${term}_${year}`;
   if (sessionStorage.getItem(cacheKey)) {
-    const cached = JSON.parse(sessionStorage.getItem(cacheKey));
-    el0.innerHTML = `<span class="fs-1">${cached.summary.zero}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-    elR.innerHTML = `<span class="fs-1">${cached.summary.r}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-    elMS.innerHTML = `<span class="fs-1">${cached.summary.ms}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-    renderRiskCards(cached.details);
+    renderTeacherRiskFromCache(JSON.parse(sessionStorage.getItem(cacheKey)));
     return;
   }
 
@@ -550,10 +455,7 @@ function loadTeacherRiskDashboard(teacherId, term, year) {
   safeRun(3).withSuccessHandler(function(res) {
     if (res.status === 'success') {
       sessionStorage.setItem(cacheKey, JSON.stringify(res));
-      el0.innerHTML = `<span class="fs-1">${res.summary.zero}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-      elR.innerHTML = `<span class="fs-1">${res.summary.r}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-      elMS.innerHTML = `<span class="fs-1">${res.summary.ms}</span> <span class="fs-6 fw-normal">รายการ</span>`;
-      renderRiskCards(res.details);
+      renderTeacherRiskFromCache(res);
     } else {
       container.innerHTML = `<div class="text-center text-danger py-4 border rounded-3 bg-white shadow-sm">❌ เกิดข้อผิดพลาด: ${res.message}</div>`;
     }
@@ -568,8 +470,10 @@ window.renderRiskCards = function(details) {
     if(!container) return; 
 
     window.currentRiskDetails = details;
+    // ป้ายเฝ้าระวังกลางเทอม — server ตัดสินแล้วว่าใครเข้าเกณฑ์ (functions/riskWatch.js)
+    const watch = (window.currentRiskWatch && window.currentRiskWatch.items) || [];
 
-    if (!details || details.length === 0) {
+    if ((!details || details.length === 0) && watch.length === 0) {
         container.innerHTML = `
             <div class="text-center p-5 bg-white border border-success border-opacity-25 rounded-4 shadow-sm">
                 <div class="bg-success bg-opacity-10 text-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
@@ -583,16 +487,22 @@ window.renderRiskCards = function(details) {
 
     let grouped = {};
     let autoByClass = {};
-    details.forEach(r => {
-        let cls = r.className || 'ไม่ระบุห้อง';
-        let subKey = `${r.subjectCode}|||${r.subjectName}`; 
-        let type = r.type; 
-        
+    let watchByClass = {};
+    const slot = (cls, r) => {
+        let subKey = `${r.subjectCode}|||${r.subjectName}`;
         if(!grouped[cls]) grouped[cls] = {};
-        if(!grouped[cls][subKey]) grouped[cls][subKey] = { '0': [], 'ร': [], 'มส': [] };
-        
+        if(!grouped[cls][subKey]) grouped[cls][subKey] = { '0': [], 'ร': [], 'มส': [], watch: [] };
+        return grouped[cls][subKey];
+    };
+    watch.forEach(w => {
+        let cls = w.className || 'ไม่ระบุห้อง';
+        watchByClass[cls] = true;
+        slot(cls, w).watch.push(`<div class="rw-row"><span class="fw-bold text-dark text-nowrap">${_riskEsc(w.stdName)}</span>${_riskWatchChips(w)}</div>`);
+    });
+    (details || []).forEach(r => {
+        let cls = r.className || 'ไม่ระบุห้อง';
         if (r.auto) autoByClass[cls] = true;
-        grouped[cls][subKey][type].push(
+        slot(cls, r)[r.type].push(
             `<span class="ams-name"><span class="fw-bold text-dark text-nowrap">${r.stdName}</span>${_riskAutoTag(r)}</span>`
         );
     });
@@ -643,6 +553,9 @@ window.renderRiskCards = function(details) {
             if(rec['มส'].length > 0) {
                html += `<div class="mb-1"><span class="badge bg-secondary shadow-sm mb-1 px-3">ติด มส</span><div class="ps-2 border-start border-secondary border-2 lh-base" style="font-size: 0.85rem; line-height: 1.8 !important;">${rec['มส'].join(', ')}</div></div>`;
             }
+            if(rec.watch.length > 0) {
+               html += `<div class="mt-2"><span class="rw-head"><i class="fas fa-binoculars me-1"></i>เฝ้าระวัง</span><div class="ps-2" style="font-size: 0.85rem;">${rec.watch.join('')}</div></div>`;
+            }
             
             html += `</li>`;
         });
@@ -650,10 +563,11 @@ window.renderRiskCards = function(details) {
         html += `
                </ul>
             </div>`;
-        if (autoByClass[cls]) {
-            html += `<div class="card-footer bg-transparent border-0 pt-0 pb-3 px-3">
-                       <span class="ams-note"><i class="fas fa-robot me-1"></i>ป้าย “ระบบเติมให้” = ระบบตั้ง มส. ให้จากเวลาเรียนต่ำกว่า 80% ครูแก้ทับได้ที่หน้า ปพ.5</span>
-                     </div>`;
+        if (autoByClass[cls] || watchByClass[cls]) {
+            html += `<div class="card-footer bg-transparent border-0 pt-0 pb-3 px-3">`;
+            if (autoByClass[cls]) html += `<span class="ams-note"><i class="fas fa-robot me-1"></i>ป้าย “ระบบเติมให้” = ระบบตั้ง มส. ให้จากเวลาเรียนต่ำกว่า 80% ครูแก้ทับได้ที่หน้า ปพ.5</span>`;
+            if (watchByClass[cls]) html += `<span class="ams-note"><i class="fas fa-binoculars me-1"></i>“เฝ้าระวัง” = ยังไม่ใช่เกรด คำนวณจากคะแนนที่กรอกแล้วและเวลาเรียน ณ วันนี้</span>`;
+            html += `</div>`;
         }
         html += `
           </div>
@@ -667,6 +581,27 @@ window.renderRiskCards = function(details) {
 // ป้ายบอก "ที่มาของเกรด" ไม่ใช่ระดับความรุนแรง — จึงเงียบกว่าป้าย "ติด มส" เสมอ
 // ⚠️ อ่านจาก r.auto / r.attendancePercent ที่ server ส่งมาเท่านั้น (functions/autoMs.js)
 // ห้ามคำนวณเองว่าแถวไหนเป็นของระบบ — server เป็นคนตัดสินที่เดียว
+function _riskEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ชื่อชิ้นงานมาจากครู (indicators_json) — escape เสมอ
+function _riskWatchChips(w) {
+    let out = '';
+    if (w.missing && w.missing.length) out += `<span class="rw-chip" title="ยังไม่มีคะแนน: ${_riskEsc(w.missing.join(', '))}">ขาดงาน ${w.missing.length} ชิ้น</span>`;
+    if (w.scorePct !== null && w.scorePct !== undefined) out += `<span class="rw-chip" title="คิดจากชิ้นที่มีคะแนนแล้วเท่านั้น">คะแนนเก็บ ${w.scorePct}%</span>`;
+    if (w.attendancePct !== null && w.attendancePct !== undefined) out += `<span class="rw-chip" title="ต่ำกว่า 80% = มส.">เวลาเรียน ${w.attendancePct}%</span>`;
+    return out;
+}
+
+function _riskWatchText(w) {
+    const parts = [];
+    if (w.missing && w.missing.length) parts.push(`ขาดงาน: ${w.missing.join(', ')}`);
+    if (w.scorePct !== null && w.scorePct !== undefined) parts.push(`คะแนนเก็บ ${w.scorePct}%`);
+    if (w.attendancePct !== null && w.attendancePct !== undefined) parts.push(`เวลาเรียน ${w.attendancePct}%`);
+    return parts.join(' · ');
+}
+
 function _riskAutoTag(r) {
     if (!r || !r.auto) return '';
     const pct = (r.attendancePercent === null || r.attendancePercent === undefined)
@@ -685,20 +620,23 @@ window.jumpToScoreEntry = function(subjectCode, className) {
 // 📋 ฟังก์ชันคัดลอกรายชื่อส่ง LINE แบบสวยงาม
 // ==========================================
 window.copyRiskListByClass = function(cls) {
-    if (!window.currentRiskDetails) return;
-    
-    const classData = window.currentRiskDetails.filter(r => (r.className || 'ไม่ระบุห้อง') === cls);
-    if (classData.length === 0) return;
+    const inClass = r => (r.className || 'ไม่ระบุห้อง') === cls;
+    const classData = (window.currentRiskDetails || []).filter(inClass);
+    const watchData = ((window.currentRiskWatch && window.currentRiskWatch.items) || []).filter(inClass);
+    if (classData.length === 0 && watchData.length === 0) return;
 
     let grouped = {};
-    classData.forEach(r => {
+    const bucket = r => {
         let sub = `${r.subjectName} (${r.subjectCode})`;
-        let type = r.type;
-        if (!grouped[sub]) grouped[sub] = { '0': [], 'ร': [], 'มส': [] };
+        if (!grouped[sub]) grouped[sub] = { '0': [], 'ร': [], 'มส': [], watch: [] };
+        return grouped[sub];
+    };
+    watchData.forEach(w => bucket(w).watch.push(`${w.stdName} (${_riskWatchText(w)})`));
+    classData.forEach(r => {
         // แถวที่ระบบเติมให้จากเวลาเรียน — บอก % ไปด้วย นักเรียนจะได้รู้ว่าต้องแก้เรื่องอะไร
         let note = (r.auto && r.attendancePercent !== null && r.attendancePercent !== undefined)
             ? ` (เวลาเรียน ${r.attendancePercent}%)` : (r.auto ? ' (เวลาเรียนไม่ถึง 80%)' : '');
-        grouped[sub][type].push(`${r.stdName}${note}`); 
+        bucket(r)[r.type].push(`${r.stdName}${note}`);
     });
 
     let textToCopy = `🚨 แจ้งเตือนนักเรียนกลุ่มเสี่ยง ห้อง ${cls} 🚨\n`;
@@ -717,6 +655,9 @@ window.copyRiskListByClass = function(cls) {
         }
         if (rec['มส'].length > 0) {
             textToCopy += `📌 ติด มส:\n` + rec['มส'].map(name => `   - ${name}`).join('\n') + `\n`;
+        }
+        if (rec.watch.length > 0) {
+            textToCopy += `👀 เฝ้าระวัง:\n` + rec.watch.map(name => `   - ${name}`).join('\n') + `\n`;
         }
         textToCopy += `\n`;
     });
