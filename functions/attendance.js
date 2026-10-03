@@ -291,7 +291,10 @@ async function _holidayDates(start, end) {
     [HOLIDAY_COLOR, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
   );
   for (const r of rows) {
-    for (const d = new Date(`${r.s}T00:00:00Z`); d <= new Date(`${r.e}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+    // FullCalendar ends are exclusive; older single-day imports stored end=start.
+    const exclusiveEnd = new Date(`${r.e}T00:00:00Z`);
+    if (r.e === r.s) exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
+    for (const d = new Date(`${r.s}T00:00:00Z`); d < exclusiveEnd; d.setUTCDate(d.getUTCDate() + 1)) {
       days.add(d.toISOString().slice(0, 10));
     }
   }

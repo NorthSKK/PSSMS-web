@@ -311,9 +311,11 @@ async function getStudentClubSection(studentId, term, year) {
 
 async function getStudentUpcomingEvents() {
   const { rows } = await query(
-    `SELECT id, title, start_date, end_date, color, description
+    `SELECT id, title, start_date,
+       CASE WHEN end_date > start_date THEN end_date - 1 ELSE start_date END AS end_date,
+       color, description
      FROM calendar_events
-     WHERE COALESCE(end_date, start_date) >= $1::date
+     WHERE CASE WHEN end_date > start_date THEN end_date - 1 ELSE start_date END >= $1::date
        -- สีม่วงคือกิจกรรมส่วนตัวของบุคลากร (ดู getCalendarEvents.js) ไม่ให้หลุดถึงนักเรียน
        AND COALESCE(color, '') != '#6f42c1'
      ORDER BY start_date, title LIMIT 3`, [schoolToday()]

@@ -275,45 +275,70 @@ window.openImportCalendarModal = function() {
     new bootstrap.Modal(document.getElementById('calImportModal')).show();
 };
 
+// Preserve empty fields, quoted commas/newlines and escaped quotes from spreadsheet exports.
+function _parseCalendarCSV(text) {
+    const rows = [];
+    let row = [], field = '', quoted = false;
+    text = String(text).replace(/^\uFEFF/, '');
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '"') {
+            if (quoted && text[i + 1] === '"') { field += '"'; i++; }
+            else quoted = !quoted;
+        } else if (ch === ',' && !quoted) {
+            row.push(field.trim()); field = '';
+        } else if ((ch === '\n' || ch === '\r') && !quoted) {
+            row.push(field.trim());
+            if (row.some(Boolean)) rows.push(row);
+            row = []; field = '';
+            if (ch === '\r' && text[i + 1] === '\n') i++;
+        } else field += ch;
+    }
+    row.push(field.trim());
+    if (row.some(Boolean)) rows.push(row);
+    return rows;
+}
+
 window.previewCalendarCSV = function(input) {
+    _calImportRows = null;
+    document.getElementById('btnConfirmImport').disabled = true;
+    document.getElementById('calImportPreview').classList.add('d-none');
     const file = input.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = function(e) {
-        const text = e.target.result;
-        _calImportRows = [];
-
-        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        const rows = _parseCalendarCSV(e.target.result);
+        if (rows[0] && /วันที่|วันเดือน|date/i.test(rows[0][0])) rows.shift();
+        const events = rows.filter(parts => parts[0] && parts[1]).map(parts => ({
+            title: parts[1], start: parts[0], end: parts[0],
+            description: parts[2] || '',
+            color: /^#[0-9a-f]{6}$/i.test(parts[3] || '') ? parts[3] : _autoColorJS(parts[1])
+        }));
+        _calImportRows = CalendarImport.mergeConsecutiveEvents(events);
         const tbody = document.getElementById('calPreviewBody');
         tbody.innerHTML = '';
-
-        let startIdx = 0;
-        if (lines[0] && /วันที่|วันเดือน|date/i.test(lines[0].split(',')[0])) startIdx = 1;
-
-        let count = 0;
-        for (let i = startIdx; i < lines.length; i++) {
-            // รองรับ comma ใน field ที่มี quotes
-            const parts = lines[i].match(/(".*?"|[^,]+)(?:,|$)/g)?.map(p => p.replace(/^"|"$|,$/g, '').trim()) || [];
-            const dateStr = parts[0] || '';
-            const title = parts[1] || '';
-            if (!dateStr || !title) continue;
-
-            const desc = parts[2] || '';
-            let color = parts[3] || '';
-            if (!color || !color.startsWith('#')) color = _autoColorJS(title);
-
+        _calImportRows.forEach(event => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td class="text-nowrap">${dateStr}</td><td>${title}</td><td class="text-muted">${desc}</td>` +
-                `<td><span class="badge rounded-pill" style="background:${color};font-size:0.65rem">${color}</span></td>`;
-            tbody.appendChild(tr);
-            _calImportRows.push({ title: title, start: dateStr, end: dateStr, color: color, description: desc });
-            count++;
-        }
-
-        document.getElementById('calImportCount').textContent = `${count} รายการ`;
+            [event.start === event.end ? event.start : event.start + ' ถึง ' + event.end,
+                event.title, event.description].forEach((value, index) => {
+                const td = document.createElement('td');
+                td.textContent = value;
+                if (index === 0) td.className = 'text-nowrap';
+                if (index === 2) td.className = 'text-muted';
+                tr.appendChild(td);
+            });
+            const td = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.className = 'badge rounded-pill';
+            badge.style.background = event.color;
+            badge.style.fontSize = '0.65rem';
+            badge.textContent = event.color;
+            td.appendChild(badge); tr.appendChild(td); tbody.appendChild(tr);
+        });
+        document.getElementById('calImportCount').textContent = `${events.length} แถว → ${_calImportRows.length} รายการ`;
         document.getElementById('calImportPreview').classList.remove('d-none');
-        document.getElementById('btnConfirmImport').disabled = count === 0;
+        document.getElementById('btnConfirmImport').disabled = _calImportRows.length === 0;
     };
     reader.readAsText(file, 'UTF-8');
 };
@@ -413,15 +438,10 @@ function _autoColorJS(text) {
 window.downloadCalendarTemplate = function() {
     const rows = [
         'วันที่,กิจกรรม,ผู้รับผิดชอบ,สี',
-        '5-8 พ.ค.69,ส่งหลักสูตรระดับแผน แผนการเรียนรู้,ครูผู้สอน,',
-        '11 พ.ค.69,ปฐมนิเทศ มอบตัว นักเรียน ม.1 และม.4,คณะครู,',
-        '11 พ.ค.69,เปิดภาคเรียน 1/69,วิชาการ,#198754',
-        '13-17 ก.ค.69,วัดผลกลางภาค 1/69,ทะเบียนวัดผล,#198754',
-        '28 ก.ค.69,วันเฉลิมพระชนมพรรษา ร.10,คณะครู,#dc3545',
-        '12 ส.ค.69,วันแม่แห่งชาติ,คณะครู,#dc3545',
-        '23-25 ก.ย.69,สอบปลายภาค 1/69,ทะเบียนวัดผล,#198754',
-        '10 ต.ค.69,ปิดภาคเรียน 1/69,วิชาการ,#0d6efd',
-        '2026-05-11,ตัวอย่าง ISO date,ทั่วไป,'
+        '2026-10-01,ส่ง ปพ. และกรอกผลการเรียนในระบบ SGS,"ครูผู้สอน, ทะเบียนวัดผล",#0d6efd',
+        '2026-10-02,ส่ง ปพ. และกรอกผลการเรียนในระบบ SGS,"ครูผู้สอน, ทะเบียนวัดผล",#0d6efd',
+        '2026-10-03,ส่ง ปพ. และกรอกผลการเรียนในระบบ SGS,"ครูผู้สอน, ทะเบียนวัดผล",#0d6efd',
+        '2026-10-13,วันนวมินทรมหาราช,คณะครู,#dc3545'
     ];
     const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

@@ -83,20 +83,20 @@ async function deleteCalendarEvent([eventId]) {
 
 async function importCalendarCSV([rows]) {
   require('../lib/importSpec').assertRows(rows);
+  const { mergeConsecutiveEvents, toExclusiveEnd } = require('../public/calendarImport');
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   let count = 0;
   try {
     await client.query('BEGIN');
-    for (const r of rows) {
-      if (!r.title || !r.start) continue;
+    for (const r of mergeConsecutiveEvents(rows)) {
       await client.query(
         `INSERT INTO calendar_events(title,start_date,end_date,color,description)
          VALUES($1,$2,$3,$4,$5)`,
         // ⚠️ สี default ต้องเป็นค่าที่มีอยู่ใน dropdown ของหน้าปฏิทิน (#calColor)
         // ของเดิมเป็น '#3b82f6' ซึ่งไม่มีในจานสี 5 สีนั้น กิจกรรมที่นำเข้าทุกอันจึงเปิดมา
         // แล้วช่องสีว่าง กดบันทึกทีเดียวสีหายทั้งกิจกรรม
-        [r.title, r.start, r.end || r.start, r.color || '#0d6efd', r.description || '']
+        [r.title, r.start, toExclusiveEnd(r.end), r.color, r.description]
       );
       count++;
     }
