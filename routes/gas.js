@@ -175,6 +175,7 @@ const mediaCards = require('../functions/mediaCards');
 const savings = require('../functions/savings');
 const problemReports = require('../functions/problemReports');
 const professionalDevelopment = require('../functions/professionalDevelopment');
+const usageAnalytics = require('../lib/usageAnalytics');
 
 const handlers = {
   // Auth
@@ -498,6 +499,13 @@ router.post('/:fnName', async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: '90d' }
       );
+    }
+
+    // A telemetry failure must never turn a successful school operation into an error.
+    try {
+      await usageAnalytics.recordSuccessfulCall(fnName, result);
+    } catch (analyticsError) {
+      console.error('[usage-analytics:record]', analyticsError.message);
     }
 
     res.json({ __result: result, ...(jwtToken ? { __jwt: jwtToken } : {}) });

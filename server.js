@@ -90,6 +90,7 @@ if (require.main === module) {
     .then(() => {
       app.listen(PORT, () => {
         console.log(`PSSMS web running → http://localhost:${PORT}`);
+        require('./lib/usageAnalytics').startDispatcher();
       });
     })
     .catch(err => {

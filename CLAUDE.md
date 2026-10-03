@@ -141,6 +141,10 @@ S3_REGION=auto
 # ปลายทางรับคำแจ้งปัญหา — ไม่ตั้ง = ปุ่มยังกดได้ แถวยังลง DB แต่ค้างที่ pending
 PSSMS_SUPPORT_INGEST_URL=      # ต้องเป็น https (ยกเว้นตอนเทส)
 PSSMS_SUPPORT_INGEST_TOKEN=
+
+# สถิติรวมรายวัน — เว้นว่างเพื่อใช้ URL/token ชุดเดียวกับ support ข้างบน
+PSSMS_ANALYTICS_INGEST_URL=
+PSSMS_ANALYTICS_INGEST_TOKEN=
 ```
 ดู `.env.example` (commit ไว้) เป็นแม่แบบ. `.gitignore` คลุม `.env.*` ทั้งหมดยกเว้น `.env.example`
 
@@ -418,8 +422,16 @@ PK ที่ระบุคือ composite/primary keys ที่สำคั�
 | `sarabun` | ทะเบียนสารบรรณ |
 | `budgets` | งบประมาณ — PK `project_id`, มี `created_by` (JWT id ของคนสร้าง) |
 | `calendar_events` | ปฏิทินกิจกรรม |
+| `usage_analytics_daily` | ตัวนับการใช้งานรวมรายวัน ไม่มีชื่อ/รหัสผู้ใช้/นักเรียน/วิชา/ห้อง/คะแนน/IP/path/UA · ส่ง cumulative ไปส่วนกลางด้วย max-upsert |
 | `maintenance` | บำรุงรักษา |
 | `problem_reports` | คำแจ้งปัญหาที่ส่งออกไปหลังบ้านกลาง — เก็บไว้เป็น**หลักฐานการส่ง** ไม่ใช่กล่องข้อความของโรงเรียน · `delivery_status` มีแค่ `pending` / `delivered` |
+
+
+การนำเข้าปฏิทิน CSV รวมรายการชื่อ รายละเอียด และสีเดียวกันที่วันต่อเนื่องหรือช่วงทับกัน
+เป็นช่วงเดียวก่อนบันทึก (เรียงวันให้เอง ไม่รวมข้ามวันที่เว้นไว้) · CSV/ตัวอย่างนำเข้าใช้วันสิ้นสุด
+แบบรวมวันสุดท้าย แต่ `calendar_events.end_date` ของรายการใหม่เก็บวันถัดไปตาม FullCalendar
+ซึ่งไม่นับวันสิ้นสุด · `_holidayDates` ใช้ขอบเขตเดียวกัน และรองรับรายการรายวันเก่าที่ `end_date=start_date`
+· helper ร่วม `public/calendarImport.js` · เทส `test/calendar_import*.test.js`
 
 ### Professional development portfolio
 
@@ -1680,6 +1692,18 @@ completeness gate อยู่แล้ว แถวว่างกลางเ�
 - `problem_reports.id` เป็น `gen_random_uuid()` — เป็นฟังก์ชัน core ตั้งแต่ PostgreSQL 13
   ไม่ต้องเปิด pgcrypto (ต่างจาก sha256 ใน `db/adminIssued.js` ที่เลี่ยงไปคิดใน node)
 - เทสอยู่ที่ `test/problem_reports.test.js`
+
+### สถิติการใช้งานรวม — `lib/usageAnalytics.js`
+
+เก็บเฉพาะยอด cumulative รายวันใน `usage_analytics_daily` แล้วส่งเบื้องหลังไป
+`POST /api/analytics/ingest/daily` ของเว็บกลาง การส่งซ้ำใช้ max-upsert จึงไม่บวกยอดซ้ำ
+และปลายทางล่มต้องไม่ทำให้คำสั่งหลักของโรงเรียนล้มตาม
+
+- นับ login สำเร็จแยกบทบาท และจำนวนครั้งที่บันทึกเช็คชื่อ/คะแนน/ตารางสอนสำเร็จ
+- ไม่ส่งชื่อ username/student ID ห้อง วิชา คะแนน IP path user-agent args หรือข้อความอิสระ
+- ใช้ `PSSMS_ANALYTICS_*` ถ้าตั้งไว้ มิฉะนั้นใช้กุญแจชุดเดียวกับ `PSSMS_SUPPORT_*`
+- เก็บข้อมูลรายวันไม่เกิน 13 เดือนทั้งฝั่งโรงเรียนและส่วนกลาง
+- เพิ่ม handler ที่ต้องนับให้แก้ allowlist ใน `lib/usageAnalytics.js` อย่างตั้งใจ
 
 ### งานสารบรรณ — สิทธิ์และไฟล์แนบ
 
