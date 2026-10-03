@@ -909,9 +909,6 @@ async function getCurriculumCount() {
 // ============================================================
 // Stubs (DB already set up, just return success)
 // ============================================================
-async function setupCalendarDatabase() {
-  return 'ฐานข้อมูลปฏิทินพร้อมใช้งานแล้ว';
-}
 async function setupClubDatabase() {
   return { status: 'success', message: 'ฐานข้อมูลชุมนุมพร้อมใช้งานแล้ว' };
 }
@@ -1418,7 +1415,6 @@ module.exports = {
   addCurriculumItem,
   updateCurriculumItem,
   deleteCurriculumItem,
-  setupCalendarDatabase,
   setupClubDatabase,
   saveStudentRemarkDirectly,
   getTeacherListForDropdown,
