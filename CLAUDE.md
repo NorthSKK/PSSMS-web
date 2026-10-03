@@ -711,6 +711,10 @@ const pickDept = (u) => String(u.department || u.dept || '').trim();
   final:   { code: 'ว-ปลาย', description: 'สอบปลายภาค' } }
 ```
 
+หน้าพิมพ์ “รายละเอียดตัวชี้วัด / จุดประสงค์การเรียนรู้” ใน `src/Template_PP5.html`
+มีแถว **รวมคะแนน** เป็นแถวสุดท้าย คำนวณจากผลรวม `indicators[].score` + กลางภาค +
+ปลายภาคตาม `score_ratio` ชุดเดียวกับแถวที่แสดงในตาราง
+
 ### `indicator_id` ใน score_database
 - `formative_0`, `formative_1`, ... = index ตรงกับ `indicators_json[i]`
 - `midterm` = สอบกลาง

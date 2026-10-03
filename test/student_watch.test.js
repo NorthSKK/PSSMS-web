@@ -12,6 +12,7 @@ const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 const { TERM, YEAR } = require('./helpers/fixtures');
 const { classify } = require('../functions/studentWatch');
+const { schoolToday } = require('../lib/schoolDate');
 
 const D = '2026-06-11';
 
@@ -109,7 +110,12 @@ test('ประวัติสะสมบอกว่าหายคาบไ�
 
 // ------------------------------------------------------- อันดับสะสม
 
-const RD = ['2026-08-24', '2026-08-25', '2026-08-26'];   // ภายใน 30 วันจากวันทดสอบ
+const recentDate = (daysAgo) => {
+  const d = new Date(`${schoolToday()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - daysAgo);
+  return d.toISOString().slice(0, 10);
+};
+const RD = [recentDate(4), recentDate(3), recentDate(2)];
 const putOn = (sid, date, period, status) => query(
   `INSERT INTO attendance(date,term,year,subject_code,subject_name,class,period,student_id,student_name,status,teacher_id,session_id)
    VALUES($1,$2,$3,'ว30205','ฟิสิกส์','ม.6/1',$4,$5,'ชื่อเก่าในแถวเช็คชื่อ',$6,'teacher1',$7)`,
@@ -249,7 +255,7 @@ test('นับวิชาเฉพาะวันที่มีอากา�
     await putOn('01903', d, '1', 'ขาด');
     await putSubj('01903', d, '2', 'ค21101', 'คณิต', 'ขาด');
   }
-  for (const d of ['2026-08-27', '2026-08-28']) {
+  for (const d of [recentDate(1), recentDate(0)]) {
     await putOn('01903', d, '1', 'ขาด');
     await putSubj('01903', d, '2', 'ค21101', 'คณิต', 'มา');
   }

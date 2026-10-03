@@ -165,14 +165,14 @@ test('คาบโฮมรูมไม่เข้าระบบสอนแ�
 
 test('manualCreateAffected ไม่สร้างคาบสอนแทนให้คาบโฮมรูม', async () => {
   const { rows: lv } = await query(`SELECT id FROM leave_records WHERE teacher_id='teacher2' LIMIT 1`);
-  await ok('manualCreateAffected', ['teacher2', '2026-10-05', '2026-10-09', lv[0].id], 'admin');
+  await ok('manualCreateAffected', ['teacher2', '2099-01-05', '2099-01-09', lv[0].id], 'admin');
   const { rows } = await query(
     `SELECT COUNT(*)::int c FROM substitute_assignments
-      WHERE original_teacher_id='teacher2' AND date BETWEEN '2026-10-05' AND '2026-10-09'
+      WHERE original_teacher_id='teacher2' AND date BETWEEN '2099-01-05' AND '2099-01-09'
         AND UPPER(subject_code)='HR'`
   );
   assert.strictEqual(rows[0].c, 0);
-  await query(`DELETE FROM substitute_assignments WHERE date BETWEEN '2026-10-05' AND '2026-10-09'`);
+  await query(`DELETE FROM substitute_assignments WHERE date BETWEEN '2099-01-05' AND '2099-01-09'`);
 });
 
 test('applyAutoAssign เขียนจริง — assigned_by มาจาก JWT ไม่ใช่ payload', async () => {

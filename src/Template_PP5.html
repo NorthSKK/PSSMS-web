@@ -306,6 +306,19 @@
                     </tr>
                   <? } ?>
               <? } ?>
+              <?
+                const indicatorScoreTotal = data.config && Array.isArray(data.config.indicators)
+                  ? data.config.indicators.reduce((sum, ind) => sum + (Number(ind.score) || 0), 0)
+                  : 0;
+                const scoreRatio = data.config && data.config.ratio ? data.config.ratio.split(':') : [];
+                const configuredScoreTotal = indicatorScoreTotal
+                  + (Number(scoreRatio[1]) || 0)
+                  + (Number(scoreRatio[2]) || 0);
+              ?>
+              <tr class="indicator-total-row font-bold">
+                <td colspan="4" style="text-align: right !important; padding-right: 12px;">รวมคะแนน</td>
+                <td class="text-center text-green-700"><?= configuredScoreTotal ?></td>
+              </tr>
             </tbody>
           </table>
         </div>
