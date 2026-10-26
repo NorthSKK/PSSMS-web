@@ -1,6 +1,6 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
-const { compareStudents, studentArray } = require('../lib/studentRoster');
+const { compareStudents, studentArray, assignStudentNumbers } = require('../lib/studentRoster');
 
 function normalizeClass(str) {
   return String(str || '').replace(/[^a-zA-Z0-9ก-๙]/g, '').toLowerCase();
@@ -82,7 +82,7 @@ async function getStudentsByClass([className, year]) {
     matched = anyYear.filter(r => normalizeClass(r.department) === norm);
   }
 
-  const result = matched.sort(compareStudents).map(studentArray);
+  const result = assignStudentNumbers(matched).sort(compareStudents).map(studentArray);
   cache.set(cacheKey, result, 300);
   return result;
 }
