@@ -275,6 +275,19 @@ async function setHomeroomTeacher([teacherId, className, term, year]) {
 async function setAllHomeroomTeachers([assignments, term, year]) {
   if (!Array.isArray(assignments) || assignments.length === 0)
     return { status: 'success', message: 'ไม่มีข้อมูลที่จะบันทึก' };
+  const classes = new Set();
+  assignments = assignments.map((a, index) => {
+    const level = String(a?.level || '').trim();
+    const room = String(a?.room || '').trim();
+    const teacherIds = [...new Set((Array.isArray(a?.teacherIds) ? a.teacherIds : [])
+      .map(id => String(id || '').trim()).filter(Boolean))];
+    if (!level || !room) throw new Error(`แถวที่ ${index + 1}: กรุณาเลือกระดับชั้นและห้องให้ครบ`);
+    const key = `${level}/${room}`;
+    if (classes.has(key)) throw new Error(`ห้องเรียน ${key} ซ้ำ กรุณารวมครูที่ปรึกษาไว้ในแถวเดียวกัน`);
+    if (teacherIds.length === 0) throw new Error(`ห้องเรียน ${key}: กรุณาเลือกครูที่ปรึกษาอย่างน้อย 1 คน`);
+    classes.add(key);
+    return { ...a, level, room, teacherIds };
+  });
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   try {
