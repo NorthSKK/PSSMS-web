@@ -375,6 +375,35 @@ PK ที่ระบุคือ composite/primary keys ที่สำคั�
 | `users` | `idx_users_student_year` | `(year, status)` WHERE UPPER(role)='STUDENT' |
 
 ### Auth & users
+
+**เลขที่ประจำห้อง:** `users.student_no` เป็นจำนวนเต็มบวก nullable (ไม่เกิน 2147483647)
+ไม่ใช่รหัสนักเรียนและไม่ใช่ลำดับแถว. unique index `users_student_no_unique` กันซ้ำภายใน
+ห้องเรียน/ปีการศึกษาเดียวกัน (normalize ห้องแบบเดียวกับ `getStudentsByClass`), ช่องว่างซ้ำได้.
+Migration: `2026-10-26-student-number.sql`; schema ของโรงเรียนใหม่ต้องตรงกัน.
+
+- `addUser([form])` / `editUser([form])` รับ `form.studentNo` เพิ่ม; `''`/`null` ล้างเลขที่.
+  ไม่ส่ง field = คงค่าเดิมเมื่อห้อง/ปีเดิม แต่ล้างเมื่อเปลี่ยนห้องหรือปี. ปีของ edit ที่ไม่ส่งมา
+  คงปีเดิม. บทบาทที่ไม่ใช่นักเรียนไม่ใช้เลขที่.
+- `importStudentCSV([rows])` รับ optional `studentNo` (หัวตาราง **เลขที่**): ไม่มีคอลัมน์
+  ต่างจากมีคอลัมน์แต่ช่องว่าง. `prepareRows` ต้องรักษาความต่างนี้ ไม่เติมคีย์ที่ไม่ได้ส่ง.
+  normalize `'02'` เป็น `'2'` และตรวจช่วงก่อนตรวจเลขที่ซ้ำในไฟล์; ปีมาจาก active เหมือนเดิม.
+  `writeRegistrations` ตรวจผลลัพธ์ทั้ง batch เทียบ DB แล้วเขียนใน transaction เดียว
+  (ล็อก users); สลับเลขที่/ย้ายห้องพร้อมกันได้ ไม่มีการเขียนบางส่วนเมื่อชนเลขที่.
+  ห้ามรหัสนักเรียนในไฟล์ไปทับบัญชีบุคลากร.
+- `getAllUsers`, `getStudentsByClass`, `getStudentsByClub` คง array ช่อง **0–7** เดิม
+  แล้วเพิ่ม **[8] = เลขที่จริงหรือ null**; ไม่แทนด้วยลำดับแถวหรือสร้างเลขที่ให้ข้อมูลเก่าเอง.
+  `lib/studentRoster.js` เป็น helper ฝั่ง server สำหรับ validate/เรียงรายชื่อ (ห้อง → เลขที่
+  แบบตัวเลข → เลขที่ว่างท้าย → รหัสนักเรียน). คะแนน/การประเมินยังผูก **รหัสนักเรียนดิบ**.
+- `getAllInOneScoreGridData([subjectCode,className,term,year])` ต้องส่งปีที่ขอให้ roster
+  รวมถึงชุมนุม; รายชื่อ ปพ.5 ย้อนหลังห้ามยืมเลขที่ปัจจุบันมาใช้.
+- ทุกการเปลี่ยนห้อง/ปีผ่าน add/edit/import เก็บแถวเดิมรวม `student_no` ใน
+  `user_history` action `student_roster`; การเลื่อนชั้นใช้ action `promote` เดิมและล้าง
+  เลขที่ปีใหม่. รายชื่อปีก่อนรวมทะเบียนที่ยังอยู่ปีเดิมกับ snapshot ล่าสุดต่อรหัสนักเรียน
+  ไม่ใช่ใช้ snapshot เฉพาะเมื่อทั้งห้องว่าง. fallback จาก attendance ที่ไม่มี snapshot
+  คืนเลขที่ว่างเสมอ. ไม่ได้เติมเลขที่ย้อนหลังให้ประวัติเก่าที่ไม่มีข้อมูลนี้.
+- บันทึกทะเบียนแล้วล้าง cache `all_users*` และ `students_*` ทันที; อย่าล้างแค่
+  `all_users_admin` เพราะ Management ใช้ key `all_users_management`.
+
 | Table | Cols | PK / Note |
 |---|---|---|
 | `users` | username, password, full_name, role, department, email, year, status | PK `username`. role: Student/Teacher/Admin/Executive. Promote update in-place |
