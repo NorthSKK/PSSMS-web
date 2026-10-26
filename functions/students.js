@@ -1,5 +1,6 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
+const { compareStudents, studentArray } = require('../lib/studentRoster');
 
 function normalizeClass(str) {
   return String(str || '').replace(/[^a-zA-Z0-9ก-๙]/g, '').toLowerCase();
@@ -17,7 +18,7 @@ async function getStudentsByClass([className, year]) {
 
   // 1. users table — current registration
   const { rows } = await query(
-    `SELECT username, password, full_name, role, department, email, year, status
+    `SELECT username, password, full_name, role, department, email, year, status, student_no
      FROM users WHERE UPPER(role)='STUDENT' AND year=$1 AND status='ปกติ'
      ORDER BY username`,
     [y]
@@ -25,7 +26,7 @@ async function getStudentsByClass([className, year]) {
   let matched = rows.filter(r => normalizeClass(r.department) === norm);
 
   // 2a. historical fallback — user_history snapshot from promote events
-  if (matched.length === 0 && isHistorical) {
+  if (isHistorical) {
     const { rows: histRows } = await query(
       `SELECT DISTINCT ON (username)
               username,
@@ -35,15 +36,17 @@ async function getStudentsByClass([className, year]) {
               old_data->>'department' AS department,
               old_data->>'email'      AS email,
               old_data->>'year'       AS year,
-              old_data->>'status'     AS status
+              old_data->>'status'     AS status,
+              (old_data->>'student_no')::integer AS student_no
        FROM user_history
-       WHERE action='promote'
+       WHERE action IN ('promote','student_roster')
          AND old_data->>'year'=$1
          AND old_data->>'department'=$2
-       ORDER BY username, timestamp DESC`,
+       ORDER BY username, timestamp DESC, id DESC`,
       [y, className]
     );
-    matched = histRows.filter(r => normalizeClass(r.department) === norm);
+    const registered = new Set(matched.map(r => r.username));
+    matched.push(...histRows.filter(r => normalizeClass(r.department) === norm && !registered.has(r.username)));
   }
 
   // 2b. fallback — DISTINCT attendance(student_id, student_name, class) snapshot
@@ -79,29 +82,34 @@ async function getStudentsByClass([className, year]) {
     matched = anyYear.filter(r => normalizeClass(r.department) === norm);
   }
 
-  const result = matched.map(r => [
-    r.username, '', r.full_name, r.role,
-    r.department || '', r.email || '', r.year || '', r.status || 'ปกติ',
-  ]);
+  const result = matched.sort(compareStudents).map(studentArray);
   cache.set(cacheKey, result, 300);
   return result;
 }
 
-async function getStudentsByClub([clubId]) {
+async function getStudentsByClub([clubId, year]) {
   const { rows } = await query(
     `SELECT u.username, u.full_name, u.role,
             u.department, u.email, u.year, u.status,
-            cm.class_name
+            cm.class_name, cm.year AS roster_year
      FROM club_members cm
      JOIN users u ON u.username = cm.student_id
-     WHERE cm.club_id = $1
+     WHERE cm.club_id = $1 AND ($2::text IS NULL OR cm.year=$2)
      ORDER BY u.username`,
-    [clubId]
+    [clubId, year || null]
   );
-  return rows.map(r => [
-    r.username, '', r.full_name, r.role,
-    r.department || r.class_name || '', r.email || '', r.year || '', r.status || 'ปกติ',
-  ]);
+  // เลขที่ของชุมนุมยังเป็นเลขที่ในห้องเรียนของปีที่ลงทะเบียน ไม่ใช่ลำดับในชุมนุม.
+  const rosters = new Map();
+  for (const r of rows) {
+    const className = r.class_name || r.department || '';
+    const key = JSON.stringify([className, r.roster_year]);
+    if (!rosters.has(key)) rosters.set(key, await getStudentsByClass([className, r.roster_year]));
+    const record = rosters.get(key).find(s => s[0] === r.username);
+    r.department = className;
+    r.year = r.roster_year;
+    r.student_no = record ? record[8] : null;
+  }
+  return rows.sort(compareStudents).map(studentArray);
 }
 
 module.exports = { getStudentsByClass, getStudentsByClub };
