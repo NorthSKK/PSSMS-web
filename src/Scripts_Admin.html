@@ -2907,23 +2907,40 @@ function ttoSaveAllHomeroom() {
   var _hrTerm = window._hrActiveTerm || '1';
   var _hrYear = window._hrActiveYear || '';
   var assignments = [];
-  tbody.querySelectorAll('tr').forEach(function(tr) {
+  var seenClasses = {}, validationError = '';
+  tbody.querySelectorAll('tr').forEach(function(tr, index) {
+    if (validationError) return;
     var levelEl = tr.querySelector('.hr-level'), roomEl = tr.querySelector('.hr-room');
     if (!levelEl || !roomEl) return;
     var level = levelEl.value.trim(), room = roomEl.value.trim();
-    if (!level || !room) return;
+    if (!level || !room) {
+      validationError = 'แถวที่ ' + (index + 1) + ': กรุณาเลือกระดับและห้องให้ครบ';
+      return;
+    }
+    var className = level + '/' + room;
+    if (seenClasses[className]) {
+      validationError = 'แถวที่ ' + (index + 1) + ': ห้องเรียน ' + className + ' ซ้ำกับแถวที่ ' + seenClasses[className];
+      return;
+    }
+    seenClasses[className] = index + 1;
     var t1El = tr.querySelector('.hr-teacher-1'), t2El = tr.querySelector('.hr-teacher-2');
+    var teacherIds = [t1El ? t1El.value.trim() : '', t2El ? t2El.value.trim() : ''].filter(function(t){ return t !== ''; });
+    if (teacherIds.length === 0) {
+      validationError = 'แถวที่ ' + (index + 1) + ': กรุณาเลือกครูที่ปรึกษาของห้องเรียน ' + className + ' อย่างน้อย 1 คน';
+      return;
+    }
     var advisoryLocEl = tr.querySelector('.hr-advisory-loc'), buddhistLocEl = tr.querySelector('.hr-buddhist-loc');
     assignments.push({
       level: level,
       room: room,
-      teacherIds: [t1El ? t1El.value : '', t2El ? t2El.value : ''].filter(function(t){ return t !== ''; }),
+      teacherIds: teacherIds,
       opts: {
         advisoryLoc: advisoryLocEl ? advisoryLocEl.value.trim() : '',
         buddhistLoc: buddhistLocEl ? buddhistLocEl.value.trim() : ''
       }
     });
   });
+  if (validationError) { showAlert('⚠️ ' + _ttoEsc(validationError)); return; }
   if (assignments.length === 0) { showAlert('⚠️ ไม่มีข้อมูลที่จะบันทึก'); return; }
   var btn = document.getElementById('ttoSaveAllHomeroomBtn');
   var origHTML = btn ? btn.innerHTML : '';
