@@ -123,3 +123,39 @@ test('แก้/ลบคาบแล้วต้องรีเฟรชตา�
   const save = js.slice(js.indexOf('function saveTimetableEdit'), js.indexOf('function _ttoReloadAllRows'));
   assert.ok(save.includes('_ttoReloadAllRows()'));
 });
+
+test('บันทึกครูที่ปรึกษา 6 ห้องเรียนแล้วโหลดกลับต้องครบทั้ง 6 ห้อง', async () => {
+  const assignments = Array.from({ length: 6 }, (_, i) => ({
+    level: `ม.${i + 1}`, room: '91', teacherIds: ['teacher1', 'teacher2'],
+  }));
+  try {
+    const saved = await ok('setAllHomeroomTeachers', [assignments, TERM, YEAR], 'admin');
+    assert.match(saved.message, /6 ห้องเรียน/);
+    const loaded = await ok('getHomeroomAssignments', [TERM, YEAR], 'admin');
+    for (const assignment of assignments) {
+      const actual = loaded.find(a => a.level === assignment.level && a.room === assignment.room);
+      assert.ok(actual, `${assignment.level}/${assignment.room} ต้องไม่หายหลังบันทึก`);
+      assert.deepStrictEqual(actual.teacherIds.sort(), assignment.teacherIds.slice().sort());
+    }
+  } finally {
+    await query(`DELETE FROM timetable WHERE room='91' AND term=$1 AND year=$2`, [TERM, YEAR]);
+  }
+});
+
+test('ห้องเรียนซ้ำหรือข้อมูลไม่ครบต้องปฏิเสธทั้งชุดก่อนลบครูที่ปรึกษาเดิม', async () => {
+  const id = await makeRow({ subject_code: 'HR', subject_name: 'โฮมรูม', room: '92', period: '0' });
+  const valid = { level: 'ม.6', room: '92', teacherIds: ['teacher1'] };
+  try {
+    for (const [assignments, message] of [
+      [[valid, { ...valid, level: ' ม.6 ', teacherIds: ['teacher2'] }], /ห้องเรียน ม.6\/92 ซ้ำ/],
+      [[valid, { level: 'ม.1', room: '', teacherIds: ['teacher2'] }], /เลือกระดับชั้นและห้อง/],
+      [[valid, { level: 'ม.1', room: '92', teacherIds: [] }], /เลือกครูที่ปรึกษา/],
+    ]) {
+      const err = await denied('setAllHomeroomTeachers', [assignments, TERM, YEAR], 'admin');
+      assert.match(err, message);
+      assert.strictEqual((await readRow(id)).teacher_id, 'teacher1', 'ชุดที่ไม่ผ่านต้องไม่ลบข้อมูลเดิม');
+    }
+  } finally {
+    await query(`DELETE FROM timetable WHERE id=$1`, [id]);
+  }
+});
