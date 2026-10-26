@@ -137,8 +137,8 @@ test('นำเข้าปีใหม่เก็บเลขที่ปี�
 test('รายชื่อย้อนหลังที่เหลือแต่การเช็คชื่อใช้ลำดับรหัสเดิม ไม่ยืมเลขที่ปัจจุบันมาใส่', async () => {
   await clean();
   await ok('addUser', [form(ids[0], { studentNo: '7' })], 'admin');
-  await query(`INSERT INTO attendance(student_id,student_name,class,year,term,subject_code)
-    VALUES($1,'ชื่อเก่า',$2,$3,$4,'NUMBER_TEST')`, [ids[0], 'ม.2/93', prior, TERM]);
+  await query(`INSERT INTO attendance(student_id,student_name,class,year,term,subject_code,date,status)
+    VALUES($1,'ชื่อเก่า',$2,$3,$4,'NUMBER_TEST','2025-06-02','มา')`, [ids[0], 'ม.2/93', prior, TERM]);
   const past = await ok('getStudentsByClass', ['ม.2/93', prior], 'admin');
   assert.equal(past[0][0], ids[0]);
   assert.equal(past[0][8], 1);
