@@ -2,6 +2,7 @@ const { query } = require('../lib/db');
 const getSystemConfig = require('./getSystemConfig');
 const cache = require('../lib/cache');
 const { isManagement } = require('../lib/permissions');
+const { assignStudentNumbers } = require('../lib/studentRoster');
 
 module.exports = async function getAllUsers(args, user) {
   // getAllUsers is gated management-only in routes/gas.js.
@@ -18,7 +19,8 @@ module.exports = async function getAllUsers(args, user) {
     [config.year]
   );
 
-  // [0..7] legacy fields, [8] เลขที่จริง (null = ยังไม่กำหนด)
+  assignStudentNumbers(rows.filter(r => String(r.role).toUpperCase() === 'STUDENT'));
+  // [0..7] legacy fields, [8] เลขที่ที่กำหนดหรือค่าเริ่มต้นตามลำดับรหัสเดิม
   const result = rows.map(r => [
     r.username, managementCaller ? r.password : '', r.full_name, r.role,
     r.department || '', r.email || '', r.year || '', r.status || 'ปกติ', r.student_no ?? null,
