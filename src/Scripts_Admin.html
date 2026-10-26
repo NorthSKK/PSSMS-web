@@ -593,7 +593,7 @@ function renderStudentAccordion(students) {
   if (_expandedGroups.size === 0 && !isSearching) _expandedGroups.add(sortedClasses[0]);
   var html = '';
   sortedClasses.forEach(function(cls, idx) {
-    var rows = groups[cls];
+    var rows = groups[cls].sort(compareStudentRows);
     var male = 0, female = 0, suspended = 0, graduated = 0;
     rows.forEach(function(r) {
       var st = String(r[7] || '').trim();
@@ -615,14 +615,14 @@ function renderStudentAccordion(students) {
     html += '</div>';
     html += '<div id="' + safeId + '"' + (isOpen ? '' : ' style="display:none;"') + '>';
     html += '<div class="table-responsive"><table class="pssms-table mb-0 text-nowrap" style="font-size:.85rem;"><thead><tr>';
-    html += '<th class="ps-4">รหัสนักเรียน</th><th>ชื่อ-สกุล</th><th class="text-center">สถานะ</th><th class="text-end pe-4">จัดการ</th>';
+    html += '<th class="ps-4">เลขที่</th><th>รหัสนักเรียน</th><th>ชื่อ-สกุล</th><th class="text-center">สถานะ</th><th class="text-end pe-4">จัดการ</th>';
     html += '</tr></thead><tbody>';
     rows.forEach(function(row) {
       var studentId = String(row[0] || '');
       var studentName = String(row[2] || '');
       var status = String(row[7] || '').trim() || 'ปกติ';
       var trCls = status === 'แขวนลอย' ? ' class="table-danger"' : status === 'จบการศึกษา' ? ' class="text-muted"' : '';
-      html += '<tr' + trCls + '><td class="ps-4 fw-bold text-primary">' + escapeHtmlSafe(studentId) + '</td><td>' + escapeHtmlSafe(studentName) + '</td><td class="text-center">' + _studentStatusBadge(status) + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',' + jsArgAttr(studentId) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(' + jsArgAttr(studentId) + ')"><i class="fas fa-trash"></i></button></td></tr>';
+      html += '<tr' + trCls + '><td class="ps-4 text-muted">' + studentNoLabel(row) + '</td><td class="fw-bold text-primary">' + escapeHtmlSafe(studentId) + '</td><td>' + escapeHtmlSafe(studentName) + '</td><td class="text-center">' + _studentStatusBadge(status) + '</td><td class="text-end pe-4"><button class="btn btn-sm btn-outline-primary me-1 shadow-none" onclick="openModal(\'edit\',' + jsArgAttr(studentId) + ')"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger shadow-none" onclick="confirmDelete(' + jsArgAttr(studentId) + ')"><i class="fas fa-trash"></i></button></td></tr>';
     });
     html += '</tbody></table></div></div></div>';
   });
@@ -696,6 +696,10 @@ function renderStudentSummary(data) {
 
 function toggleStatusField() {
   const role = document.getElementById('inputRole').value;
+  const numberContainer = document.getElementById('studentNoFieldContainer');
+  if (numberContainer) numberContainer.classList.toggle('d-none', role !== 'Student');
+  const numberInput = document.getElementById('inputStudentNo');
+  if (numberInput) numberInput.disabled = role !== 'Student';
   const statusContainer = document.getElementById('statusFieldContainer');
   if(statusContainer) {
     if(role === 'Student') statusContainer.classList.remove('d-none');
@@ -738,6 +742,7 @@ function openModal(mode, id=null) {
       if(document.getElementById('inputDeptExec')) document.getElementById('inputDeptExec').value = user[4] || 'ผอ.';
       document.getElementById('inputEmail').value = user[5];
       if(document.getElementById('inputStatus')) document.getElementById('inputStatus').value = user[7] || "ปกติ";
+      if(document.getElementById('inputStudentNo')) document.getElementById('inputStudentNo').value = user[8] == null ? '' : user[8];
     }
   }
   toggleStatusField(); modal.show();
@@ -755,11 +760,17 @@ function saveUser() {
     status: document.getElementById('inputStatus') ? document.getElementById('inputStatus').value : 'ปกติ'
   };
   if(!form.username || !form.password || !form.fullname) { showAlert("ข้อมูลไม่ครบ"); return; }
+  if (form.role === 'Student') {
+    try { form.studentNo = parseStudentNo(document.getElementById('inputStudentNo').value); }
+    catch (err) { showAlert('⚠️ ' + err.message); return; }
+  }
   showLoader(true);
   const action = mode === 'add' ? 'addUser' : 'editUser';
   google.script.run.withSuccessHandler(res => { 
     showLoader(false); showAlert(res.message); 
     if(res.status === 'success') { bootstrap.Modal.getInstance(document.getElementById('userModal')).hide(); loadUserData(true); }
+  }).withFailureHandler(err => {
+    showLoader(false); showAlert('❌ ' + err.message);
   })[action](form);
 }
 
@@ -945,6 +956,14 @@ function _validateImportRows(rows, kind) {
 
       if (c.required && !v) { errors.push({ row: at, message: 'ไม่ได้กรอก "' + c.label + '"' }); return; }
       if (!v) return;
+
+      if (c.normalize === 'studentNo') {
+        var number = Number(v);
+        if (!/^0*[1-9]\d*$/.test(v) || !Number.isSafeInteger(number) || number > 2147483647) {
+          errors.push({ row: at, message: 'เลขที่ต้องเป็นจำนวนเต็มบวก หรือเว้นว่าง' }); return;
+        }
+        r[c.key] = v = String(number);
+      }
 
       if (c.normalize === 'day') {
         var d = _normalizeDayClient(v);
