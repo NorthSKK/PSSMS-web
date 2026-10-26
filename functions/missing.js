@@ -1289,7 +1289,7 @@ async function promoteStudentsToNextYear() {
 
   // Snapshot full row before mutation
   const { rows } = await query(
-    `SELECT username, password, full_name, role, department, email, year, status
+    `SELECT username, password, full_name, role, department, email, year, status, student_no
      FROM users
      WHERE UPPER(role)='STUDENT' AND status='ปกติ' AND CAST(year AS INTEGER) < $1`,
     [currentYear]
@@ -1331,19 +1331,19 @@ async function promoteStudentsToNextYear() {
         [
           r.username,
           JSON.stringify(r),
-          JSON.stringify({ ...r, department: newDept, year: String(currentYear), status: newStatus }),
+          JSON.stringify({ ...r, department: newDept, year: String(currentYear), status: newStatus, student_no: null }),
         ]
       );
 
       if (isGraduate) {
         await client.query(
-          `UPDATE users SET status='จบการศึกษา', year=$1 WHERE username=$2`,
+          `UPDATE users SET status='จบการศึกษา', year=$1, student_no=NULL WHERE username=$2`,
           [currentYear, r.username]
         );
         graduateCount++;
       } else {
         await client.query(
-          `UPDATE users SET department=$1, year=$2 WHERE username=$3`,
+          `UPDATE users SET department=$1, year=$2, student_no=NULL WHERE username=$3`,
           [newDept, currentYear, r.username]
         );
         updateCount++;
@@ -1358,7 +1358,8 @@ async function promoteStudentsToNextYear() {
   }
 
   const cache = require('../lib/cache');
-  cache.del('all_users');
+  cache.delPrefix('all_users');
+  cache.delPrefix('students_');
 
   return {
     status: 'success',
