@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { studentNo, compareStudents, studentArray } = require('../lib/studentRoster');
+const { studentNo, compareStudents, studentArray, assignStudentNumbers } = require('../lib/studentRoster');
 const { prepareRows, importSpec } = require('../lib/importSpec');
 
 test('เลขที่เป็นจำนวนเต็มบวกหรือว่าง แยกจากรหัสนักเรียนที่มีศูนย์นำหน้า', () => {
@@ -23,6 +23,20 @@ test('ทะเบียนเรียงเลขที่แบบตัว�
     { username: '01904', department: 'ม.1/1', student_no: null },
   ];
   assert.deepEqual(rows.sort(compareStudents).map(r => r.username), ['01903', '01902', '01901', '01904']);
+});
+
+test('ค่าเริ่มต้นใช้ลำดับรหัสแบบเดิมและไม่แย่งเลขที่ที่กำหนดแล้ว', () => {
+  const rows = [
+    { username: '2', department: 'ม.1/1', year: '2569', student_no: null },
+    { username: '10', department: 'ม.1/1', year: '2569', student_no: null },
+    { username: '01', department: 'ม.1/1', year: '2569', student_no: 2 },
+  ];
+  assignStudentNumbers(rows);
+  assert.deepEqual(rows.map(r => r.student_no), [3, 1, 2]);
+  const newcomer = { username: '00', department: 'ม.1/1', year: '2569', student_no: null };
+  assignStudentNumbers([...rows, newcomer]);
+  assert.equal(newcomer.student_no, 4);
+  assert.deepEqual(rows.map(r => r.student_no), [3, 1, 2], 'เพิ่มคนรหัสน้อยกว่าไม่ทำให้เลขที่เดิมเลื่อน');
 });
 
 test('ไฟล์นักเรียนไม่ส่งคอลัมน์เลขที่ต้องไม่ถูกแปลงเป็นช่องว่างที่ล้างข้อมูล', () => {
