@@ -36,9 +36,9 @@ jobs:
       - name: Initialize isolated database schema
         run: node -e "require('./lib/db').query(require('fs').readFileSync('db/schema.sql','utf8')).then(()=>require('./lib/db').pool.end()).catch(e=>{console.error(e);process.exit(1)})"
       - run: node -e "require('./db/migrate').runMigrations().then(()=>require('./lib/db').pool.end()).catch(e=>{console.error(e);process.exit(1)})"
-      - run: npm run test:only -- test/student_numbers.test.js test/student_roster.test.js test/migrate.test.js
+      - run: npm test
         env:
           TZ: Asia/Bangkok
-      - run: npm run test:only -- test/student_numbers.test.js test/student_roster.test.js test/migrate.test.js
+      - run: npm test
         env:
           TZ: UTC
