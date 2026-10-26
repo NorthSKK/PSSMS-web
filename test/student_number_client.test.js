@@ -36,6 +36,8 @@ test('เรียงเลขที่ที่ server กำหนด 1/2/10 �
   assert.deepEqual(rows.sort(ctx.compareStudentRows).map(r => r[0]), ['00002', '00999', '00001']);
   const objects = roster().map(r => ({ username: r[0], department: r[4], student_no: r[8] }));
   assert.deepEqual(objects.sort(compareStudents).map(r => r.username), rows.map(r => r[0]));
+  const legacy = ['2', '10'].map(id => [id, '', '', 'Student', 'ม.1/1', '', '2569', 'ปกติ']);
+  assert.deepEqual(legacy.sort(ctx.compareStudentRows).map(r => r[0]), ['10', '2'], 'ข้อมูล cache เดิมต้องคงการเรียงรหัสแบบข้อความ');
   assert.equal(ctx.studentNoLabel(rows[2].slice(0, 8)), '—');
   assert.equal(ctx.parseStudentNo('02'), 2);
   for (const v of ['0', '-1', '1.5', '2147483648']) assert.throws(() => ctx.parseStudentNo(v));
@@ -46,7 +48,7 @@ function importer() {
   vm.runInContext(['_headerKey', '_gridToRows', '_normalizeDayClient', '_validateImportRows'].map(n => fn(admin, n)).join('\n'), ctx);
   return ctx;
 }
-test('ไฟล์ไม่มีหัวเลขที่คง absent แต่หัวเลขที่ช่องว่างเป็นการล้าง', () => {
+test('ไฟล์ไม่มีหัวเลขที่คง absent แต่หัวเลขที่ช่องว่างให้ระบบกำหนดอัตโนมัติ', () => {
   const ctx = importer();
   const missing = ctx._gridToRows([['รหัสนักเรียน', 'ชื่อ-สกุล', 'ระดับ', 'ห้อง'], ['01903', 'ก', 'ม.1', '1']], 'student').rows[0];
   const blank = ctx._gridToRows([['รหัสนักเรียน', 'ชื่อ-สกุล', 'ระดับ', 'ห้อง', 'เลขที่'], ['01903', 'ก', 'ม.1', '1', '']], 'student').rows[0];
@@ -72,7 +74,7 @@ function userForm(mode, role = 'Student') {
   vm.runInContext(fn(admin, 'saveUser'), ctx);
   return { ctx, elements, calls, alerts, chain };
 }
-test('เพิ่ม/แก้ทะเบียนส่งเลขที่จริง ล้างได้ แต่ staff ไม่ส่งเลขที่', () => {
+test('เพิ่ม/แก้ทะเบียนส่งเลขที่จริง เว้นว่างให้กำหนดอัตโนมัติ แต่ staff ไม่ส่งเลขที่', () => {
   for (const mode of ['add', 'edit']) {
     const state = userForm(mode); state.ctx.saveUser();
     assert.equal(state.calls[0][0], mode);
