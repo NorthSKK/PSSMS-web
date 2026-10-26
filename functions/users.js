@@ -1,7 +1,7 @@
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
 const { assertRows, prepareRows, assertNoErrors } = require('../lib/importSpec');
-const { studentNo, classKey } = require('../lib/studentRoster');
+const { studentNo, classKey, assignStudentNumbers } = require('../lib/studentRoster');
 
 function invalidateUsers() {
   cache.delPrefix('all_users');
@@ -48,14 +48,17 @@ async function writeRegistrations(forms, { importing = false, editing = false } 
     });
     const { rows: others } = await client.query(
       `SELECT username, department, year, student_no FROM users
-       WHERE UPPER(role)='STUDENT' AND student_no IS NOT NULL AND NOT (username = ANY($1))`, [ids]);
+       WHERE UPPER(role)='STUDENT' AND NOT (username = ANY($1))`, [ids]);
+    const students = planned.filter(r => String(r.role).toUpperCase() === 'STUDENT');
     const occupied = new Map();
-    for (const r of [...others, ...planned.filter(r => String(r.role).toUpperCase() === 'STUDENT')]) {
+    for (const r of [...others, ...students]) {
       if (r.student_no == null) continue;
       const key = JSON.stringify([String(r.year || '').trim(), classKey(r.department), r.student_no]);
       if (occupied.has(key)) throw new Error(`เลขที่ ${r.student_no} ซ้ำในห้องเรียน ${r.department} ปี ${r.year} (${occupied.get(key)} และ ${r.username})`);
       occupied.set(key, r.username);
     }
+    const missingOthers = others.filter(r => r.student_no == null);
+    assignStudentNumbers([...others, ...students]);
     for (const next of planned) {
       const prev = old.get(next.username);
       if (prev && String(prev.role).toUpperCase() === 'STUDENT'
@@ -67,6 +70,9 @@ async function writeRegistrations(forms, { importing = false, editing = false } 
       }
     }
     await client.query('UPDATE users SET student_no=NULL WHERE username = ANY($1)', [ids]);
+    for (const r of missingOthers) {
+      if (r.student_no != null) await client.query('UPDATE users SET student_no=$1 WHERE username=$2', [r.student_no, r.username]);
+    }
     for (const r of planned) {
       await client.query(
         `INSERT INTO users(username,password,full_name,role,department,email,year,status,student_no)
