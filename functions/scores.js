@@ -80,8 +80,8 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year], us
   await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
   const isClub = String(subjectCode || '').startsWith('CLUB');
   const students = isClub
-    ? await require('./students').getStudentsByClub([subjectCode])
-    : await require('./students').getStudentsByClass([className, null]);
+    ? await require('./students').getStudentsByClub([subjectCode, year])
+    : await require('./students').getStudentsByClass([className, year]);
 
   let configObj = await getSubjectConfig([subjectCode, className, term, year]);
   if (!configObj) configObj = { ratio: '70:10:20', indicators: [], examIndicators: null };

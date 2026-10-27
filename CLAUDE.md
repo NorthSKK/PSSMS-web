@@ -375,9 +375,48 @@ PK ที่ระบุคือ composite/primary keys ที่สำคั�
 | `users` | `idx_users_student_year` | `(year, status)` WHERE UPPER(role)='STUDENT' |
 
 ### Auth & users
+
+**เลขที่ประจำห้อง:** `users.student_no` เป็นจำนวนเต็มบวก (ไม่เกิน 2147483647)
+ไม่ใช่รหัสนักเรียน. ผู้ที่ยังไม่กำหนดใช้ค่าเริ่มต้นจากลำดับรหัสนักเรียนแบบเดิม (ข้อความ
+เช่น `'10'` ก่อน `'2'`) โดยจองเลขที่ที่กำหนดเองไว้ก่อน ไม่ให้เลขที่แสดงซ้ำกัน.
+Migration `2026-10-26-student-number.sql` เติมทะเบียนเดิมแล้วเก็บไว้คงที่;
+unique index `users_student_no_unique` กันซ้ำในห้องเรียน/ปีเดียวกัน (normalize ห้อง
+แบบเดียวกับ `getStudentsByClass`). คอลัมน์ nullable รองรับ staff/ข้อมูลทะเบียนที่ไม่มีห้องหรือปี.
+
+- `addUser([form])` / `editUser([form])` รับ `form.studentNo` เพิ่ม; `''`/`null` ให้ระบบ
+  เลือกเลขที่ว่าง. ไม่ส่ง field = คงค่าเดิมเมื่อห้อง/ปีเดิม; เมื่อเปลี่ยนห้องหรือปีใช้ค่าเริ่มต้น
+  ของทะเบียนใหม่. เพิ่มคนรหัสน้อยกว่าทีหลังไม่ทำให้เลขที่ที่บันทึกไว้เลื่อน.
+  ปีของ edit ที่ไม่ส่งมาคงปีเดิม. บทบาทที่ไม่ใช่นักเรียนไม่ใช้เลขที่.
+- `importStudentCSV([rows])` รับ optional `studentNo` (หัวตาราง **เลขที่**): ไม่มีคอลัมน์
+  ต่างจากมีคอลัมน์แต่ช่องว่าง. `prepareRows` ต้องรักษาความต่างนี้ ไม่เติมคีย์ที่ไม่ได้ส่ง.
+  normalize `'02'` เป็น `'2'` และตรวจช่วงก่อนตรวจเลขที่ซ้ำในไฟล์; ปีมาจาก active เหมือนเดิม.
+  `writeRegistrations` ตรวจผลลัพธ์ทั้ง batch เทียบ DB แล้วเขียนใน transaction เดียว
+  (ล็อก users); สลับเลขที่/ย้ายห้องพร้อมกันได้ ไม่มีการเขียนบางส่วนเมื่อชนเลขที่.
+  ห้ามรหัสนักเรียนในไฟล์ไปทับบัญชีบุคลากร.
+- `getAllUsers`, `getStudentsByClass`, `getStudentsByClub` คง array ช่อง **0–7** เดิม
+  แล้วเพิ่ม **[8] = เลขที่ที่กำหนดหรือค่าเริ่มต้นตามรหัสเดิม**.
+  `lib/studentRoster.js` เป็น helper ฝั่ง server สำหรับ validate/เติมค่าเริ่มต้น/เรียงรายชื่อ
+  (ห้อง → เลขที่แบบตัวเลข → รหัสนักเรียน). คะแนน/การประเมินยังผูก **รหัสนักเรียนดิบ**.
+- `getAllInOneScoreGridData([subjectCode,className,term,year])` ต้องส่งปีที่ขอให้ roster
+  รวมถึงชุมนุม; รายชื่อ ปพ.5 ย้อนหลังห้ามยืมเลขที่ปัจจุบันมาใช้.
+- ทุกการเปลี่ยนห้อง/ปีผ่าน add/edit/import เก็บแถวเดิมรวม `student_no` ใน
+  `user_history` action `student_roster`; การเลื่อนชั้นใช้ action `promote` เดิมและกำหนด
+  ค่าเริ่มต้นของปีใหม่ โดยเก็บเลขที่เดิมไว้ใน snapshot. อ่าน/เขียนทะเบียนภายใต้ lock เดียวกัน
+  รวมถึงตอนเลื่อนชั้น เพื่อไม่ใช้ snapshot ที่เก่ากว่าการแก้ไขที่เพิ่งบันทึก.
+  รายชื่อปีก่อนรวมทะเบียนที่ยังอยู่ปีเดิมกับ snapshot ล่าสุดต่อรหัสนักเรียน
+  ไม่ใช่ใช้ snapshot เฉพาะเมื่อทั้งห้องว่าง. fallback จาก attendance ที่ไม่มี snapshot
+  ใช้ค่าเริ่มต้นตามลำดับรหัสของรายชื่อในปีนั้น ไม่ยืมเลขที่ปัจจุบันมาใส่.
+  ค่าเริ่มต้นนี้เป็นลำดับเดิมของระบบ ไม่ได้อ้างว่าโรงเรียนเคยกำหนดเลขที่นั้นเอง.
+- หน้าเว็บใช้ `compareStudentRows` / `studentNoLabel` (`Scripts_Core.html`) ร่วมกันใน
+  ทะเบียนนักเรียน ตารางคะแนน การประเมิน ส่งออก SGS และ payload ปพ.5 ใช้เลขที่จาก server.
+  Admin กรอกช่อง **เลขที่ประจำห้อง** เฉพาะนักเรียน; เว้นว่างให้ server กำหนดเลขที่ว่าง
+  อัตโนมัติ ส่วน staff ไม่ส่งค่า. ไม่มีการสร้างเลขที่ใหม่จากลำดับแถวที่แสดงหรือกรองอยู่.
+- บันทึกทะเบียนแล้วล้าง cache `all_users*` และ `students_*` ทันที; อย่าล้างแค่
+  `all_users_admin` เพราะ Management ใช้ key `all_users_management`.
+
 | Table | Cols | PK / Note |
 |---|---|---|
-| `users` | username, password, full_name, role, department, email, year, status | PK `username`. role: Student/Teacher/Admin/Executive. Promote update in-place |
+| `users` | username, password, full_name, role, department, email, year, status, student_no | PK `username`. role: Student/Teacher/Admin/Executive. Promote update in-place |
 | `user_history` | id, username, action, changed_by, old_data jsonb, new_data jsonb, timestamp | audit log + snapshot ก่อน promote |
 | `system_settings` | key, subkey, value, ... | active term/year, TermData rows |
 

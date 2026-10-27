@@ -69,10 +69,7 @@ async function planClass(subjectCode, className, term, year) {
        WHERE subject_code=$1 AND term=$2 AND year=$3`,
       [subjectCode, term, year]
     ),
-    query(
-      `SELECT username, full_name, department FROM users
-       WHERE UPPER(role)='STUDENT' AND status='ปกติ'`
-    ),
+    require('./students').getStudentsByClass([className, year]),
     query(
       `SELECT student_id, indicator_id, score FROM score_database
        WHERE subject_code=$1 AND term=$2 AND year=$3`,
@@ -103,9 +100,7 @@ async function planClass(subjectCode, className, term, year) {
     .filter(r => r.ms_source === AUTO_SOURCE)
     .map(r => String(r.student_id).trim()));
 
-  const roster = rosterRes.rows
-    .filter(u => normalize(u.department) === normalize(className))
-    .sort((a, b) => String(a.username).localeCompare(String(b.username)));
+  const roster = rosterRes.map(r => ({ username: r[0], full_name: r[2] }));
 
   const rows = [];
   let skippedAuto = 0;

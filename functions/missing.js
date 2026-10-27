@@ -1287,18 +1287,6 @@ async function promoteStudentsToNextYear() {
   const currentYear = parseInt(config.year);
   if (!currentYear) return { status: 'error', message: 'อ่านค่าปีการศึกษาไม่สำเร็จ' };
 
-  // Snapshot full row before mutation
-  const { rows } = await query(
-    `SELECT username, password, full_name, role, department, email, year, status
-     FROM users
-     WHERE UPPER(role)='STUDENT' AND status='ปกติ' AND CAST(year AS INTEGER) < $1`,
-    [currentYear]
-  );
-
-  if (rows.length === 0) {
-    return { status: 'error', message: '⚠️ ไม่พบนักเรียนที่เข้าเงื่อนไขการเลื่อนชั้น!' };
-  }
-
   const { pool } = require('../lib/db');
   const client = await pool.connect();
   let updateCount = 0;
@@ -1306,23 +1294,34 @@ async function promoteStudentsToNextYear() {
 
   try {
     await client.query('BEGIN');
+    await client.query('LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE');
+    const { assignStudentNumbers } = require('../lib/studentRoster');
+    const { rows: registered } = await client.query(
+      `SELECT username,password,full_name,role,department,email,year,status,student_no
+       FROM users WHERE UPPER(role)='STUDENT'`);
+    const rows = registered.filter(r => r.status === 'ปกติ' && r.year && Number(r.year) < currentYear);
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return { status: 'error', message: '⚠️ ไม่พบนักเรียนที่เข้าเงื่อนไขการเลื่อนชั้น!' };
+    }
+    const targets = new Set(rows.map(r => r.username));
+    const missingOthers = registered.filter(r => r.student_no == null && !targets.has(r.username));
+    assignStudentNumbers(registered);
+    const currentMembers = registered.filter(r => String(r.year) === String(currentYear));
+    const planned = rows.map(r => {
+      const m = String(r.department || '').match(/ม\.(\d+)\/(\d+)/);
+      const graduate = m && (Number(m[1]) === 3 || Number(m[1]) === 6);
+      return { ...r, department: m && !graduate ? `ม.${Number(m[1]) + 1}/${Number(m[2])}` : r.department,
+        year: String(currentYear), status: graduate ? 'จบการศึกษา' : r.status, student_no: null };
+    });
+    assignStudentNumbers([...currentMembers, ...planned]);
+    const plannedById = new Map(planned.map(r => [r.username, r]));
+    for (const r of missingOthers) {
+      if (r.student_no != null) await client.query('UPDATE users SET student_no=$1 WHERE username=$2', [r.student_no, r.username]);
+    }
     for (const r of rows) {
-      const cls = String(r.department || '');
-      const m = cls.match(/ม\.(\d+)\/(\d+)/);
-      let newDept = r.department;
-      let newStatus = r.status;
-      let isGraduate = false;
-
-      if (m) {
-        const level = parseInt(m[1]);
-        const room = parseInt(m[2]);
-        if (level === 3 || level === 6) {
-          newStatus = 'จบการศึกษา';
-          isGraduate = true;
-        } else {
-          newDept = `ม.${level + 1}/${room}`;
-        }
-      }
+      const next = plannedById.get(r.username);
+      const isGraduate = next.status === 'จบการศึกษา';
 
       // Snapshot old row to user_history before mutation
       await client.query(
@@ -1331,20 +1330,20 @@ async function promoteStudentsToNextYear() {
         [
           r.username,
           JSON.stringify(r),
-          JSON.stringify({ ...r, department: newDept, year: String(currentYear), status: newStatus }),
+          JSON.stringify(next),
         ]
       );
 
       if (isGraduate) {
         await client.query(
-          `UPDATE users SET status='จบการศึกษา', year=$1 WHERE username=$2`,
-          [currentYear, r.username]
+          `UPDATE users SET status='จบการศึกษา', year=$1, student_no=$3 WHERE username=$2`,
+          [currentYear, r.username, next.student_no]
         );
         graduateCount++;
       } else {
         await client.query(
-          `UPDATE users SET department=$1, year=$2 WHERE username=$3`,
-          [newDept, currentYear, r.username]
+          `UPDATE users SET department=$1, year=$2, student_no=$4 WHERE username=$3`,
+          [next.department, currentYear, r.username, next.student_no]
         );
         updateCount++;
       }
@@ -1358,7 +1357,8 @@ async function promoteStudentsToNextYear() {
   }
 
   const cache = require('../lib/cache');
-  cache.del('all_users');
+  cache.delPrefix('all_users');
+  cache.delPrefix('students_');
 
   return {
     status: 'success',

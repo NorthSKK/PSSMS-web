@@ -321,6 +321,28 @@ function syncSystemTerm() {
   }).getSystemConfig();
 }
 
+function parseStudentNo(value) {
+  if (value == null || String(value).trim() === '') return null;
+  var text = String(value).trim(), number = Number(text);
+  if (!/^0*[1-9]\d*$/.test(text) || !Number.isSafeInteger(number) || number > 2147483647) {
+    throw new Error('เลขที่ต้องเป็นจำนวนเต็มบวก หรือเว้นว่าง');
+  }
+  return number;
+}
+
+function studentNoLabel(student) {
+  return student[8] == null || student[8] === '' ? '—' : String(student[8]);
+}
+
+function compareStudentRows(a, b) {
+  var cls = String(a[4] || '').localeCompare(String(b[4] || ''), 'th', { numeric: true });
+  if (cls) return cls;
+  var an = a[8] == null || a[8] === '' ? Infinity : Number(a[8]);
+  var bn = b[8] == null || b[8] === '' ? Infinity : Number(b[8]);
+  if (an !== bn) return an < bn ? -1 : 1;
+  return String(a[0]).localeCompare(String(b[0]));
+}
+
 function saveUserSession(user) {
   localStorage.setItem('pssms_user', JSON.stringify(user));
   window.currentUser = user;

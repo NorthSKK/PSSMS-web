@@ -651,7 +651,7 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
   thead.innerHTML = headHtml + subHeadHtml;
 
   let bodyHtml = '';
-  students.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  students.sort(compareStudentRows);
 
   students.forEach((std, rowIndex) => {
     const stdId = String(std[0]).trim();
@@ -678,7 +678,7 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
     if (remarkVal === '-') remarkVal = '';
     
     bodyHtml += `<tr style="height:28px;">
-      <td class="text-center text-muted fw-bold sticky-col-1 align-middle border-end" style="font-size:0.75rem; background-color: #fff; padding: 1px 2px;">${rowIndex + 1}</td>
+      <td class="text-center text-muted fw-bold sticky-col-1 align-middle border-end" style="font-size:0.75rem; background-color: #fff; padding: 1px 2px;">${studentNoLabel(std)}</td>
       <td class="text-start sticky-col-2 align-middle px-2 border-end" style="background-color: #fff; padding-top: 1px; padding-bottom: 1px;">
          <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.78rem; line-height:1.15;">${std[2]}</div>
          <div class="d-flex align-items-center">
@@ -1215,11 +1215,7 @@ function renderSGSGrid(mode) {
   window.sgsCurrentMode = mode;
   const normID = (id) => { let clean = String(id).replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, ''); return clean || '0'; };
 
-  let sortedStudents = [...currentScoreStudents].sort((a, b) => {
-      let idA = parseInt(String(a[0]).replace(/[^0-9]/g, '')) || 0;
-      let idB = parseInt(String(b[0]).replace(/[^0-9]/g, '')) || 0;
-      return idA - idB;
-  });
+  let sortedStudents = [...currentScoreStudents].sort(compareStudentRows);
 
   let buttonsHtml = `
      <div class="d-flex w-100 justify-content-between mb-3 align-items-center">
@@ -1272,7 +1268,7 @@ function renderSGSGrid(mode) {
   sortedStudents.forEach((std, rIdx) => {
       const safeStdId = normID(std[0]);
       let rowHtml = `<tr>
-        <td class="text-muted text-center">${rIdx + 1}</td>
+        <td class="text-muted text-center">${studentNoLabel(std)}</td>
         <td class="fw-bold text-primary font-monospace text-center">${std[0]}</td>
         <td class="text-start text-truncate" style="max-width: 150px;">${std[2]}</td>`;
 
@@ -1557,11 +1553,11 @@ window.preparePrintPorPor5 = function(event) {
         return;
     }
 
-    currentScoreStudents.forEach((std, rowIndex) => {
+    [...currentScoreStudents].sort(compareStudentRows).forEach((std) => {
         const stdId = String(std[0]).trim();
         const safeStdId = normID(stdId); 
         const name = std[2];
-        const no = rowIndex + 1;
+        const no = studentNoLabel(std);
         stats.total++; 
 
         let formativeScores = [];
@@ -1692,7 +1688,7 @@ function renderEvalTable(students, existingQuals) {
   const tbody = document.getElementById('evalTableBody');
   let bodyHtml = '';
   
-  students.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  students.sort(compareStudentRows);
 
   students.forEach((std, rowIndex) => {
     const stdId = String(std[0]).trim();
@@ -1706,7 +1702,7 @@ function renderEvalTable(students, existingQuals) {
 
     let colIndex = 0; 
     bodyHtml += `<tr style="height:28px;">
-      <td class="text-center text-muted fw-bold sticky-col-1" style="font-size:0.75rem; padding: 1px 2px;">${rowIndex + 1}</td>
+      <td class="text-center text-muted fw-bold sticky-col-1" style="font-size:0.75rem; padding: 1px 2px;">${studentNoLabel(std)}</td>
       <td class="text-start px-2 sticky-col-2" style="padding-top: 1px; padding-bottom: 1px;">
          <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.78rem; line-height:1.15;">${std[2]}</div>
          <div class="text-muted font-monospace" style="font-size: 0.68rem;">${stdId}</div>
