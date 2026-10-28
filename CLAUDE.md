@@ -420,6 +420,10 @@ unique index `users_student_no_unique` กันซ้ำในห้องเ�
 | `user_history` | id, username, action, changed_by, old_data jsonb, new_data jsonb, timestamp | audit log + snapshot ก่อน promote |
 | `system_settings` | key, subkey, value, ... | active term/year, TermData rows |
 
+`getSystemConfig` คืน `termStart`/`termEnd` ของเทอมปัจจุบัน และ
+`termHistory["เทอม_ปี"] = { start, end }` จาก `TermData` ทุกแถว (วันที่ ค.ศ.).
+หน้าตั้งค่าจึงดึงช่วงวันที่ที่บันทึกไว้กลับมาได้เมื่อสลับภาคเรียนหรือปีการศึกษา.
+
 ### Curriculum / Timetable
 | Table | Cols | Note |
 |---|---|---|
@@ -2002,6 +2006,10 @@ document.getElementById('subFilterFrom').value = '2026-08-17';  // ❌ ช่อ
 
 `setDateValue(id, val)` เรียก `el._flatpickr.setDate(val, false)` ให้ด้วย
 (`false` = ไม่ยิง `onChange` — คนเรียกจัดการ reload เอง)
+
+หน้าตั้งค่าภาคเรียนต้องใช้ตัวนี้ทั้งตอนรับ `getSystemConfig()` และตอนสลับเทอม:
+API อาจตอบหลัง picker เริ่มทำงานแล้ว การใส่ `.value` ตรง ๆ ทำให้กรอบสรุปมีวันที่
+แต่ช่องเปิด–ปิดภาคเรียนที่เห็นยังว่าง รวมถึงการโหลดซ้ำหลังบันทึกด้วย
 
 ⚠️ **ล้างค่าก็ต้องผ่านมัน** — `el.value=''` ตรง ๆ ตัวกรองถูกล้างจริงแต่ช่องที่ครูเห็น
 ยังค้างวันเดิม (เคยหลุดที่ปุ่ม "ล้างตัวกรอง" ของหน้าสารบรรณ) · `setDateValue(id,'')` รองรับ

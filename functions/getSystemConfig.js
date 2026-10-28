@@ -14,7 +14,7 @@ module.exports = async function getSystemConfig() {
   const config = {
     term: '1', year: '2568',
     schoolName: '',
-    schoolLogo: '', termStart: '', termEnd: '',
+    schoolLogo: '', termStart: '', termEnd: '', termHistory: {},
   };
 
   for (const r of rows) {
@@ -27,9 +27,13 @@ module.exports = async function getSystemConfig() {
   }
 
   for (const r of rows) {
-    if (r.key === 'TermData' && r.subkey === `${config.term}_${config.year}`) {
-      config.termStart = r.value1 || '';
-      config.termEnd = r.value2 || '';
+    if (r.key === 'TermData') {
+      const range = { start: r.value1 || '', end: r.value2 || '' };
+      config.termHistory[r.subkey] = range;
+      if (r.subkey === `${config.term}_${config.year}`) {
+        config.termStart = range.start;
+        config.termEnd = range.end;
+      }
     }
   }
 

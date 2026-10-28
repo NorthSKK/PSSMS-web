@@ -324,12 +324,9 @@ function loadCurrentConfig() {
     if(termEl) { termEl.removeEventListener('change', handleTermYearChange); termEl.addEventListener('change', handleTermYearChange); }
     if(yearEl) { yearEl.removeEventListener('input', handleTermYearChange); yearEl.addEventListener('input', handleTermYearChange); }
 
-    const sDateInput = document.getElementById('inputStartDate');
-    const eDateInput = document.getElementById('inputEndDate');
-
-    // 🌟 ดึงข้อมูลล่าสุดมาใส่ (ผ่านตัวแปลงให้แสดงผลชัวร์ 100%)
-    if (config.termStart) sDateInput.value = formatDateForInput(config.termStart);
-    if (config.termEnd) eDateInput.value = formatDateForInput(config.termEnd);
+    // API อาจตอบหลัง flatpickr สร้างช่องภาษาไทยแล้ว ต้องอัปเดตทั้งสองช่องพร้อมกัน
+    setDateValue('inputStartDate', formatDateForInput(config.termStart));
+    setDateValue('inputEndDate', formatDateForInput(config.termEnd));
     
     if(document.getElementById('currentTermDisplay')) document.getElementById('currentTermDisplay').innerText = `${config.term}/${config.year}`;
     if(document.getElementById('currentRangeDisplay')) document.getElementById('currentRangeDisplay').innerText = `${formatThaiDate(config.termStart)} ถึง ${formatThaiDate(config.termEnd)}`;
@@ -435,9 +432,6 @@ function handleTermYearChange() {
   const y = document.getElementById('inputYear').value.trim();
   const key = `${t}_${y}`;
   
-  const sDateInput = document.getElementById('inputStartDate');
-  const eDateInput = document.getElementById('inputEndDate');
-
   // ดึงข้อมูลให้ก็ต่อเมื่อพิมพ์ปีครบ 4 หลักแล้วเท่านั้น
   if (y.length >= 4) {
      if (systemConfigHistory[key] && systemConfigHistory[key].start && systemConfigHistory[key].end) {
@@ -445,19 +439,14 @@ function handleTermYearChange() {
          const sDate = formatDateForInput(systemConfigHistory[key].start);
          const eDate = formatDateForInput(systemConfigHistory[key].end);
          
-         sDateInput.value = sDate;
-         eDateInput.value = eDate;
-         
-         if(sDateInput._flatpickr) sDateInput._flatpickr.setDate(sDate);
-         if(eDateInput._flatpickr) eDateInput._flatpickr.setDate(eDate);
+         setDateValue('inputStartDate', sDate);
+         setDateValue('inputEndDate', eDate);
          
          if (typeof showToast === 'function') showToast(`ดึงข้อมูลวันที่ของเทอม ${t}/${y} ให้อัตโนมัติ`, 'success');
      } else {
          // ถ้าเป็นเทอมใหม่ที่ไม่มีในประวัติ ให้ล้างช่องรอให้กรอก
-         sDateInput.value = "";
-         eDateInput.value = "";
-         if(sDateInput._flatpickr) sDateInput._flatpickr.clear();
-         if(eDateInput._flatpickr) eDateInput._flatpickr.clear();
+         setDateValue('inputStartDate', '');
+         setDateValue('inputEndDate', '');
          
          if (typeof showToast === 'function') showToast(`ยังไม่มีประวัติวันที่ของเทอม ${t}/${y} โปรดระบุใหม่`, 'warning');
      }
