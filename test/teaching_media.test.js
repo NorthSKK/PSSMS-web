@@ -25,8 +25,8 @@ function get(path) {
   });
 }
 
-test('all three lessons open as isolated HTML without accessing application credentials', async () => {
-  for (const slug of ['equilibrium', 'sound', 'electromagnetic-waves']) {
+test('all four lessons open as isolated HTML without accessing application credentials', async () => {
+  for (const slug of ['equilibrium', 'sound', 'electromagnetic-waves', 'air']) {
     const res = await get('/teaching-media/' + slug);
     assert.equal(res.status, 200);
     assert.match(res.headers['content-type'], /text\/html/);

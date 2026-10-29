@@ -7,6 +7,7 @@
 | สมดุลกล | https://pw.pssms.app/teaching-media/equilibrium |
 | เสียง | https://pw.pssms.app/teaching-media/sound |
 | คลื่นแม่เหล็กไฟฟ้า | https://pw.pssms.app/teaching-media/electromagnetic-waves |
+| อากาศ (วิทยาศาสตร์กายภาพ บทที่ 1) | https://pw.pssms.app/teaching-media/air |
 
 แต่ละไฟล์เป็น HTML สำเร็จรูป รวม CSS/JavaScript ไม่มี dependency ภายนอก ไม่ต้องใช้ Vercel
 หรือเซิร์ฟเวอร์ localhost. ไม่มีการเปลี่ยนระบบอัปโหลด: ยังไม่รับ HTML ที่ผู้ใช้ส่งเข้ามาเอง.
@@ -23,7 +24,7 @@ Router ตั้ง CSP `sandbox allow-scripts` โดยไม่ให้ `all
 
 ## เพิ่มการ์ดให้ teacher12 เฉพาะภูพระบาทวิทยา
 
-หลัง deploy และตรวจสาม URL แล้ว รัน `scripts/import-pw-physics-media.js` โดยตั้ง
+สำหรับสามบทฟิสิกส์เดิม หลัง deploy และตรวจ URL แล้ว รัน `scripts/import-pw-physics-media.js` โดยตั้ง
 `DATABASE_URL` ของโรงเรียนเป้าหมายผ่านช่องทางที่มีอยู่. สคริปต์ไม่โหลด `.env.prod` เอง.
 
 ```sh
@@ -37,13 +38,18 @@ node scripts/import-pw-physics-media.js --apply  # เพิ่มการ์�
 ครูปรับระดับชั้นจากหน้าเพิ่ม/แก้การ์ดได้เอง. ไม่รันสคริปต์นี้อัตโนมัติใน migration/boot
 จึงไม่เพิ่มการ์ดของครูคนนี้ให้โรงเรียนอื่น.
 
+บทอากาศอิง PDF ที่ผู้ใช้จัดให้ ครอบคลุมองค์ประกอบอากาศ อะตอม ไอออน ไอโซโทป
+อิเล็กตรอน ตารางธาตุ ประโยชน์และมลพิษ มีแบบทดสอบก่อนเรียน 10 ข้อและทบทวน 15 ข้อ.
+เพิ่มการ์ด `air` ให้ teacher12 ผ่านการบำรุงรักษาเฉพาะโรงเรียนหลังตรวจ URL จริง
+โดยตรวจชื่อโรงเรียน บทบาท เจ้าของ และ URL ซ้ำก่อนบันทึก; ไม่เพิ่มบทนี้ในสคริปต์นำเข้าสามบทเดิม.
+
 ## ตรวจงาน
 
 ```sh
 node --test test/teaching_media.test.js test/physics_media_import.test.js
 ```
 
-HTTP tests ตรวจสามบท/CSP/404/traversal; import tests ตรวจ school guard, dry-run,
+HTTP tests ตรวจทั้งสี่บท/CSP/404/traversal; import tests ตรวจ school guard, dry-run,
 owner/visibility และการรันซ้ำโดยไม่แตะฐานข้อมูลจริง.
 ตรวจในเบราว์เซอร์เพิ่ม: ปรับตัวควบคุม ทำแบบทดสอบ หมุนภาพสามมิติ และกดฟังเสียง
 โดยไม่มี script errors หรือ network requests ภายนอก.

@@ -5,7 +5,7 @@ const path = require('path');
 const router = express.Router();
 
 // Only reviewed, bundled lessons are executable. Never serve arbitrary uploads here.
-const LESSONS = new Set(['equilibrium', 'sound', 'electromagnetic-waves']);
+const LESSONS = new Set(['equilibrium', 'sound', 'electromagnetic-waves', 'air']);
 const CSP = [
   'sandbox allow-scripts',
   "default-src 'none'",
