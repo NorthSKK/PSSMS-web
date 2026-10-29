@@ -728,8 +728,9 @@ async function getClubAttendanceSummary([clubId, term, year]) {
 }
 
 async function deleteClub([clubId]) {
-  await query(`DELETE FROM clubs WHERE club_id=$1`, [clubId]);
-  cache.del('clubs_all');
+  const res = await query(`DELETE FROM clubs WHERE club_id=$1 RETURNING term, year`, [clubId]);
+  if (!res.rows.length) throw new Error('ไม่พบชุมนุม');
+  for (const r of res.rows) cache.del(`clubs_${r.term}_${r.year}`);
   return { status: 'success', message: 'ลบชุมนุมสำเร็จ' };
 }
 
@@ -1240,41 +1241,41 @@ async function sendTaskToNotion([text]) {
 // adminAddMember / adminRemoveMember — club admin actions
 // ============================================================
 async function adminAddMember([clubId, studentId]) {
-  // Lookup student info
+  const cid = String(clubId || '').trim();
+  const sid = String(studentId || '').trim();
+  const clubRes = await query(`SELECT term, year, capacity FROM clubs WHERE club_id=$1`, [cid]);
+  if (!clubRes.rows.length) throw new Error('ไม่พบชุมนุม');
+  const { term, year } = clubRes.rows[0];
   const { rows } = await query(
-    `SELECT username, full_name, department FROM users WHERE username=$1`, [studentId]
+    `SELECT username, full_name, department, status FROM users WHERE username=$1 AND UPPER(role)='STUDENT'`, [sid]
   );
-  const u = rows[0] || {};
-
-  // Check if already registered
+  if (!rows.length) throw new Error('ไม่พบข้อมูลนักเรียน');
+  const status = String(rows[0].status || '').trim();
+  if (status === 'แขวนลอย' || status === 'จบการศึกษา') {
+    throw new Error(`ไม่สามารถเพิ่มสมาชิกที่มีสถานะ ${status}`);
+  }
   const existing = await query(
-    `SELECT club_id FROM club_members WHERE student_id=$1`, [studentId]
+    `SELECT club_id FROM club_members WHERE student_id=$1 AND term=$2 AND year=$3`, [sid, term, year]
   );
-  if (existing.rows.length > 0) {
-    return { status: 'already', message: `${studentId} ลงทะเบียนชุมนุมอื่นแล้ว` };
+  if (existing.rows.length) {
+    if (existing.rows[0].club_id === cid) return { status: 'already', message: 'นักเรียนอยู่ในชุมนุมนี้แล้ว' };
+    throw new Error(`${sid} ลงทะเบียนชุมนุมอื่นในภาคเรียนนี้แล้ว`);
   }
-
-  // Get club term/year
-  const clubRes = await query(`SELECT term, year, capacity FROM clubs WHERE club_id=$1`, [clubId]);
-  if (clubRes.rows.length === 0) return { status: 'error', message: 'ไม่พบชุมนุม' };
-  const club = clubRes.rows[0];
-
-  try {
-    await query(
-      `INSERT INTO club_members(club_id,student_id,student_name,class_name,term,year,registered_by)
-       VALUES($1,$2,$3,$4,$5,$6,'admin')`,
-      [clubId, studentId, u.full_name || '', u.department || '', club.term, club.year]
-    );
-    return { status: 'success', message: 'เพิ่มสมาชิกสำเร็จ' };
-  } catch (e) {
-    return { status: 'error', message: e.message };
-  }
+  await query(
+    `INSERT INTO club_members(club_id,student_id,student_name,class_name,term,year,registered_by)
+     VALUES($1,$2,$3,$4,$5,$6,'admin')`,
+    [cid, sid, rows[0].full_name || '', rows[0].department || '', term, year]
+  );
+  cache.del(`clubs_${term}_${year}`);
+  return { status: 'success', message: 'เพิ่มสมาชิกสำเร็จ' };
 }
 
 async function adminRemoveMember([clubId, studentId]) {
-  await query(
-    `DELETE FROM club_members WHERE club_id=$1 AND student_id=$2`, [clubId, studentId]
+  const res = await query(
+    `DELETE FROM club_members WHERE club_id=$1 AND student_id=$2 RETURNING term, year`, [clubId, studentId]
   );
+  if (!res.rows.length) throw new Error('ไม่พบสมาชิกในชุมนุมนี้');
+  for (const r of res.rows) cache.del(`clubs_${r.term}_${r.year}`);
   return { status: 'success', message: 'ลบสมาชิกสำเร็จ' };
 }
 
