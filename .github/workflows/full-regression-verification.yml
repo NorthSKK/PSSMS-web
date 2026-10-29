@@ -61,6 +61,7 @@ jobs:
             }
           }
           const report=[...files].map(([file,map])=>({file,called:[...map.values()].filter(f=>f.called).map(f=>f.name),notCalled:[...map.values()].filter(f=>!f.called).map(f=>f.name)}));
+          console.log('FUNCTION_COVERAGE '+JSON.stringify(report));
           fs.writeFileSync('/tmp/pssms-backend-coverage.json',JSON.stringify(report,null,2));
           console.log(JSON.stringify({files:report.length,called:report.reduce((n,r)=>n+r.called.length,0),notCalled:report.reduce((n,r)=>n+r.notCalled.length,0)}));
           JS

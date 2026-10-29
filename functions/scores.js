@@ -118,7 +118,7 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year], us
       charTotal: r.char_total || 0, charGrade: r.char_grade || 0,
       read1: r.read1 || '', read2: r.read2 || '', read3: r.read3 || '', read4: r.read4 || '',
       readTotal: r.read_total || 0, readGrade: r.read_grade || 0,
-      comp: r.comp || 3,
+      comp: r.comp ?? 3,
     };
   }
 

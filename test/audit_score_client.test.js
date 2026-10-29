@@ -24,3 +24,23 @@ test('indicator modal preserves 100:0:0 and ignores response after switching cla
  const call=h.calls[1];assert.deepEqual([call.payload.formative,call.payload.midterm,call.payload.final],[100,0,0]);
  let refreshed=false;h.c.refreshTableOnly=()=>refreshed=true;h.choose('B');call.success({status:'success'});assert.equal(refreshed,false);
 });
+
+test('refresh after editing headers retains leading-zero student scores and competency selection',()=>{
+ const h=harness();h.els.scoreClassSelect.value=JSON.stringify(['A','วิชา','ม.1/1']);
+ h.els.scoreTableHeader={innerHTML:''};
+ h.c.currentScoreConfig={ratio:'70:10:20',indicators:[{name:'งาน',score:70}]};
+ h.c.currentScoreStudents=[['01903','','นักเรียน','Student','ม.1/1','','2569','ปกติ',1]];
+ h.c.sgsColumnStates={};h.c.isQualVisible=true;h.c.reCalcAllRows=()=>{};
+ h.c.compareStudentRows=()=>0;h.c.studentNoLabel=r=>r[8];
+ const values={'.midterm-std-1903':'17','.midterm-re-std-1903':'0','.final-std-1903':'19','.remark-select[data-safeid="1903"]':'ร','.qual-read[data-safeid="1903"]':'1','.qual-char[data-safeid="1903"]':'2','.qual-comp[data-safeid="1903"]':'0'};
+ h.c.document.querySelector=selector=>Object.hasOwn(values,selector)?{value:values[selector]}:null;
+ h.c.document.querySelectorAll=selector=>selector==='.formative-std-1903'?[{value:'23'}]:[];
+ vm.runInContext(fn('refreshTableOnly')+'\n'+fn('renderAllInOneTable'),h.c);h.c.refreshTableOnly();
+ const html=h.els.scoreTableBody.innerHTML;
+ for(const [cls,value] of [['formative-std-1903','23'],['midterm-std-1903','17'],['midterm-re-std-1903','0'],['final-std-1903','19']]){
+   const input=[...html.matchAll(/<input\b[^>]*>/g)].map(m=>m[0]).find(tag=>tag.includes(cls));assert.ok(input,cls);assert.ok(input.includes('value="'+value+'"'),input);
+ }
+ assert.match(html,/01903/);
+ const comp=html.match(/<select class="qual-select qual-comp[\s\S]*?<\/select>/)[0];assert.match(comp,/value="0" selected/);
+ assert.match(html,/<option value="ร" selected/);
+});
