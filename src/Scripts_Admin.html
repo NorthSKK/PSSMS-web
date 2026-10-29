@@ -2076,6 +2076,10 @@ let _clubTeacherList = [];
 let _clubSelectedAdvisors = {};       // { teacherId: true }
 let _currentClubForMembers = null;    // { clubId, clubName, term, year }
 let _clubMembersCache = [];
+let _clubUsersLoading = false;
+let _clubUsersLoaded = false;
+let _clubTeachersLoading = false;
+let _clubTeachersLoaded = false;
 
 function initAdminClubs() {
   const user = JSON.parse(localStorage.getItem('pssms_user'));
@@ -2085,20 +2089,11 @@ function initAdminClubs() {
   if (termLabel) termLabel.textContent = user.currentTerm;
   if (yearLabel) yearLabel.textContent = user.currentYear;
 
-  // Prime allUsers cache if empty (Page_Admin_Clubs may be opened directly)
-  if (!allUsers || allUsers.length === 0) {
-    google.script.run.withSuccessHandler(d => { allUsers = d; }).getAllUsers();
-  }
+  _clubUsersLoaded = false;
+  loadClubUsers();
 
   loadClubList();
   loadTeacherListForClubs();
-}
-
-function setupClubDb() {
-  Swal.fire({ title: 'สร้าง/ตรวจสอบฐานข้อมูลชุมนุม?', text: 'Club_Database, Club_Advisors, Club_Members', icon: 'question', showCancelButton: true, confirmButtonText: 'สร้าง', cancelButtonText: 'ยกเลิก' }).then(r => {
-    if (!r.isConfirmed) return;
-    google.script.run.withSuccessHandler(res => { showAlert(res.message); loadClubList(); }).setupClubDatabase();
-  });
 }
 
 function loadClubList() {
@@ -2182,8 +2177,17 @@ function _filterClubListImpl() {
 
 // --- Create / Edit modal ---
 function loadTeacherListForClubs() {
+  if (_clubTeachersLoading) return;
+  _clubTeachersLoading = true;
   google.script.run.withSuccessHandler(list => {
+    _clubTeachersLoading = false;
+    _clubTeachersLoaded = true;
     _clubTeacherList = list || [];
+    renderAdvisorList(_clubTeacherList);
+  }).withFailureHandler(err => {
+    _clubTeachersLoading = false;
+    const box = document.getElementById('clubFormAdvisors');
+    if (box) box.innerHTML = '<div class="text-danger p-3">โหลดรายชื่อครูไม่สำเร็จ <button type="button" class="btn btn-sm btn-outline-secondary" onclick="loadTeacherListForClubs()">ลองใหม่</button></div>';
   }).getTeacherListForClubDropdown();
 }
 
@@ -2208,6 +2212,10 @@ function openClubModal(clubId) {
     document.getElementById('clubFormStatus').value = 'open';
   }
   renderAdvisorList(_clubTeacherList);
+  if (!_clubTeachersLoaded) {
+    document.getElementById('clubFormAdvisors').innerHTML = '<div class="text-muted p-3">กำลังโหลดรายชื่อครู...</div>';
+    loadTeacherListForClubs();
+  }
   // Ensure modal is shown (edit button doesn't have data-bs-toggle)
   const modalEl = document.getElementById('clubModal');
   if (modalEl) {
@@ -2245,6 +2253,8 @@ function _filterAdvisorListImpl() {
 }
 
 function submitClubForm() {
+  const btn = document.getElementById('clubFormSubmit');
+  if (btn.disabled) return;
   const user = JSON.parse(localStorage.getItem('pssms_user'));
   const clubId = document.getElementById('clubFormId').value;
   const clubName = document.getElementById('clubFormName').value.trim();
@@ -2266,7 +2276,6 @@ function submitClubForm() {
     advisors: advisors
   };
 
-  const btn = document.getElementById('clubFormSubmit');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>กำลังบันทึก...';
 
@@ -2281,8 +2290,13 @@ function submitClubForm() {
     }
   };
 
-  if (clubId) google.script.run.withSuccessHandler(onDone).updateClub(payload);
-  else google.script.run.withSuccessHandler(onDone).createClub(payload);
+  const onError = (err) => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-1"></i>บันทึก';
+    showAlert('❌ บันทึกชุมนุมไม่สำเร็จ: ' + (err.message || 'กรุณาลองใหม่'));
+  };
+  if (clubId) google.script.run.withSuccessHandler(onDone).withFailureHandler(onError).updateClub(payload);
+  else google.script.run.withSuccessHandler(onDone).withFailureHandler(onError).createClub(payload);
 }
 
 function deleteClubBtn(clubId, clubName) {
@@ -2303,14 +2317,44 @@ function openClubMembers(clubId, clubName, term, year) {
   document.getElementById('clubMembersList').innerHTML = _skelCards(3, 40);
   document.getElementById('clubMembersStudentList').innerHTML = '<div class="text-muted text-center p-3 small">เลือกชั้นเรียนเพื่อเริ่มเพิ่มนักเรียน</div>';
 
-  // populate class filter from cached user list
-  const classSet = new Set();
-  (allUsers || []).forEach(u => { if (String(u[3]).toLowerCase() === 'student' && u[4]) classSet.add(String(u[4])); });
-  const opts = Array.from(classSet).sort().map(c => `<option value="${c}">${c}</option>`).join('');
-  document.getElementById('clubMembersClassFilter').innerHTML = '<option value="">-- เลือกชั้น --</option>' + opts;
+  loadClubUsers();
 
   new bootstrap.Modal(document.getElementById('clubMembersModal')).show();
   loadClubMembersData();
+}
+
+function isEligibleClubMember(row) {
+  const status = String(row[7] || '').trim();
+  return String(row[3]).toLowerCase() === 'student' && status !== 'แขวนลอย' && status !== 'จบการศึกษา';
+}
+
+function renderClubMemberClasses() {
+  const select = document.getElementById('clubMembersClassFilter');
+  if (!select) return;
+  const selected = select.value;
+  const classes = Array.from(new Set((allUsers || []).filter(u => isEligibleClubMember(u) && u[4]).map(u => String(u[4])))).sort();
+  select.innerHTML = '<option value="">-- เลือกชั้น --</option>' + classes.map(c => '<option value="' + escapeHtmlSafe(c) + '">' + escapeHtmlSafe(c) + '</option>').join('');
+  select.value = classes.includes(selected) ? selected : '';
+  select.disabled = false;
+  loadMembersStudentList();
+}
+
+function loadClubUsers() {
+  if (_clubUsersLoaded) { renderClubMemberClasses(); return; }
+  const select = document.getElementById('clubMembersClassFilter');
+  if (select) { select.disabled = true; select.innerHTML = '<option value="">กำลังโหลดห้องเรียน...</option>'; }
+  if (_clubUsersLoading) return;
+  _clubUsersLoading = true;
+  google.script.run.withSuccessHandler(users => {
+    _clubUsersLoading = false;
+    _clubUsersLoaded = true;
+    allUsers = users || [];
+    renderClubMemberClasses();
+  }).withFailureHandler(err => {
+    _clubUsersLoading = false;
+    const box = document.getElementById('clubMembersStudentList');
+    if (box) box.innerHTML = '<div class="text-danger p-3">โหลดรายชื่อนักเรียนไม่สำเร็จ <button type="button" class="btn btn-sm btn-outline-secondary" onclick="loadClubUsers()">ลองใหม่</button></div>';
+  }).getAllUsers();
 }
 
 function loadClubMembersData(onDone) {
@@ -2362,7 +2406,7 @@ function loadMembersStudentList() {
   const box = document.getElementById('clubMembersStudentList');
   if (!cls) { box.innerHTML = '<div class="text-muted text-center p-3 small">เลือกชั้นเรียนก่อน</div>'; return; }
   const existing = new Set(_clubMembersCache.map(m => String(m.studentId).replace(/'/g, '').trim()));
-  const students = (allUsers || []).filter(u => String(u[3]).toLowerCase() === 'student' && String(u[4]) === cls);
+  const students = (allUsers || []).filter(u => isEligibleClubMember(u) && String(u[4]) === cls);
   if (!students.length) { box.innerHTML = '<div class="text-muted text-center p-3 small">ไม่พบนักเรียนในชั้นนี้</div>'; return; }
   box.innerHTML = students.map(s => {
     const sid = String(s[0]).replace(/'/g, '').trim();

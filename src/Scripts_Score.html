@@ -410,7 +410,36 @@ function toggleQualColumns() {
   refreshTableOnly(); 
 }
 
+let _scoreGridRequest = 0;
+let _scoreGridReadyKey = null;
+
+function scoreGridContextKey() {
+  const select = document.getElementById('scoreClassSelect');
+  const user = getSessionUser();
+  return select && select.value && user ? JSON.stringify([select.value, user.id, user.currentTerm, user.currentYear]) : null;
+}
+
+function isCurrentScoreGrid(request, key) {
+  return request === _scoreGridRequest && key !== null && key === scoreGridContextKey();
+}
+
+function resetScoreGridState() {
+  _scoreGridRequest++;
+  _scoreGridReadyKey = null;
+  clearTimeout(autoSaveTimer);
+  clearTimeout(retrySaveTimer);
+  isSavingScores = false;
+}
+
+function scoreRatioPart(value, fallback) {
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 function loadScoreGrid() {
+  resetScoreGridState();
+  const request = _scoreGridRequest;
+  const key = scoreGridContextKey();
   const val = document.getElementById('scoreClassSelect').value;
   const gridCard = document.getElementById('scoreGridCard');
   const btnSave = document.getElementById('btnSaveScores');
@@ -427,10 +456,13 @@ function loadScoreGrid() {
 
   safeRun(3)
     .withFailureHandler(err => {
+        if (!isCurrentScoreGrid(request, key)) return;
         document.getElementById('scoreTableBody').innerHTML = `<tr><td colspan="10" class="text-center text-danger p-5">โหลดข้อมูลไม่สำเร็จ: ${err.message}</td></tr>`;
         document.getElementById('scoreGridTitle').innerHTML = `เกิดข้อผิดพลาดในการโหลด`;
     })
     .withSuccessHandler(res => {
+        if (!isCurrentScoreGrid(request, key)) return;
+        _scoreGridReadyKey = key;
         btnSave.disabled = false;
         currentScoreConfig = res.config;
         currentScoreStudents = res.students;
@@ -925,6 +957,9 @@ function calcRow(stdId, safeStdId) {
 }
 
 function saveAllInOneScores(isSilent = false) {
+  const request = _scoreGridRequest;
+  const key = scoreGridContextKey();
+  if (!isCurrentScoreGrid(request, key) || _scoreGridReadyKey !== key || !currentScoreConfig) return;
   if(isSavingScores) {
       if(isSilent) {
           clearTimeout(retrySaveTimer);
@@ -948,6 +983,7 @@ function saveAllInOneScores(isSilent = false) {
   const e = parseFloat(document.getElementById('edit-ratio-e').innerText) || 0;
   
   const _doSaveAllInOne = () => {
+  if (!isCurrentScoreGrid(request, key) || _scoreGridReadyKey !== key) return;
   if (!isSilent && btn) {
      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...';
      btn.className = originalBtnClass;
@@ -1030,20 +1066,23 @@ function saveAllInOneScores(isSilent = false) {
         const rTot = document.getElementById(`rTot_${safeStdId}`) ? document.getElementById(`rTot_${safeStdId}`).innerText : '0';
         const rGrd = document.getElementById(`rGrd_${safeStdId}`) ? document.getElementById(`rGrd_${safeStdId}`).innerText : '0';
 
+        const compInput = document.querySelector(`.qual-comp[data-safeid="${safeStdId}"]`);
         payload.qualRecords.push({ 
             studentId: stdId, subjectCode: item[0], term: user.currentTerm, year: user.currentYear, 
             char1: c1, char2: c2, char3: c3, char4: c4, charTotal: cTot, char: cGrd, 
-            read1: r1, read2: r2, read3: r3, read4: r4, readTotal: rTot, read: rGrd  
+            read1: r1, read2: r2, read3: r3, read4: r4, readTotal: rTot, read: rGrd, comp: compInput ? compInput.value : undefined
         });
       });
 
       safeRun(3)
         .withFailureHandler(err => {
+          if (!isCurrentScoreGrid(request, key)) return;
           isSavingScores = false; 
           if(btn) { btn.disabled = false; btn.innerHTML = originalText; btn.className = originalBtnClass; }
           if(!isSilent) showAlert("❌ ขัดข้องที่ระบบเซิร์ฟเวอร์: " + err.message);
         })
         .withSuccessHandler(res => {
+          if (!isCurrentScoreGrid(request, key)) return;
           isSavingScores = false; 
           if(btn) { btn.disabled = false; btn.innerHTML = originalText; btn.className = originalBtnClass; }
           
@@ -1080,6 +1119,7 @@ function saveAllInOneScores(isSilent = false) {
   if((f + m + e) !== 100) {
      if(!isSilent) {
         Swal.fire({ title: '⚠️ สัดส่วนคะแนนรวมไม่เท่ากับ 100', text: 'ต้องการบันทึกต่อหรือไม่?', icon: 'warning', showCancelButton: true, confirmButtonText: 'บันทึกต่อ', cancelButtonText: 'ยกเลิก' }).then(r => {
+          if (!isCurrentScoreGrid(request, key)) return;
           if (!r.isConfirmed) { isSavingScores = false; return; }
           _doSaveAllInOne();
         });
@@ -1136,6 +1176,9 @@ window.showIndicatorEdit = function(idx) {
 };
 
 window.saveIndicatorDetail = function() {
+  const request = _scoreGridRequest;
+  const key = scoreGridContextKey();
+  if (!isCurrentScoreGrid(request, key) || _scoreGridReadyKey !== key) return;
   const idx = document.getElementById('editIndIdx').value;
   const newDesc = document.getElementById('editIndDesc').value.trim();
 
@@ -1161,17 +1204,19 @@ window.saveIndicatorDetail = function() {
     term: user.currentTerm,
     year: user.currentYear,
     teacherId: user.id,
-    formative: parseInt(ratios[0]) || 70,
-    midterm: parseInt(ratios[1]) || 10,
-    final: parseInt(ratios[2]) || 20,
+    formative: scoreRatioPart(ratios[0], 70),
+    midterm: scoreRatioPart(ratios[1], 10),
+    final: scoreRatioPart(ratios[2], 20),
     indicators: currentScoreConfig.indicators 
   };
 
   safeRun(3)
     .withFailureHandler(function(err) {
+      if (!isCurrentScoreGrid(request, key)) return;
       showToast('❌ ผิดพลาด: ' + err.message, 'danger');
     })
     .withSuccessHandler(function(res) {
+    if (!isCurrentScoreGrid(request, key)) return;
     if(res.status === 'success') {
       showToast('✅ อัปเดตรายละเอียดจุดประสงค์เรียบร้อยแล้ว!', 'success');
       refreshTableOnly();

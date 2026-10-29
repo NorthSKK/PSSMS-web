@@ -458,11 +458,27 @@ unique index `users_student_no_unique` กันซ้ำในห้องเ�
 | `print_config` | header config สำหรับพิมพ์ ปพ.5 — `sys_data` (jsonb) เก็บ `school_name` `school_address` `principal_name` `measure_head` `head_*` กรอกจากการ์ด "ส่วนจัดการของผู้ดูแลระบบ" บนหน้า `Page_Score_Entry` · ⚠️ **`savePrintConfigData` เขียน `sys_data` ทับทั้งก้อน ไม่ได้ merge** ฟิลด์ที่ฟอร์มไม่ส่งมาหายทันทีที่กดบันทึก เพิ่มฟิลด์ใหม่ต้องแตะ 3 ที่: markup, ตัวโหลด, `sysObj` ตอน save (เทส `test/print_config.test.js`) |
 
 ### Clubs
+
+ตารางชุมนุมสร้างและอัปเดตอัตโนมัติตอนเริ่มระบบ จึงไม่มีปุ่มสร้างฐานข้อมูลบนหน้าจัดการชุมนุม.
+
+`adminAddMember(clubId, studentId)` ตรวจสมาชิกซ้ำเฉพาะ **เทอม/ปีของชุมนุมปลายทาง**:
+ประวัติเทอมก่อนต้องไม่กันลงเทอมใหม่. `already` ใช้เฉพาะอยู่ชุมนุมเดิมเทอมเดียวกัน;
+ถ้าอยู่ชุมนุมอื่นในเทอมนั้นต้องแจ้งข้อผิดพลาด. เพิ่ม/ลบสมาชิกหรือลบชุมนุมต้องล้าง
+cache `clubs_<term>_<year>` ไม่ใช่ `clubs_all`. สร้าง/แก้ชุมนุมและรายชื่อครูที่ปรึกษา
+ต้องเขียนใน transaction เดียว เพื่อให้บันทึกไม่ครบแล้วไม่ค้างข้อมูลบางส่วน.
+ตัวเลือกเพิ่มสมาชิกไม่แสดงนักเรียนสถานะ `แขวนลอย` หรือ `จบการศึกษา` และ
+`adminAddMember` ต้องตรวจสถานะซ้ำก่อนเขียน เพื่อกันข้อมูลหน้าจอที่ค้างอยู่.
+กติกานี้ไม่ลบสมาชิกหรือประวัติชุมนุมที่บันทึกไว้แล้ว.
 | Table | Cols | PK |
 |---|---|---|
 | `clubs` | club_id, club_name, description, capacity, term, year, status, created_at, updated_at | PK `club_id`. clubId format `CLUB${Date.now()}` |
 | `club_advisors` | club_id, teacher_id, teacher_name, role, term, year | many-to-many |
 | `club_members` | 1 student : 1 club : 1 term |
+
+หน้าจัดการชุมนุมต้องรอรายชื่อนักเรียน/ครูจาก API แล้วเติมตัวเลือกซ้ำเมื่อโหลดสำเร็จ
+แม้เปิดหน้าต่างก่อน API ตอบ; โหลดล้มเหลวให้ลองใหม่ได้. บันทึกล้มเหลวต้องคืนปุ่มให้กดซ้ำ
+และคงค่าที่กรอกไว้. ตัวเลือกชุมนุมของครูใช้ `_tcMyClubs` โดยตรง (ประกาศ `let`
+จึงไม่มี `window._tcMyClubs`).
 
 ### Other
 | Table | Note |
@@ -754,7 +770,20 @@ const pickDept = (u) => String(u.department || u.dept || '').trim();
 
 ## Score (ปพ.5) Conventions
 
+### การโหลดและบันทึกตารางคะแนน
+
+`loadScoreGrid` ใช้ request generation และ context (วิชา/ห้อง/ผู้ใช้/เทอม/ปี)
+รับเฉพาะ response ของตารางที่ยังเลือกอยู่. บันทึกได้เมื่อโหลด context นั้นสำเร็จแล้วเท่านั้น;
+การเปลี่ยนหน้าหรือวิชาล้าง readiness และ timer Auto-Save/Retry.
+callback บันทึกและกล่องยืนยันต้องตรวจ context ซ้ำก่อนเปลี่ยน UI หรือส่งข้อมูล.
+สมรรถนะต้องส่งค่าจาก `.qual-comp` รวมถึง `0` และหน้ารายละเอียดตัวชี้วัดต้องคงสัดส่วนศูนย์.
+
 ### `score_ratio`
+
+สัดส่วนคะแนน `0` เป็นค่าจริง ไม่ใช่ค่าที่ขาดหาย: fallback เฉพาะ `null`/`undefined`.
+`saveAllInOneWithConfig` ตรวจ context ของ `qualRecords` ทั้งชุดก่อนเขียนข้อมูลใด ๆ:
+แถวที่ส่งวิชา/เทอม/ปีต่างจาก outer context ที่ผ่านสิทธิ์แล้วต้องถูกปฏิเสธ.
+สมรรถนะรับจำนวนเต็ม `0–3`; ไม่ส่งค่ามาให้คงค่าเดิมเมื่อ update (แถวใหม่ใช้ `3`).
 `"formative:midterm:final"` เช่น `"70:10:20"` (max scores)
 
 ### `indicators_json`
@@ -877,6 +906,10 @@ gate ข้างบนทำให้เด็กที่**ไม่ส่ง�
 · `getTeacherRiskDashboard` ส่ง `stdId` (รหัสดิบ) มาให้คอลัมน์รหัสประจำตัว — เดิมไม่ส่ง ใบพิมพ์ขึ้น `-` ทุกแถว
 
 ### มส. อัตโนมัติจากเวลาเรียน — `functions/autoMs.js`
+
+การแก้ประวัติผ่าน `updateAttendanceStatus` / `updateAttendanceBatch` ต้องทบทวน มส.
+จาก context ที่ `UPDATE ... RETURNING` แก้จริง โดยรวมวิชา×ห้อง×เทอม×ปีซ้ำก่อนเรียก
+`syncAutoMs` เดิม. ห้ามคำนวณเปอร์เซ็นต์เพิ่ม และ hook ล้มต้องไม่ล้มการบันทึกเช็คชื่อ.
 
 การ์ด "นักเรียนกลุ่มเสี่ยง (0, ร, มส.)" อ่านจาก `grade_summary` ส่วนการ์ด
 "กระดานแจ้งเตือนกลุ่มเสี่ยง" คำนวณสดจากเวลาเรียน — เดิมสองการ์ดไม่ตรงกันทั้งเทอม
