@@ -1,5 +1,9 @@
 # PSSMS Web — Node + Railway PostgreSQL
 
+สื่อฟิสิกส์ HTML ที่ตรวจทานแล้วเสิร์ฟจาก `/teaching-media/:lesson` ด้วย CSP sandbox
+แยกจาก JWT ของแอป; ไม่รับ HTML upload. รายละเอียดเส้นทาง การตรวจ และสคริปต์เพิ่ม
+การ์ดให้ teacher12 เฉพาะภูพระบาทวิทยาอยู่ที่ [`docs/physics-interactive-media.md`](docs/physics-interactive-media.md).
+
 ระบบบริหารจัดการสถานศึกษา 4 ฝ่าย — **web rewrite** ของ GAS prototype เดิม
 (อ่าน `../src/` เป็น reference เท่านั้น, ไม่ deploy ไป GAS แล้ว)
 

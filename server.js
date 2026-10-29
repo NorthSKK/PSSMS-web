@@ -8,6 +8,8 @@ const app = express();
 app.use(cors());
 if (process.env.NODE_ENV !== 'test') app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
+// Reviewed interactive lessons are isolated from the application's JWT origin.
+app.use('/teaching-media', require('./routes/teachingMedia'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Public deployment marker for the central customer registry. Keep this route
