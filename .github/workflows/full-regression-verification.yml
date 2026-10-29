@@ -41,6 +41,7 @@ jobs:
         env:
           TZ: Asia/Bangkok
       - run: npm test
+        if: always()
         env:
           TZ: UTC
       - name: Summarize exercised backend functions
