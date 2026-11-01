@@ -312,9 +312,12 @@ test('ไม่มีชื่อโรงเรียนใด hardcode อย�
   const path = require('node:path');
   const root = path.join(__dirname, '..');
   // seed เป็นข้อมูลสมมติ · คอมเมนต์อธิบายบั๊กเก่าอ้างชื่อได้ · ตัวเทสนี้เองก็มีคำนี้
+  // สคริปต์นำเข้าสื่อเฉพาะโรงเรียนใช้ชื่อเป็นด่านปฏิเสธ DB ผิดแห่ง ไม่ใช่ค่า default
+  // ยกเว้นเฉพาะไฟล์ operator นี้; runtime และ scripts อื่นยังต้องผ่านด่านเดิมทั้งหมด
   const out = execSync(
     `grep -rn "ภูพระบาท" --include="*.html" --include="*.js" . ` +
     `| grep -v node_modules | grep -v "^./db/seed" | grep -v "^./test/" ` +
+    `| grep -v "^\\./scripts/import-pw-physics-media\\.js:" ` +
     `| grep -v "^[^:]*:[0-9]*: *[/*]" | grep -v "// " || true`,
     { cwd: root, encoding: 'utf8' }
   ).trim();

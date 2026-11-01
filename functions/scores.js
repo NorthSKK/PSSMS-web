@@ -118,7 +118,7 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year], us
       charTotal: r.char_total || 0, charGrade: r.char_grade || 0,
       read1: r.read1 || '', read2: r.read2 || '', read3: r.read3 || '', read4: r.read4 || '',
       readTotal: r.read_total || 0, readGrade: r.read_grade || 0,
-      comp: r.comp || 3,
+      comp: r.comp ?? 3,
     };
   }
 
@@ -310,8 +310,20 @@ async function saveAllInOneWithConfig([payload], user) {
   await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
   const effectiveTeacherId = resolveTeacherId(user, p.teacherId);
 
+  // Validate the entire assessment batch before config/scores can be written.
+  for (const r of Array.isArray(qualRecords) ? qualRecords : []) {
+    for (const [field, expected] of Object.entries({ subjectCode, term, year })) {
+      if (r[field] != null && String(r[field]).trim() !== String(expected).trim()) {
+        throw new Error('ข้อมูลประเมินต้องเป็นวิชา ภาคเรียน และปีการศึกษาเดียวกับรายการที่บันทึก');
+      }
+    }
+    if (r.comp != null && r.comp !== '' && (!Number.isInteger(Number(r.comp)) || Number(r.comp) < 0 || Number(r.comp) > 3)) {
+      throw new Error('ผลประเมินสมรรถนะต้องเป็นจำนวนเต็ม 0–3');
+    }
+  }
+
   if (newConfig) {
-    const ratio = `${newConfig.formative || 70}:${newConfig.midterm || 10}:${newConfig.final || 20}`;
+    const ratio = `${newConfig.formative ?? 70}:${newConfig.midterm ?? 10}:${newConfig.final ?? 20}`;
     await query(
       `INSERT INTO subject_config(subject_id,subject_code,class_name,term,year,score_ratio,indicators_json,teacher_id,exam_indicators_json)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -343,17 +355,17 @@ async function saveAllInOneWithConfig([payload], user) {
              student_id, subject_code, term, year,
              char1, char2, char3, char4, char_total, char_grade,
              read1, read2, read3, read4, read_total, read_grade, comp
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,COALESCE($17,3))
            ON CONFLICT(student_id,subject_code,term,year) DO UPDATE SET
              char1=$5, char2=$6, char3=$7, char4=$8, char_total=$9, char_grade=$10,
-             read1=$11, read2=$12, read3=$13, read4=$14, read_total=$15, read_grade=$16, comp=$17`,
+             read1=$11, read2=$12, read3=$13, read4=$14, read_total=$15, read_grade=$16, comp=COALESCE($17,qualitative_assess.comp)`,
           [
-            r.studentId, r.subjectCode || subjectCode, r.term || term, r.year || year,
+            r.studentId, subjectCode, term, year,
             r.char1 || '', r.char2 || '', r.char3 || '', r.char4 || '',
             parseInt(r.charTotal) || 0, parseInt(r.char) || 0,
             r.read1 || '', r.read2 || '', r.read3 || '', r.read4 || '',
             parseInt(r.readTotal) || 0, parseInt(r.read) || 0,
-            parseInt(r.comp) || 3,
+            r.comp == null || r.comp === '' ? null : Number(r.comp),
           ]
         );
       }

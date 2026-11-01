@@ -1101,7 +1101,7 @@ function _tcShowState(state, msg) {
 function _tcRenderSelector(clubs) {
   const sel = document.getElementById('tcClubSelector'); if (!sel) return;
   sel.innerHTML = clubs.map(function(c, i) {
-    return '<button class="btn btn-sm me-2 mb-1 ' + (i===0?'btn-accent':'btn-outline-secondary') + '" onclick="_tcSelectClub(window._tcMyClubs[' + i + '],this)">' + _tcEsc(c.clubName) + '</button>';
+    return '<button class="btn btn-sm me-2 mb-1 ' + (i===0?'btn-accent':'btn-outline-secondary') + '" onclick="_tcSelectClub(_tcMyClubs[' + i + '],this)">' + _tcEsc(c.clubName) + '</button>';
   }).join('');
   sel.classList.remove('d-none');
 }
