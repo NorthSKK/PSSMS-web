@@ -22,6 +22,17 @@ async function _syncAutoMsQuietly(target) {
   }
 }
 
+async function _syncEditedAttendance(rows) {
+  const seen = new Set();
+  for (const row of rows) {
+    const target = { subjectCode: row.subject_code, className: row.class, term: row.term, year: row.year };
+    const key = JSON.stringify(target);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await _syncAutoMsQuietly(target);
+  }
+}
+
 async function saveAttendanceBatch([list], user) {
   if (!Array.isArray(list) || list.length === 0) return { status: 'success', saved: 0 };
 
@@ -78,23 +89,28 @@ async function saveLessonRecord([record], user) {
 
 async function updateAttendanceStatus([sessionId, studentId, newStatus], user) {
   await verifySessionOwner(user, sessionId);
-  await query(
-    `UPDATE attendance SET status=$1 WHERE session_id=$2 AND student_id=$3`,
+  const { rows } = await query(
+    `UPDATE attendance SET status=$1 WHERE session_id=$2 AND student_id=$3
+     RETURNING subject_code, class, term, year`,
     [newStatus, sessionId, studentId]
   );
-  return { status: 'success' };
+  if (!rows.length) throw new Error('ไม่พบรายการเช็คชื่อที่ต้องการแก้ไข');
+  await _syncEditedAttendance(rows);
+  return { status: 'success', updated: rows.length };
 }
 
 async function updateAttendanceBatch([updates], user) {
   if (!Array.isArray(updates) || updates.length === 0) return { status: 'success', message: 'ไม่มีรายการที่ต้องแก้ไข' };
   await verifyAttendanceBatchOwner(user, updates.map(u => u.rowIdx));
-  await query(
+  const { rows } = await query(
     `UPDATE attendance SET status = v.status
      FROM unnest($1::int[], $2::text[]) AS v(id, status)
-     WHERE attendance.id = v.id`,
+     WHERE attendance.id = v.id
+     RETURNING attendance.subject_code, attendance.class, attendance.term, attendance.year`,
     [updates.map(u => u.rowIdx), updates.map(u => u.status)]
   );
-  return { status: 'success', message: `อัปเดตสำเร็จ ${updates.length} รายการ` };
+  await _syncEditedAttendance(rows);
+  return { status: 'success', updated: rows.length, message: `อัปเดตสำเร็จ ${rows.length} รายการ` };
 }
 
 async function getTodayAttendanceHistory([date, subjectCode, className], user) {
