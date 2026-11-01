@@ -58,6 +58,12 @@
         <option value="">⏳ กำลังโหลดวิชา...</option>
       </select>
       <div class="pssms-actions ms-auto" style="margin: 0;">
+        <button type="button" class="btn btn-soft btn-sm" id="btnSortScoreStudents" onclick="event.preventDefault(); toggleScoreStudentSort()" title="สลับการเรียงรายชื่อ">
+          <i class="fas fa-sort-numeric-down me-1"></i><span class="d-none d-xl-inline">เรียงเลขที่</span>
+        </button>
+        <button type="button" class="btn btn-soft btn-sm" id="btnSaveStudentNumbers" onclick="event.preventDefault(); saveScoreGridStudentNumbers()" title="บันทึกเลขที่นักเรียนทั้งระบบ" disabled>
+          <i class="fas fa-users-cog me-1"></i><span class="d-none d-xl-inline">บันทึกเลขที่</span>
+        </button>
         <button type="button" class="btn btn-soft btn-sm" id="btnEditHeader" onclick="event.preventDefault(); toggleHeaderEditMode()" title="แก้ไขหัวตาราง">
           <i class="fas fa-th me-1"></i>หัวตาราง
         </button>

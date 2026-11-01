@@ -21,7 +21,7 @@ const TIMETABLE_WRITE_FNS = new Set([
 // Functions that invalidate student-list caches on success
 const USER_WRITE_FNS = new Set([
   'addUser', 'editUser', 'deleteUser', 'importStudentCSV', 'importTeacherCSV',
-  'promoteStudentsToNextYear',
+  'promoteStudentsToNextYear', 'saveScoreGridStudentNumbers',
 ]);
 
 // Functions callable without a valid session token
@@ -53,6 +53,7 @@ const MANAGEMENT_ONLY = new Set([
 const TEACHER_OR_MANAGEMENT = new Set([
   'saveAttendanceBatch', 'saveLessonRecord', 'updateAttendanceStatus', 'updateAttendanceBatch',
   'saveMassiveAttendanceGrid', 'saveSubjectConfig', 'saveAllInOneScores', 'saveAllInOneWithConfig',
+  'saveScoreGridStudentNumbers',
   'saveDetailedLessonRecord', 'updateDetailedLessonRecord', 'deleteDetailedLessonRecord',
   'saveMorningActivityBatch', 'createClub', 'updateClub', 'teacherUpdateTimetableRow',
   'saveStudentRemarkDirectly', 'saveLeaveRequest', 'updateLeave', 'deleteLeave', 'reviewLeave',
@@ -273,6 +274,7 @@ const handlers = {
   getSubjectConfig:                (args) => scores.getSubjectConfig(args),
   saveSubjectConfig:               (args, user) => scores.saveSubjectConfig(args, user),
   getAllInOneScoreGridData:         (args, user) => scores.getAllInOneScoreGridData(args, user),
+  saveScoreGridStudentNumbers:      (args, user) => scores.saveScoreGridStudentNumbers(args, user),
   saveAllInOneScores:              (args, user) => scores.saveAllInOneScores(args, user),
   saveAllInOneWithConfig:          (args, user) => scores.saveAllInOneWithConfig(args, user),
   getFinalGradePreview:            (args, user) => finalGrades.getFinalGradePreview(args, user),
@@ -460,7 +462,8 @@ router.post('/:fnName', async (req, res) => {
   }
 
   // ปิดการเขียนเมื่อ licence หมดอายุพ้น grace — อ่าน พิมพ์ และ export ยังทำได้
-  if (!READONLY_ALLOWED.has(fnName) && await license.isLocked()) {
+  if (!READONLY_ALLOWED.has(fnName) &&
+      (process.env.PSSMS_SERVICE_READONLY === '1' || await license.isLocked())) {
     const { until } = await license.read();
     return res.json({
       __error: `หมดอายุการใช้งานเมื่อ ${until} ระบบอยู่ในโหมดอ่านอย่างเดียว บันทึกข้อมูลใหม่ไม่ได้ — ` +

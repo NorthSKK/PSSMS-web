@@ -1,5 +1,7 @@
 const { query } = require('../lib/db');
 const { resolveTeacherId, verifyTeacherOwnsSubject } = require('../lib/permissions');
+const cache = require('../lib/cache');
+const { studentNo, classKey } = require('../lib/studentRoster');
 
 async function getSubjectConfig([subjectCode, className, term, year]) {
   let rows;
@@ -154,6 +156,89 @@ async function getAllInOneScoreGridData([subjectCode, className, term, year], us
     attDetails,
     attSessions,
     autoMs,
+  };
+}
+
+// เลขที่เป็นข้อมูลทะเบียนกลาง (users.student_no) ไม่ใช่ข้อมูลของรายวิชาหรือ ปพ.5
+// แต่หน้า ปพ.5 ส่ง context ของรายวิชามาเพื่อยืนยันว่าครูมีสิทธิ์แก้เฉพาะห้องที่สอน
+// `changes` รับเป็นชุดเพื่อให้สลับเลขที่กันได้ในครั้งเดียวโดยไม่ชน unique index กลางทาง.
+async function saveScoreGridStudentNumbers([changes, subjectCode, className, term, year], user) {
+  await verifyTeacherOwnsSubject(user, subjectCode, className, term, year);
+  if (!Array.isArray(changes) || changes.length === 0) {
+    return { status: 'success', message: 'ไม่มีเลขที่ที่ต้องบันทึก' };
+  }
+
+  const requested = new Map();
+  for (const change of changes) {
+    const id = String(change?.studentId || '').trim();
+    if (!id) throw new Error('ไม่พบรหัสนักเรียน');
+    if (requested.has(id)) throw new Error('พบรหัสนักเรียนซ้ำในรายการบันทึก');
+    requested.set(id, studentNo(change?.studentNo));
+  }
+
+  const { pool } = require('../lib/db');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // serialize roster edits: this also makes the duplicate check valid until commit.
+    await client.query('LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE');
+    const { rows: roster } = await client.query(
+      `SELECT username, password, full_name, role, department, email, year, status, student_no
+       FROM users
+       WHERE UPPER(role)='STUDENT' AND year=$1 AND status='ปกติ'
+       FOR UPDATE`,
+      [String(year || '').trim()]
+    );
+    const classRoster = roster.filter(r => classKey(r.department) === classKey(className));
+    const byId = new Map(classRoster.map(r => [String(r.username), r]));
+    for (const id of requested.keys()) {
+      if (!byId.has(id)) throw new Error('นักเรียนไม่ได้อยู่ในห้องเรียนที่เลือก หรือไม่มีสถานะปกติ');
+    }
+
+    // Check the final state, not only the submitted rows: a duplicate with an
+    // unchanged student is still invalid, while a two-way swap is allowed.
+    const occupied = new Map();
+    for (const row of classRoster) {
+      const no = requested.has(String(row.username)) ? requested.get(String(row.username)) : row.student_no;
+      if (no == null) continue;
+      if (occupied.has(no)) throw new Error(`เลขที่ ${no} ซ้ำในห้องเรียนนี้`);
+      occupied.set(no, row.username);
+    }
+
+    // Clear only the edited rows before writing final values so swaps never
+    // trip users_student_no_unique midway through the transaction.
+    const ids = [...requested.keys()];
+    await client.query('UPDATE users SET student_no=NULL WHERE username = ANY($1)', [ids]);
+    for (const id of ids) {
+      const previous = byId.get(id);
+      const nextNo = requested.get(id);
+      await client.query('UPDATE users SET student_no=$1 WHERE username=$2', [nextNo, id]);
+      if (previous.student_no !== nextNo) {
+        const next = { ...previous, student_no: nextNo };
+        await client.query(
+          `INSERT INTO user_history(username, action, changed_by, old_data, new_data)
+           VALUES($1,'student_number',$2,$3::jsonb,$4::jsonb)`,
+          [id, String(user?.id || ''), JSON.stringify(previous), JSON.stringify(next)]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    if (e.code === '23505' && e.constraint === 'users_student_no_unique') {
+      throw new Error('เลขที่ซ้ำในห้องเรียนและปีการศึกษาเดียวกัน');
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  // หน้า ปพ.5, ทะเบียน, ชุมนุม และรายชื่อทุกหน้าดึงเลขที่จาก roster ชุดเดียวกัน.
+  cache.delPrefix('students_');
+  cache.delPrefix('all_users');
+  return {
+    status: 'success',
+    message: `บันทึกเลขที่นักเรียนสำเร็จ ${requested.size} คน — รายชื่อทุกหน้าจะใช้เลขที่ใหม่นี้`,
   };
 }
 
@@ -415,6 +500,7 @@ module.exports = {
   getSubjectConfig,
   saveSubjectConfig,
   getAllInOneScoreGridData,
+  saveScoreGridStudentNumbers,
   saveAllInOneScores,
   saveAllInOneWithConfig,
 };
