@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 31939)
-Total output lines: 2299
-
 <style>
 /* ==========================================
    🎨 0. DESIGN TOKENS (70-20-10 minimal palette)
@@ -1057,7 +1054,138 @@ body.dark-mode {
 
 /* --- Dropdown --- */
 .dark-mode .dropdown-menu { background-color: #1e1e1e !important; border-color: #333 !important; box-shadow: 0 4px 16px rgba(0,0,0,0.6) !important; }
-.dark-mode .d…1939 tokens truncated…: var(--p-accent-soft); }
+.dark-mode .dropdown-item { color: #e0e0e0 !important; }
+.dark-mode .dropdown-item:hover, .dark-mode .dropdown-item:focus { background-color: #2d2d2d !important; color: #fff !important; }
+.dark-mode .dropdown-divider { border-color: #333 !important; }
+.dark-mode .dropdown-header { color: #adb5bd !important; }
+
+/* --- Borders & Dividers --- */
+.dark-mode hr { border-color: #333 !important; opacity: 1; }
+.dark-mode .border, .dark-mode .border-bottom, .dark-mode .border-top,
+.dark-mode .border-start, .dark-mode .border-end { border-color: #333 !important; }
+
+/* --- Progress --- */
+.dark-mode .progress { background-color: #333 !important; }
+
+/* --- Accordion --- */
+.dark-mode .accordion-item { background-color: #1e1e1e !important; border-color: #333 !important; }
+.dark-mode .accordion-button { background-color: #1e1e1e !important; color: #e0e0e0 !important; box-shadow: none !important; }
+.dark-mode .accordion-button:not(.collapsed) { background-color: #252525 !important; color: #8bb9fe !important; }
+.dark-mode .accordion-button::after { filter: invert(0.8); }
+.dark-mode .accordion-body { background-color: #1e1e1e !important; color: #e0e0e0 !important; }
+
+/* --- Pagination --- */
+.dark-mode .page-link { background-color: #1e1e1e !important; border-color: #333 !important; color: #8bb9fe !important; }
+.dark-mode .page-item.active .page-link { background-color: #0d6efd !important; border-color: #0d6efd !important; color: #fff !important; }
+.dark-mode .page-item.disabled .page-link { background-color: #1a1a1a !important; color: #555 !important; }
+
+/* --- Score Table (ปพ.5) --- */
+.dark-mode .grid-wrapper { border-color: #333; background: #1e1e1e; }
+.dark-mode .grid-scroll-container::-webkit-scrollbar-track { background: #1a1a1a; border-top: 1px solid #333; }
+.dark-mode .grid-scroll-container::-webkit-scrollbar-thumb { background: #444; border: 3px solid #1a1a1a; }
+.dark-mode .grid-scroll-container::-webkit-scrollbar-thumb:hover { background: #666; }
+.dark-mode .sticky-col-1, .dark-mode .sticky-col-2, .dark-mode .sticky-head-1, .dark-mode .sticky-head-2 { background: #1e1e1e !important; box-shadow: inset -1px 0 0 #333, inset 0 -1px 0 #333 !important; }
+.dark-mode .sticky-col-2, .dark-mode .sticky-head-2 { box-shadow: inset -1px 0 0 #333, inset 0 -1px 0 #333, 4px 0 6px -2px rgba(0,0,0,0.5) !important; }
+.dark-mode #scoreTableHeader tr:nth-child(1) th, .dark-mode .eval-header tr:nth-child(1) th,
+.dark-mode #scoreTableHeader tr:nth-child(2) th, .dark-mode .eval-header tr:nth-child(2) th {
+  background: #1e1e1e !important; box-shadow: inset 0 -1px 0 #333; border-color: #333 !important;
+}
+.dark-mode .score-cell-input, .dark-mode .eval-input, .dark-mode .qual-select { background-color: #2d2d2d !important; color: #fff !important; border-color: #444 !important; }
+.dark-mode .score-cell-input:focus, .dark-mode .eval-input:focus { background-color: #1a1a1a !important; color: #fff !important; }
+.dark-mode .col-highlight-f     { background-color: #0b151f !important; }
+.dark-mode .col-highlight-m     { background-color: #1a1607 !important; }
+.dark-mode .col-highlight-mr    { background-color: #1a0b0b !important; }
+.dark-mode .col-highlight-e     { background-color: #1f0f15 !important; }
+.dark-mode .col-highlight-total { background-color: #1e1e1e !important; }
+.dark-mode .col-highlight-grade { background-color: #0a1a10 !important; }
+
+/* --- JS-rendered content: catch inline light backgrounds --- */
+/* card-body or div with white/light inline background */
+.dark-mode [style*="background: linear-gradient(to right, #ffffff"],
+.dark-mode [style*="background: linear-gradient(to right, #fff"],
+.dark-mode [style*="background-color: #e7f1ff"],
+.dark-mode [style*="background-color: #fff5f5"],
+.dark-mode [style*="background-color: #ffecec"],
+.dark-mode [style*="background: #fff5f5"],
+.dark-mode [style*="background: #ffecec"] {
+  background: #1e2a3a !important;
+  color: #e0e0e0 !important;
+}
+/* generic: any div/span/td with explicit white/light bg inline style */
+.dark-mode .card-body[style*="background"],
+.dark-mode div[style*="background-color: #f"],
+.dark-mode div[style*="background-color: rgb(255"],
+.dark-mode div[style*="background-color: white"] {
+  background-color: #1e1e1e !important;
+  color: #e0e0e0 !important;
+}
+/* progress background inline */
+.dark-mode div[style*="background-color: #e9ecef"] { background-color: #333 !important; }
+/* table row with inline light bg (JS-rendered report rows) */
+.dark-mode tr[style*="background-color: #e7f1ff"] { background-color: #0d1f3c !important; color: #e0e0e0 !important; }
+/* fw-bold without explicit color — ensure readable */
+.dark-mode .fw-bold:not([class*="text-"]):not([style*="color"]) { color: inherit; }
+/* small text divs */
+.dark-mode .small { color: inherit; }
+/* links */
+.dark-mode a:not(.btn):not(.nav-link):not(.nav-link-custom):not(.dropdown-item) { color: #8bb9fe; }
+
+/* Dept-aware dark mode */
+body.dark-mode.dept-academic {
+  --p-dom:#0a1e22; --p-sec:#163840;
+  --p-accent:#22ccd8; --p-accent-hover:#1ab8c4; --p-accent-soft:#0d3038;
+  --p-border:rgba(34,204,216,.18); --p-border-strong:rgba(34,204,216,.3); --p-hover:rgba(34,204,216,.1);
+}
+body.dark-mode.dept-budget {
+  --p-dom:#0a1c0d; --p-sec:#153220;
+  --p-accent:#5bbf68; --p-accent-hover:#4da659; --p-accent-soft:#102214;
+  --p-border:rgba(91,191,104,.18); --p-border-strong:rgba(91,191,104,.3); --p-hover:rgba(91,191,104,.1);
+}
+body.dark-mode.dept-personnel {
+  --p-dom:#1f100a; --p-sec:#3a1c11;
+  --p-accent:#e07045; --p-accent-hover:#d05e32; --p-accent-soft:#2a140a;
+  --p-border:rgba(224,112,69,.18); --p-border-strong:rgba(224,112,69,.3); --p-hover:rgba(224,112,69,.1);
+}
+body.dark-mode.dept-general {
+  --p-dom:#1c1800; --p-sec:#302a00;
+  --p-accent:#d4a520; --p-accent-hover:#b88c14; --p-accent-soft:#201c00;
+  --p-border:rgba(212,165,32,.18); --p-border-strong:rgba(212,165,32,.3); --p-hover:rgba(212,165,32,.1);
+}
+
+/* Dept wrapper overrides in dark — page wrappers like .pssms-dept-academic
+   reset --p-sec to LIGHT values locally; re-apply dark dept tokens so deeper elements get dark bg */
+body.dark-mode .pssms-dept-academic {
+  --p-dom:#0a1e22; --p-sec:#163840;
+  --p-accent:#22ccd8; --p-accent-hover:#1ab8c4; --p-accent-soft:#0d3038;
+  --p-border:rgba(34,204,216,.18); --p-border-strong:rgba(34,204,216,.3); --p-hover:rgba(34,204,216,.1);
+}
+body.dark-mode .pssms-dept-budget {
+  --p-dom:#0a1c0d; --p-sec:#153220;
+  --p-accent:#5bbf68; --p-accent-hover:#4da659; --p-accent-soft:#102214;
+  --p-border:rgba(91,191,104,.18); --p-border-strong:rgba(91,191,104,.3); --p-hover:rgba(91,191,104,.1);
+}
+body.dark-mode .pssms-dept-personnel {
+  --p-dom:#1f100a; --p-sec:#3a1c11;
+  --p-accent:#e07045; --p-accent-hover:#d05e32; --p-accent-soft:#2a140a;
+  --p-border:rgba(224,112,69,.18); --p-border-strong:rgba(224,112,69,.3); --p-hover:rgba(224,112,69,.1);
+}
+body.dark-mode .pssms-dept-general {
+  --p-dom:#1c1800; --p-sec:#302a00;
+  --p-accent:#d4a520; --p-accent-hover:#b88c14; --p-accent-soft:#201c00;
+  --p-border:rgba(212,165,32,.18); --p-border-strong:rgba(212,165,32,.3); --p-hover:rgba(212,165,32,.1);
+}
+
+/* Status chips in dark mode */
+.dark-mode .pssms-status-pending  { background: #2e2400; color: #f0c840; }
+.dark-mode .pssms-status-approved { background: #0a2010; color: #86c4a3; }
+.dark-mode .pssms-status-rejected { background: #250a0a; color: #f29b9b; }
+.dark-mode .pssms-status-info     { background: #0d1f3c; color: #8bb9fe; }
+
+/* Dark mode new components */
+.dark-mode .pssms-icon-circle { background: var(--p-accent-soft); color: var(--p-accent); }
+.dark-mode .pssms-kpi-value { color: var(--p-accent); }
+.dark-mode .pssms-card-link:hover { border-color: var(--p-accent); box-shadow: 0 0 0 3px var(--p-accent-soft); }
+.dark-mode .pssms-card-accent { background: var(--p-accent-soft); }
 .dark-mode .pssms-progress { background: var(--p-sec); }
 .dark-mode .pssms-pill { background: var(--p-surface); border-color: var(--p-border); color: var(--p-text-muted); }
 .dark-mode .pssms-pill:hover { background: var(--p-hover); color: var(--p-text); }
