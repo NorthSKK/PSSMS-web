@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { ok, denied, call, stop } = require('./helpers/api');
 const { query } = require('../lib/db');
 const Y = '2580', T = '2', SUB = 'ว99993', CLS = 'ม.1/97', SID = '0099793', OTHER = '0099794';
+const CURRENT_ID = '0099795';
 const MARK = 'REMAINING_WORKFLOW_TEST', DAY = '2037-06-01';
 const TODO_OWNER = 'audit_remaining_todo_owner';
 const PRIVATE_TODO = JSON.stringify([{ text: 'ข้อมูลสมมติของเจ้าของคนอื่น', done: false }]);
@@ -21,8 +22,8 @@ async function clean() {
   await query('DELETE FROM leave_records WHERE reason=$1', [MARK]);
   await query(`DELETE FROM system_settings WHERE key='todo' AND subkey=$1`, [SID]);
   await query(`DELETE FROM system_settings WHERE key='todo' AND subkey=$1`, [TODO_OWNER]);
-  await query('DELETE FROM user_history WHERE username=ANY($1)', [[SID, OTHER]]);
-  await query('DELETE FROM users WHERE username=ANY($1)', [[SID, OTHER]]);
+  await query('DELETE FROM user_history WHERE username=ANY($1)', [[SID, OTHER, CURRENT_ID]]);
+  await query('DELETE FROM users WHERE username=ANY($1)', [[SID, OTHER, CURRENT_ID]]);
 }
 before(async () => {
   await clean();
@@ -120,13 +121,19 @@ test('dashboard/teacher/todo read paths return usable payloads and todo round-tr
 });
 
 test('course sessions and massive attendance grid use the requested academic year roster', async () => {
+  const active = await ok('getSystemConfig', [], 'admin');
+  assert.notEqual(String(active.year), Y, 'fixture requires two distinct academic years');
+  await query(`INSERT INTO users(username,password,full_name,role,department,year,status)
+    VALUES($1,'test','นักเรียนปีปัจจุบัน','Student',$2,$3,'ปกติ')`, [CURRENT_ID, CLS, String(active.year)]);
+  require('../lib/cache').delPrefix('students_');
   await query(`INSERT INTO attendance(date,term,year,subject_code,subject_name,class,period,student_id,student_name,status,session_id,teacher_id)
     VALUES($1,$2,$3,$4,$5,$6,'1',$7,$5,'มา',$8,'teacher1')`, [DAY, T, Y, SUB, MARK, CLS, SID, MARK]);
   const sessions = await ok('getCourseSessionList', ['teacher2', SUB, CLS, T, Y], 'teacher1');
   assert.equal(sessions.length, 1); assert.equal(sessions[0].studentCount, 1);
   const grid = await ok('getMassiveAttendanceGrid', ['teacher2', SUB, CLS, T, Y], 'teacher1');
   assert.equal(grid.attendance[SID][`${DAY}_1`].status, 'มา');
-  assert.ok(grid.students.some(r => r[0] === SID), 'selected-year student must be available for editing selected-year attendance');
+  assert.deepEqual(grid.students.map(r => r[0]), [SID],
+    'selected-year attendance must use only that year roster, never current-year children in the same classroom');
 });
 
 test('todo reads cannot disclose another owner data through a supplied user ID', async () => {
