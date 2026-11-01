@@ -2513,3 +2513,7 @@ Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-h
 ### Domain docs
 
 Single-context repo — `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.
+
+สคริปต์ operator `scripts/import-pw-physics-media.js` เป็นข้อยกเว้นเฉพาะจุดของการตรวจชื่อโรงเรียน:
+ชื่อในสคริปต์ใช้ยืนยันฐานข้อมูลปลายทางและปฏิเสธโรงเรียนอื่น ไม่ใช่ค่า default หรือข้อความใน UI.
+ข้อยกเว้นต้องตรงชื่อไฟล์นี้เท่านั้น; `src/`, `public/` และโค้ด runtime ยังห้าม hardcode เหมือนเดิม.
