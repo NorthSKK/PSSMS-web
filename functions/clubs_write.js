@@ -6,26 +6,42 @@ function invalidateClubs(term, year) {
   cache.del(`clubs_${term}_${year}`);
 }
 
+async function clubTransaction(work) {
+  const client = await require('../lib/db').pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client.query.bind(client));
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally { client.release(); }
+}
+
 // Frontend: createClub(payload) → 1 object. clubId always generated server-side (matches GAS).
 async function createClub([payload]) {
   const c = payload || {};
   const clubId = `CLUB${Date.now()}`;
-  await query(
-    `INSERT INTO clubs(club_id,club_name,description,capacity,term,year,status)
-     VALUES($1,$2,$3,$4,$5,$6,$7)`,
-    [clubId, String(c.clubName || '').trim(), String(c.description || '').trim(),
-     parseInt(c.capacity) || 0, c.term, c.year, c.status || 'open']
-  );
+  await clubTransaction(async query => {
+    await query(
+      `INSERT INTO clubs(club_id,club_name,description,capacity,term,year,status)
+       VALUES($1,$2,$3,$4,$5,$6,$7)`,
+      [clubId, String(c.clubName || '').trim(), String(c.description || '').trim(),
+       parseInt(c.capacity) || 0, c.term, c.year, c.status || 'open']
+    );
 
-  if (Array.isArray(c.advisors) && c.advisors.length > 0) {
-    for (const a of c.advisors) {
-      await query(
-        `INSERT INTO club_advisors(club_id,teacher_id,teacher_name,role,term,year)
-         VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-        [clubId, a.teacherId, a.teacherName || '', a.role || 'หัวหน้า', c.term, c.year]
-      );
+    if (Array.isArray(c.advisors) && c.advisors.length > 0) {
+      for (const a of c.advisors) {
+        await query(
+          `INSERT INTO club_advisors(club_id,teacher_id,teacher_name,role,term,year)
+           VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+          [clubId, a.teacherId, a.teacherName || '', a.role || 'หัวหน้า', c.term, c.year]
+        );
+      }
     }
-  }
+
+  });
 
   invalidateClubs(c.term, c.year);
   return { status: 'success', message: 'สร้างชุมนุมเรียบร้อย', clubId };
@@ -41,36 +57,40 @@ async function updateClub([payload], user) {
   // club or replace its advisor list (the advisors array below is a full replace).
   await verifyTeacherOwnsSubject(user, `CLUB_${clubId}`, null, u.term, u.year);
 
-  // Resolve term/year from clubs row (immutable in GAS — keep DB row authoritative)
-  const cur = await query(`SELECT term, year FROM clubs WHERE club_id=$1`, [clubId]);
-  if (cur.rows.length === 0) return { status: 'error', message: 'ไม่พบชุมนุม' };
-  const term = cur.rows[0].term, year = cur.rows[0].year;
+  const { term, year } = await clubTransaction(async query => {
+    // Resolve term/year from clubs row (immutable in GAS — keep DB row authoritative)
+    const cur = await query(`SELECT term, year FROM clubs WHERE club_id=$1 FOR UPDATE`, [clubId]);
+    if (cur.rows.length === 0) throw new Error('ไม่พบชุมนุม');
+    const term = cur.rows[0].term, year = cur.rows[0].year;
 
-  const sets = [];
-  const params = [];
-  const push = (col, val) => { params.push(val); sets.push(`${col}=$${params.length}`); };
+    const sets = [];
+    const params = [];
+    const push = (col, val) => { params.push(val); sets.push(`${col}=$${params.length}`); };
 
-  if (u.clubName    !== undefined) push('club_name',   String(u.clubName).trim());
-  if (u.description !== undefined) push('description', String(u.description).trim());
-  if (u.capacity    !== undefined) push('capacity',    parseInt(u.capacity) || 0);
-  if (u.status      !== undefined) push('status',      u.status);
-  sets.push('updated_at=NOW()');
+    if (u.clubName    !== undefined) push('club_name',   String(u.clubName).trim());
+    if (u.description !== undefined) push('description', String(u.description).trim());
+    if (u.capacity    !== undefined) push('capacity',    parseInt(u.capacity) || 0);
+    if (u.status      !== undefined) push('status',      u.status);
+    sets.push('updated_at=NOW()');
 
-  if (sets.length > 1) {
-    params.push(clubId);
-    await query(`UPDATE clubs SET ${sets.join(',')} WHERE club_id=$${params.length}`, params);
-  }
-
-  if (Array.isArray(u.advisors)) {
-    await query(`DELETE FROM club_advisors WHERE club_id=$1`, [clubId]);
-    for (const a of u.advisors) {
-      await query(
-        `INSERT INTO club_advisors(club_id,teacher_id,teacher_name,role,term,year)
-         VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
-        [clubId, a.teacherId, a.teacherName || '', a.role || 'หัวหน้า', term, year]
-      );
+    if (sets.length > 1) {
+      params.push(clubId);
+      await query(`UPDATE clubs SET ${sets.join(',')} WHERE club_id=$${params.length}`, params);
     }
-  }
+
+    if (Array.isArray(u.advisors)) {
+      await query(`DELETE FROM club_advisors WHERE club_id=$1`, [clubId]);
+      for (const a of u.advisors) {
+        await query(
+          `INSERT INTO club_advisors(club_id,teacher_id,teacher_name,role,term,year)
+           VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+          [clubId, a.teacherId, a.teacherName || '', a.role || 'หัวหน้า', term, year]
+        );
+      }
+    }
+
+    return { term, year };
+  });
 
   invalidateClubs(term, year);
   return { status: 'success', message: 'อัปเดตชุมนุมเรียบร้อย' };

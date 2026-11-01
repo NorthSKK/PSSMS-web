@@ -1185,6 +1185,7 @@ function loadPage(pageName) {
   isDrawing = false; 
   
   // -- ระบบบันทึกคะแนน (ปพ.5) --
+  if (typeof resetScoreGridState === 'function') resetScoreGridState();
   currentScoreConfig = null;
   currentScoreStudents = [];
   currentAttStats = {};
