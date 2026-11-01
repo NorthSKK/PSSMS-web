@@ -292,6 +292,7 @@ let isHeaderEditMode = false;
 let isQualVisible = false;
 let isSavingScores = false;
 let sgsColumnStates = {};
+let scoreStudentSort = 'number';
 
 const normID = (id) => { let clean = String(id).replace(/[^a-zA-Z0-9]/g, '').replace(/^0+/, ''); return clean || '0'; };
 const normStr = (str) => String(str).replace(/\s+/g, '').toLowerCase();
@@ -431,6 +432,96 @@ function resetScoreGridState() {
   isSavingScores = false;
 }
 
+function scoreStudentOrder(a, b) {
+  if (scoreStudentSort === 'id') return String(a[0] || '').localeCompare(String(b[0] || ''), 'th', { numeric: true });
+  return compareStudentRows(a, b);
+}
+
+function updateScoreStudentSortButton() {
+  const btn = document.getElementById('btnSortScoreStudents');
+  if (!btn) return;
+  const byNumber = scoreStudentSort === 'number';
+  btn.title = byNumber ? 'กำลังเรียงตามเลขที่ — กดเพื่อเรียงตามรหัสนักเรียน' : 'กำลังเรียงตามรหัสนักเรียน — กดเพื่อเรียงตามเลขที่';
+  btn.innerHTML = byNumber
+    ? '<i class="fas fa-sort-numeric-down me-1"></i><span class="d-none d-xl-inline">เรียงเลขที่</span>'
+    : '<i class="fas fa-id-card me-1"></i><span class="d-none d-xl-inline">เรียงรหัส</span>';
+}
+
+function toggleScoreStudentSort() {
+  scoreStudentSort = scoreStudentSort === 'number' ? 'id' : 'number';
+  updateScoreStudentSortButton();
+  if (currentScoreStudents && currentScoreStudents.length) refreshTableOnly();
+}
+
+function scoreStudentNumberValue(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text) return null;
+  if (!/^0*[1-9]\d*$/.test(text)) throw new Error('เลขที่ต้องเป็นจำนวนเต็มบวก หรือเว้นว่าง');
+  const number = Number(text);
+  if (!Number.isSafeInteger(number) || number > 2147483647) throw new Error('เลขที่ต้องเป็นจำนวนเต็มบวก หรือเว้นว่าง');
+  return number;
+}
+
+function scoreHtmlAttr(value) {
+  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function saveScoreGridStudentNumbers() {
+  const request = _scoreGridRequest;
+  const key = scoreGridContextKey();
+  if (!isCurrentScoreGrid(request, key) || _scoreGridReadyKey !== key) return;
+  const selected = document.getElementById('scoreClassSelect');
+  const button = document.getElementById('btnSaveStudentNumbers');
+  if (!selected || !selected.value) return;
+
+  let changes;
+  try {
+    changes = [...document.querySelectorAll('.score-student-no')].map(input => ({
+      studentId: String(input.dataset.studentId || '').trim(),
+      studentNo: scoreStudentNumberValue(input.value),
+    })).filter(change => {
+      const student = currentScoreStudents.find(row => String(row[0]).trim() === change.studentId);
+      return student && (student[8] == null ? change.studentNo != null : Number(student[8]) !== change.studentNo);
+    });
+  } catch (error) {
+    showAlert('⚠️ ' + error.message);
+    return;
+  }
+  if (!changes.length) {
+    showToast('ยังไม่มีการเปลี่ยนเลขที่นักเรียน', 'info');
+    return;
+  }
+
+  const item = JSON.parse(selected.value);
+  const user = getSessionUser();
+  Swal.fire({
+    title: 'ยืนยันการเปลี่ยนเลขที่นักเรียน?',
+    html: '<div class="text-start">เลขที่เป็นข้อมูลกลางของโรงเรียน ไม่ใช่เฉพาะ ปพ.5<br><br><b class="text-danger">การเปลี่ยนครั้งนี้จะกระทบรายการของแอดมิน ครูท่านอื่น และทุกหน้าที่ใช้รายชื่อนักเรียน</b><br><br>ต้องการบันทึกเลขที่ใหม่ ' + changes.length + ' คนหรือไม่?</div>',
+    icon: 'warning', showCancelButton: true, confirmButtonText: 'ยืนยันบันทึกเลขที่', cancelButtonText: 'ยกเลิก',
+  }).then(result => {
+    if (!result.isConfirmed || !isCurrentScoreGrid(request, key)) return;
+    if (button) { button.disabled = true; button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>กำลังบันทึก'; }
+    safeRun(3)
+      .withFailureHandler(error => {
+        if (!isCurrentScoreGrid(request, key)) return;
+        if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-users-cog me-1"></i><span class="d-none d-xl-inline">บันทึกเลขที่</span>'; }
+        showAlert('❌ บันทึกเลขที่ไม่สำเร็จ: ' + (error.message || error));
+      })
+      .withSuccessHandler(response => {
+        if (!isCurrentScoreGrid(request, key)) return;
+        if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-users-cog me-1"></i><span class="d-none d-xl-inline">บันทึกเลขที่</span>'; }
+        if (!response || response.status !== 'success') {
+          showAlert('❌ บันทึกเลขที่ไม่สำเร็จ: ' + ((response && response.message) || 'ไม่ทราบสาเหตุ'));
+          return;
+        }
+        showToast(response.message || 'บันทึกเลขที่นักเรียนสำเร็จ', 'success');
+        // โหลด roster ใหม่เพื่อรับเลขที่กลางที่ transaction ยืนยันแล้ว และเรียงตามโหมดเดิม
+        loadScoreGrid();
+      })
+      .saveScoreGridStudentNumbers(changes, item[0], item[2], user.currentTerm, user.currentYear);
+  });
+}
+
 function scoreRatioPart(value, fallback) {
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
@@ -443,13 +534,15 @@ function loadScoreGrid() {
   const val = document.getElementById('scoreClassSelect').value;
   const gridCard = document.getElementById('scoreGridCard');
   const btnSave = document.getElementById('btnSaveScores');
-  if(!val) { gridCard.classList.add('d-none'); btnSave.disabled = true; return; }
+  const btnStudentNo = document.getElementById('btnSaveStudentNumbers');
+  if(!val) { gridCard.classList.add('d-none'); btnSave.disabled = true; if (btnStudentNo) btnStudentNo.disabled = true; return; }
 
   const item = JSON.parse(val);
   const user = getSessionUser();
   
   gridCard.classList.remove('d-none');
   btnSave.disabled = true; 
+  if (btnStudentNo) btnStudentNo.disabled = true;
   document.getElementById('scoreGridTitle').innerHTML = `<i class="fas fa-spinner fa-spin me-2 text-primary"></i>กำลังซิงค์ข้อมูล ปพ.5...`;
   
   renderSkeletonTable();
@@ -464,12 +557,14 @@ function loadScoreGrid() {
         if (!isCurrentScoreGrid(request, key)) return;
         _scoreGridReadyKey = key;
         btnSave.disabled = false;
+        if (btnStudentNo) btnStudentNo.disabled = false;
         currentScoreConfig = res.config;
         currentScoreStudents = res.students;
         currentAttStats = res.attStats || {}; 
         currentAutoMs = res.autoMs || {}; 
         currentAttDetails = res.attDetails || {}; 
         currentAttSessions = res.attSessions || []; 
+        updateScoreStudentSortButton();
 
         document.getElementById('scoreTabs').classList.remove('d-none');
         renderAllInOneTable(res.students, res.config, res.existingScores, res.existingQuals);
@@ -579,7 +674,7 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
   document.getElementById('scoreRatioBadge').innerText = `สัดส่วนปัจจุบัน ${config.ratio}`;
 
   let headHtml = `<tr>
-    <th rowspan="2" class="align-middle text-center sticky-head-1 text-secondary border-end py-1" style="width:45px; font-size: 0.78rem; background-color: #f1f3f5;">ที่</th>
+    <th rowspan="2" class="align-middle text-center sticky-head-1 text-secondary border-end py-1" style="width:58px; font-size: 0.78rem; background-color: #f1f3f5;" title="แก้ไขเลขที่ แล้วกดบันทึกเลขที่">เลขที่</th>
     <th rowspan="2" class="align-middle text-start sticky-head-2 text-secondary border-end px-2 py-1" style="min-width: 180px; font-size: 0.78rem; background-color: #f1f3f5;">รหัส / ชื่อ-สกุล</th>`;
   
   let subHeadHtml = `<tr>`;
@@ -683,9 +778,9 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
   thead.innerHTML = headHtml + subHeadHtml;
 
   let bodyHtml = '';
-  students.sort(compareStudentRows);
+  const sortedStudents = [...students].sort(scoreStudentOrder);
 
-  students.forEach((std, rowIndex) => {
+  sortedStudents.forEach((std, rowIndex) => {
     const stdId = String(std[0]).trim();
     const safeStdId = normID(stdId); 
     let colIndex = 0; 
@@ -710,7 +805,9 @@ function renderAllInOneTable(students, config, existingScores, existingQuals) {
     if (remarkVal === '-') remarkVal = '';
     
     bodyHtml += `<tr style="height:28px;">
-      <td class="text-center text-muted fw-bold sticky-col-1 align-middle border-end" style="font-size:0.75rem; background-color: #fff; padding: 1px 2px;">${studentNoLabel(std)}</td>
+      <td class="text-center text-muted fw-bold sticky-col-1 align-middle border-end" style="font-size:0.75rem; background-color: #fff; padding: 1px 2px;">
+        <input type="number" min="1" step="1" inputmode="numeric" class="form-control form-control-sm score-student-no text-center fw-bold" style="min-width:46px; height:25px; padding:1px 2px; font-size:0.75rem;" value="${scoreHtmlAttr(std[8] == null ? '' : std[8])}" data-student-id="${scoreHtmlAttr(stdId)}" aria-label="เลขที่ของ ${scoreHtmlAttr(std[2])}" title="แก้ไขเลขที่ แล้วกดปุ่มบันทึกเลขที่ด้านบน">
+      </td>
       <td class="text-start sticky-col-2 align-middle px-2 border-end" style="background-color: #fff; padding-top: 1px; padding-bottom: 1px;">
          <div class="fw-bold text-dark text-truncate" style="max-width: 170px; font-size: 0.78rem; line-height:1.15;">${std[2]}</div>
          <div class="d-flex align-items-center">

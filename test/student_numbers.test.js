@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { ok, denied, stop } = require('./helpers/api');
 const { query } = require('../lib/db');
 const cache = require('../lib/cache');
-const { TERM, YEAR } = require('./helpers/fixtures');
+const { TERM, YEAR, PHYSICS } = require('./helpers/fixtures');
 
 const ids = ['0098101', '0098102', '0098103', '0098104'];
 const CLS = 'ม.1/91';
@@ -82,6 +82,49 @@ test('ทะเบียน/ปพ.5 ใช้เลขที่กำหนด�
   const users = await ok('getAllUsers', [], 'admin');
   assert.equal(users.find(s => s[0] === ids[0])[8], 3);
   assert.equal((await read(ids[0])).username, ids[0]);
+});
+
+test('ครู/ผู้ดูแลบันทึกเลขที่จาก ปพ.5 เป็นข้อมูลทะเบียนกลาง สลับเลขที่ได้ และกันเลขซ้ำ', async () => {
+  await clean();
+  await ok('importStudentCSV', [[
+    row(ids[0], { studentNo: '1' }),
+    row(ids[1], { studentNo: '2' }),
+    row(ids[2], { studentNo: '3' }),
+  ]], 'admin');
+
+  // เติม cache ที่ทุกหน้าใช้ก่อน เพื่อยืนยันว่า endpoint ล้างให้แล้ว
+  await ok('getAllUsers', [], 'admin');
+  await ok('saveScoreGridStudentNumbers', [[
+    { studentId: ids[0], studentNo: '2' },
+    { studentId: ids[1], studentNo: '1' },
+  ], 'NUMBER_TEST', CLS, TERM, YEAR], 'admin');
+
+  const roster = await ok('getStudentsByClass', [CLS, YEAR], 'admin');
+  assert.deepEqual(roster.map(s => [s[0], s[8]]), [[ids[1], 1], [ids[0], 2], [ids[2], 3]]);
+  const users = await ok('getAllUsers', [], 'admin');
+  assert.equal(users.find(s => s[0] === ids[0])[8], 2, 'ทะเบียนอ่านค่าเดียวกับ ปพ.5');
+  const grid = await ok('getAllInOneScoreGridData', ['NUMBER_TEST', CLS, TERM, YEAR], 'admin');
+  assert.deepEqual(grid.students.map(s => [s[0], s[8]]), roster.map(s => [s[0], s[8]]));
+
+  const before = (await read(ids[0])).student_no;
+  assert.match(await denied('saveScoreGridStudentNumbers', [[
+    { studentId: ids[0], studentNo: '3' },
+  ], 'NUMBER_TEST', CLS, TERM, YEAR], 'admin'), /เลขที่ 3 ซ้ำ/);
+  assert.equal((await read(ids[0])).student_no, before, 'เลขที่ต้องไม่ถูกเขียนบางส่วนเมื่อพบเลขซ้ำ');
+  assert.match(await denied('saveScoreGridStudentNumbers', [[
+    { studentId: ids[0], studentNo: '4' },
+  ], 'NUMBER_TEST', CLS, TERM, YEAR], 'student'), /สงวนสิทธิ์/);
+});
+
+test('ครูแก้เลขที่ได้เฉพาะห้องและรายวิชาที่ตนสอน', async () => {
+  const ownGrid = await ok('getAllInOneScoreGridData', [PHYSICS.code, PHYSICS.className, TERM, YEAR], 'teacher1');
+  const ownStudent = ownGrid.students[0];
+  await ok('saveScoreGridStudentNumbers', [[{
+    studentId: ownStudent[0], studentNo: ownStudent[8],
+  }], PHYSICS.code, PHYSICS.className, TERM, YEAR], 'teacher1');
+  assert.match(await denied('saveScoreGridStudentNumbers', [[{
+    studentId: ids[0], studentNo: '4',
+  }], 'NUMBER_TEST', CLS, TERM, YEAR], 'teacher1'), /ไม่มีสิทธิ์/);
 });
 
 test('ป้องกันเลขที่ซ้ำ/ไม่ใช่จำนวนเต็มทั้งหน้าทะเบียนและฐานข้อมูล โดยไม่เขียนบางส่วน', async () => {

@@ -5,7 +5,7 @@ function fn(name){const a=source.indexOf('function '+name+'(');if(a<0)return '';
 function harness(){const els={};for(const id of ['scoreClassSelect','scoreGridCard','btnSaveScores','scoreGridTitle','scoreTableBody','scoreTabs','edit-ratio-f','edit-ratio-m','edit-ratio-e','scoreRatioBadge'])els[id]={value:'',innerText:'',innerHTML:'',disabled:false,classList:{add(){},remove(){}}};
 const calls=[],renders=[];let confirmation;const user={id:'teacher1',currentTerm:'2',currentYear:'2569'};let comp='0';
 const c={console,document:{getElementById:id=>els[id]||null,querySelector:s=>s.includes('.qual-comp')?{value:comp}:null,querySelectorAll:()=>[]},getSessionUser:()=>user,normID:id=>String(id).replace(/^0+/,''),currentScoreConfig:null,currentScoreStudents:[],currentAttStats:{},currentAutoMs:{},currentAttDetails:{},currentAttSessions:[],isSavingScores:false,isHeaderEditMode:false,_scoreGridRequest:0,_scoreGridReadyKey:null,autoSaveTimer:null,retrySaveTimer:null,clearTimeout(){},setTimeout(){},showAlert(){},showToast(){},renderSkeletonTable(){},renderEvalTable(){},renderAllInOneTable(rows){renders.push(rows[0][0]);},Swal:{fire(){return{then(fn){confirmation=fn;}}}},safeRun(){let success,failure;return{withSuccessHandler(f){success=f;return this;},withFailureHandler(f){failure=f;return this;},getAllInOneScoreGridData(...args){calls.push({type:'load',args,success,failure});},saveSubjectConfig(payload){calls.push({type:'config',payload,success,failure});},saveAllInOneWithConfig(payload){calls.push({type:'save',payload,success,failure});}}}};
-vm.createContext(c);vm.runInContext(['scoreGridContextKey','isCurrentScoreGrid','resetScoreGridState','scoreRatioPart','loadScoreGrid','saveAllInOneScores'].map(fn).join('\n'),c);
+vm.createContext(c);vm.runInContext("let scoreStudentSort = 'number';\n"+['scoreGridContextKey','isCurrentScoreGrid','resetScoreGridState','scoreRatioPart','scoreHtmlAttr','updateScoreStudentSortButton','scoreStudentOrder','loadScoreGrid','saveAllInOneScores'].map(fn).join('\n'),c);
 els['edit-ratio-f'].innerText='100';els['edit-ratio-m'].innerText='0';els['edit-ratio-e'].innerText='0';
 return{c,els,calls,renders,user,choose(subject){els.scoreClassSelect.value=JSON.stringify([subject,'วิชา','ม.1/1']);c.loadScoreGrid();},reply(call,id){call.success({config:{ratio:'100:0:0',indicators:[]},students:[[id]],existingScores:{},existingQuals:{}});},confirm(){confirmation({isConfirmed:true});},comp(v){comp=String(v);}};}
 test('late A reply never replaces B roster or saves A students into B',()=>{const h=harness();h.choose('A');h.choose('B');h.reply(h.calls[1],'01903');h.reply(h.calls[0],'01904');h.c.saveAllInOneScores();assert.deepEqual(h.renders,['01903']);const p=h.calls.find(c=>c.type==='save').payload;assert.equal(p.subjectCode,'B');assert.deepEqual(Array.from(p.qualRecords,r=>r.studentId),['01903']);});
@@ -43,4 +43,15 @@ test('refresh after editing headers retains leading-zero student scores and comp
  assert.match(html,/01903/);
  const comp=html.match(/<select class="qual-select qual-comp[\s\S]*?<\/select>/)[0];assert.match(comp,/value="0" selected/);
  assert.match(html,/<option value="ร" selected/);
+});
+
+test('student-number controls are separate from score saving and warn about shared records',()=>{
+ const page=fs.readFileSync('src/Page_Score_Entry.html','utf8');
+ assert.match(page,/id="btnSaveStudentNumbers"/);
+ assert.match(page,/id="btnSortScoreStudents"/);
+ assert.match(source,/function saveScoreGridStudentNumbers\(\)/);
+ assert.match(source,/saveScoreGridStudentNumbers\(changes, item\[0\], item\[2\], user\.currentTerm, user\.currentYear\)/);
+ assert.match(source,/ข้อมูลกลางของโรงเรียน/);
+ assert.match(source,/แอดมิน ครูท่านอื่น/);
+ assert.match(source,/function toggleScoreStudentSort\(\)/);
 });
