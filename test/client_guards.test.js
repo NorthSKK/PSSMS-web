@@ -130,6 +130,25 @@ test('ป้าย มส. อัตโนมัติต้องอ่าน�
     'ป้ายต้องใช้ token ที่ถูกนิยามใหม่ใน body.dark-mode ไม่ใช่สีคงที่โหมดสว่าง');
 });
 
+// Styles.html เคยถูกเผยแพร่จากสำเนาเก่า จนกฎโหมดมืดของตาราง/ปุ่มหายไปทั้งชุด
+// และทำให้ตาราง ปพ.5 กับสีของปุ่มเพี้ยนหลัง deploy. ล็อก selector สำคัญไว้เพื่อ
+// ให้การเขียนทับไฟล์ CSS ในอนาคตต้องรักษาหน้าตาเดิมไว้ด้วย.
+test('โหมดมืดต้องคงกฎตาราง ปพ.5 และปุ่มใน sidebar', () => {
+  const styles = read('Styles.html');
+  for (const selector of [
+    '.dark-mode .dropdown-item',
+    '.dark-mode .grid-wrapper',
+    '.dark-mode .sticky-col-1, .dark-mode .sticky-col-2',
+    '.dark-mode .score-cell-input, .dark-mode .eval-input, .dark-mode .qual-select',
+    '.dark-mode .col-highlight-f',
+    '.dark-mode .pssms-status-pending',
+    '#sidebar .sidebar-footer-meta',
+    '#sidebar .sidebar-help-button',
+  ]) {
+    assert.ok(styles.includes(selector), `Styles.html ต้องมีกฎ ${selector}`);
+  }
+});
+
 // ── error จากเซิร์ฟเวอร์ห้ามถูกยิงซ้ำแบบ "สัญญาณขัดข้อง" ─────────────────────
 //
 // เจอตอน ผอ. เปิดหน้าสารบรรณ: error สิทธิ์ถูกยิงซ้ำ 3 รอบพร้อมขึ้น
