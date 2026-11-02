@@ -1,0 +1,45 @@
+name: Publish archive rehearsal runner
+
+on:
+  push:
+    branches: ['codex/**']
+    paths:
+      - 'tools/school-archive/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/archive-runner-rehearsal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    if: startsWith(github.ref, 'refs/heads/codex/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare minimal build context
+        run: |
+          mkdir -p .archive-image-context/tools/school-archive
+          cp package.json package-lock.json .archive-image-context/
+          cp tools/school-archive/Dockerfile tools/school-archive/*.cjs .archive-image-context/tools/school-archive/
+      - name: Build and publish tested immutable runner
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${REPOSITORY_OWNER,,}/pssms-school-archive-rehearsal"
+          TAG="$IMAGE:$COMMIT_SHA"
+          docker build --platform linux/amd64 -f .archive-image-context/tools/school-archive/Dockerfile -t "$TAG" .archive-image-context
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+          docker push "$TAG"
+          docker pull "$TAG"
+          DIGEST_REFERENCE=$(docker inspect --format '{{index .RepoDigests 0}}' "$TAG")
+          printf 'ARCHIVE_RUNNER_IMAGE=%s\n' "$DIGEST_REFERENCE" >> "$GITHUB_STEP_SUMMARY"
+          docker logout ghcr.io
