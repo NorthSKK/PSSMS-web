@@ -19,6 +19,14 @@ app.get('/api/app-info', (req, res) => {
   res.json(require('./lib/appInfo').appInfo());
 });
 
+// No customer records or credentials: the archive runner checks the exact
+// deployment freeze generation before taking its final snapshot.
+app.get('/api/service-status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ...require('./lib/serviceArchiveState').archiveState(),
+    version: require('./lib/appInfo').appInfo().version });
+});
+
 app.use('/api/assets', require('./routes/assets'));
 // multipart — ไม่ผ่าน express.json ข้างบน จึงไม่กระทบ limit ของ endpoint อื่น
 app.use('/api/media',  require('./routes/media'));
