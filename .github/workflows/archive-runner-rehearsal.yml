@@ -43,3 +43,5 @@ jobs:
           DIGEST_REFERENCE=$(docker inspect --format '{{index .RepoDigests 0}}' "$TAG")
           printf 'ARCHIVE_RUNNER_IMAGE=%s\n' "$DIGEST_REFERENCE" >> "$GITHUB_STEP_SUMMARY"
           docker logout ghcr.io
+
+# runner upload metadata check
