@@ -44,7 +44,7 @@ async function decryptFile(source, target, key, slug, objectKey, expected) {
     await pipeline(input, decipher, fs.createWriteStream(target, { mode: 0o600 }));
     const actual = await digestFile(target);
     if (expected && (actual.sha256 !== expected.sha256 || actual.bytes !== expected.bytes)) {
-      throw new Error('Archive content checksum mismatch');
+      throw new Error('Archive content checksum mismatch (${objectKey})`);
     }
     return actual;
   } catch (err) { await fsp.rm(target, { force: true }); throw err; }
