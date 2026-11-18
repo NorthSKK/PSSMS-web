@@ -99,17 +99,19 @@ async function run(env = process.env, dependencies = {}) {
   let sequence = 0;
   async function report(status, step, detail = {}) {
     const body = JSON.stringify({ status,step,sequence:++sequence,...detail });
+    let lastError = 'Archive callback unavailable';
     for (let attempt=0;attempt<5;attempt++) {
       try {
         const response = await fetchImpl(s.callback,{ method:'POST',headers:{ Authorization:`Bearer ${s.token}`,'Content-Type':'application/json' },
           body,signal:AbortSignal.timeout(30000) });
         if (response.ok) { await response.body?.cancel(); return; }
         await response.body?.cancel();
-        if (response.status >= 400 && response.status < 500) throw new Error('Archive callback rejected');
-      } catch (err) { if (attempt===4) throw new Error('Archive callback unavailable'); }
+        if (response.status >= 400 && response.status < 500) throw new Error(`Archive callback HTTP ${response.status}`);
+        lastError = `Archive callback HTTP ${response.status}`;
+      } catch (err) { lastError = String(err?.message || lastError).slice(0,120); if (attempt===4) throw new Error(lastError); }
       await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
     }
-    throw new Error('Archive callback unavailable');
+    throw new Error(lastError);
   }
   let counter = 0;
   const temp = suffix => path.join(work,`${++counter}-${suffix}`);
